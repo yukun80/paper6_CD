@@ -12,9 +12,6 @@ Panopticon 的代码架构深度构建于 [DINOv2 官方代码库](https://githu
 ## 最新动态
 
 * 我们发布了重构后的评估代码库 [Geobreeze](https://github.com/geobreeze/geobreeze)！
-* 🥳 激动人心的消息：Panopticon 荣获 [CVPR 2025 EarthVision Workshop](https://www.grss-ieee.org/events/earthvision-2025/) **最佳论文 (Best Paper)** 奖！我们将在 6 月前往纳什维尔（Nashville, TN），欢迎各位同仁前来交流！
-* Panopticon 将在 2025 年 6 月于维也纳举行的欧洲航天局 [2025 年生存星球峰会 (Living Planet Symposium 2025, LPS25)](https://lps25.esa.int/) 上进行展示 ⛰️。
-* 我们还将参加在布里斯班举行的 [IGARRS 2025](https://2025.ieeeigarss.org/index.php) 🦘！
 * Panopticon 已作为官方模型集成至 [TorchGeo 0.7](https://torchgeo.readthedocs.io/en/stable/api/models.html#panopticon) 中，这使得在该模型上调用现有的遥感数据集变得极其简便。
 
 ---
@@ -182,29 +179,26 @@ PYTHONPATH=. python dinov2/eval/eval.py main \
 
 ---
 
-## 许可协议
+  1. 任意通道输入的 Patch Embedding + 通道交叉注意力
+     panopticon.py:10
+  2. 光谱增强（通道子采样、通道补齐、单传感器/多传感器视图策略）
+     augmentations.py:57
+  3. 两阶段训练配置与超参（Stage2 为多数据集+PanopticonAugmentation）
+     stage2.yaml:70
+  4. 数据侧“footprint/sensor as augmentation”输入组织（FMoW/Satlas/MMEarth/SpectralEarth）
+     fmow.py:314
+     satlas.py:132
+     mmearth.py:387
+     spectral_earth.py:280
 
-本代码库遵循 **Apache License 2.0** 协议，部分第三方代码遵循 MIT 协议。模型权重遵循 **CC-BY-4.0** 协议。
-
-## 引用
-
-如果您觉得本工作对您的研究有所帮助，请考虑引用我们的论文：
-
-```latex
-@inproceedings{waldmann_shah_2025_panopticon,
-    author={Waldmann, Leonard and Shah, Ando and Wang, Yi and Lehmann, Nils and Stewart, Adam and Xiong, Zhitong and Zhu, Xiao Xiang and Bauer, Stefan and Chuang, John},
-    title={Panopticon: Advancing Any-Sensor Foundation Models for Earth Observation},
-    booktitle={Proceedings of the Computer Vision and Pattern Recognition Conference (CVPR) Workshops},
-    year={2025},
-    pages={2204-2214}
-}
-
-```
-
-## 合作交流
-
-如果您对地球观测领域的基础模型应用感兴趣，欢迎随时联系我们（ando@berkeley.edu）。我们正致力于在多个应用领域评估模型的实用性，非常期待了解您的项目进展！
-
----
-
-**您是否需要我为您详细解析 Panopticon 在处理多光谱与 SAR 数据时的切片嵌入 (Patch Embedding) 具体数学实现？**
+• - /home/yukun/codes/paper6_waterlogging/panopticon/dinov2/models/panopticon.py
+  - /home/yukun/codes/paper6_waterlogging/panopticon/dinov2/data/augmentations.py
+  - /home/yukun/codes/paper6_waterlogging/panopticon/dinov2/configs/stage2.yaml
+  - /home/yukun/codes/paper6_waterlogging/panopticon/dinov2/configs/stage1.yaml
+  - /home/yukun/codes/paper6_waterlogging/panopticon/dinov2/models/vision_transformer.py
+  - /home/yukun/codes/paper6_waterlogging/panopticon/dinov2/data/loaders.py
+  - /home/yukun/codes/paper6_waterlogging/panopticon/dinov2/data/collate.py
+  - /home/yukun/codes/paper6_waterlogging/panopticon/dinov2/data/datasets/fmow.py
+  - /home/yukun/codes/paper6_waterlogging/panopticon/dinov2/data/datasets/satlas.py
+  - /home/yukun/codes/paper6_waterlogging/panopticon/dinov2/data/datasets/mmearth.py
+  - /home/yukun/codes/paper6_waterlogging/panopticon/dinov2/data/datasets/spectral_earth.py
