@@ -1,0 +1,64 @@
+exp_name: urban_sar_floods_ch12
+
+runtime:
+  require_cuda: false
+
+data:
+  root: datasets/urban_sar_floods_ch12_256
+  train_split: Train_dataset.txt
+  val_split: Valid_dataset.txt
+  num_classes: 3
+  ignore_index: 255
+  crop_size: 256
+  random_crop: true
+  random_hflip: true
+  random_vflip: false
+  mean: [0.2741981148, 0.3617288014, 0.1863108298, 0.2530457343, -15.6468804058, -9.6937542005, -15.4654368286, -9.5856175246, 0.0879119825, 0.1088000612, 0.1814468179, 0.1081404089]
+  std: [0.1900069367, 0.2378937928, 0.1645078691, 0.2128030704, 4.3938968350, 4.4999491713, 4.8541489287, 5.2109864401, 0.1701154668, 0.2031591760, 4.1878041451, 4.5371364289]
+
+model:
+  name: swin_uperlite
+  backbone: swin_t
+  in_channels: 12
+  num_classes: 3
+  pretrained: true
+  fpn_dim: 128
+
+optim:
+  type: adamw
+  lr: 0.00015
+  weight_decay: 0.0001
+
+scheduler:
+  type: cosine
+  min_lr: 0.000001
+
+loss:
+  aux_loss_weight: 0.0
+
+train:
+  seed: 42
+  deterministic: false
+  amp: true
+  max_epochs: 80
+  batch_size: 4
+  val_batch_size: 2
+  num_workers: 8
+  pin_memory: true
+  drop_last: false
+  save_every: 10
+  resume_from: ""
+
+eval:
+  selection_metric: pos_mIoU
+  selection_mode: max
+  pos_classes: [1, 2]
+
+visualize:
+  base_channel: 6
+  alpha: 0.55
+
+work_dir:
+  root: exp_template/work_dir
+  exp_subdir: urban_sar_floods_ch12
+  run_name_template: "{model}_{backbone}_{time}"
