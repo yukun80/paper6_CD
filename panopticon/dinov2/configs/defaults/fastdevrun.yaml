@@ -4,7 +4,6 @@ train:
   batch_size_per_gpu: 2
   num_workers: 1
   OFFICIAL_EPOCH_LENGTH: 10
-  use_wandb: False
 
 optim:
   epochs: 1

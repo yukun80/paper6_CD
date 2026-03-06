@@ -124,7 +124,6 @@ train:
   drop_last: true
   pin_memory: true
   persistent_workers: true
-  use_wandb: true
   saveckp_freq: 5
   seed: 21
   OFFICIAL_EPOCH_LENGTH: 1250

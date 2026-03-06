@@ -17,9 +17,6 @@ from dotenv import load_dotenv
 import random
 import re
 
-import wandb
-from pathlib import Path
-
 logger = logging.getLogger("dinov2")
 
 def write_config(cfg, output_dir, name="config.yaml"):
@@ -123,7 +120,6 @@ def get_train_cfg_from_args(args):
         # drop non-hparam args
         to_drop_key = [
             'train.output_dir',
-            'train.use_wandb',
             'add_args',
             'optim.epochs',
             'optim.scaling_rule',
@@ -181,18 +177,6 @@ def get_train_cfg_from_args(args):
 
     return cfg
 
-def setup_wandb_logging(cfg):
-
-    if cfg.train.use_wandb and distributed.is_main_process():
-        output_dir = cfg.train.output_dir
-        name = str(os.path.relpath(output_dir, os.environ['ODIR']))
-        wandb.init(
-            project=os.environ['WANDB_PROJECT'], 
-            name=name,
-            config=OmegaConf.to_container(cfg, resolve=True),
-            dir = output_dir,
-            resume = 'auto')
-
 def train_setup(args):
     """
     Create configs and perform basic setups. In args should be:
@@ -206,6 +190,5 @@ def train_setup(args):
     write_config(cfg, args.output_dir, name='pre_apply_rules_config.yaml')
     apply_scaling_rules_to_cfg(cfg)
     write_config(cfg, args.output_dir, name='config.yaml')
-    setup_wandb_logging(cfg)
     logger.info('\n' + OmegaConf.to_yaml(cfg))
     return cfg

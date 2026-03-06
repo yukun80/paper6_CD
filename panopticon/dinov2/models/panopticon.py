@@ -33,11 +33,23 @@ class PanopticonPE(nn.Module):
     def forward(self, x_dict: dict) -> Tensor:
         x = x_dict["imgs"]
         chn_ids = x_dict["chn_ids"]
+        time_ids = x_dict.get("time_ids", None)
+        feature_type_ids = x_dict.get("feature_type_ids", None)
+        temporal_role_ids = x_dict.get("temporal_role_ids", None)
+        polarization_ids = x_dict.get("polarization_ids", None)
         w, h = x.shape[-2:]
         mask = x_dict.get("spec_masks", None)
 
         x = self.conv3d(x)
-        x = self.chnfus(x, chn_ids=chn_ids, mask=mask)  # B,L,D
+        x = self.chnfus(
+            x,
+            chn_ids=chn_ids,
+            mask=mask,
+            time_ids=time_ids,
+            feature_type_ids=feature_type_ids,
+            temporal_role_ids=temporal_role_ids,
+            polarization_ids=polarization_ids,
+        )  # B,L,D
         x = self.proj(x)
 
         return x, h, w
@@ -71,6 +83,12 @@ class ChnAttn(nn.Module):
         chnemb_cfg: dict = {},
         attn_cfg: dict = {},
         layer_norm: bool = False,
+        use_time_embed: bool = False,
+        time_embed_num: int = 2,
+        use_metadata_embed: bool = False,
+        feature_type_num: int = 4,
+        temporal_role_num: int = 5,
+        polarization_num: int = 2,
     ):
         """
         Args:
@@ -83,13 +101,31 @@ class ChnAttn(nn.Module):
         super().__init__()
 
         self.chnemb = ChnEmb(**chnemb_cfg, embed_dim=dim)
+        self.use_time_embed = use_time_embed
+        if self.use_time_embed:
+            self.time_embed = nn.Embedding(time_embed_num, dim)
+        self.use_metadata_embed = use_metadata_embed
+        if self.use_metadata_embed:
+            # 任务特定通道语义元信息 embedding（用于层次化洪涝分割适配）。
+            self.feature_type_embed = nn.Embedding(feature_type_num, dim)
+            self.temporal_role_embed = nn.Embedding(temporal_role_num, dim)
+            self.polarization_embed = nn.Embedding(polarization_num, dim)
         self.query = nn.Parameter(torch.randn(1, 1, dim))
         self.xattn = CrossAttnNoQueryProj(dim=dim, **attn_cfg)
 
         if layer_norm:
             self.layer_norm = nn.LayerNorm(dim)
 
-    def forward(self, x: Tensor, chn_ids: Tensor, mask: Tensor = None) -> Tensor:
+    def forward(
+        self,
+        x: Tensor,
+        chn_ids: Tensor,
+        mask: Tensor = None,
+        time_ids: Tensor = None,
+        feature_type_ids: Tensor = None,
+        temporal_role_ids: Tensor = None,
+        polarization_ids: Tensor = None,
+    ) -> Tensor:
         """
         Args:
             x (Tensor): Image tensor of shape (B, C, L, D)
@@ -106,6 +142,29 @@ class ChnAttn(nn.Module):
 
         # add embeddings
         chn_embs = self.chnemb(chn_ids)  # B,C,D
+        if self.use_time_embed and time_ids is not None:
+            chn_embs = chn_embs + self.time_embed(time_ids.long())
+        if self.use_metadata_embed:
+            # 三类元信息均提供时才加入，缺失则保持向后兼容。
+            if feature_type_ids is not None and temporal_role_ids is not None and polarization_ids is not None:
+                if feature_type_ids.shape != chn_ids.shape:
+                    raise ValueError(
+                        f"feature_type_ids shape mismatch: {tuple(feature_type_ids.shape)} vs {tuple(chn_ids.shape)}"
+                    )
+                if temporal_role_ids.shape != chn_ids.shape:
+                    raise ValueError(
+                        f"temporal_role_ids shape mismatch: {tuple(temporal_role_ids.shape)} vs {tuple(chn_ids.shape)}"
+                    )
+                if polarization_ids.shape != chn_ids.shape:
+                    raise ValueError(
+                        f"polarization_ids shape mismatch: {tuple(polarization_ids.shape)} vs {tuple(chn_ids.shape)}"
+                    )
+                metadata_embs = (
+                    self.feature_type_embed(feature_type_ids.long())
+                    + self.temporal_role_embed(temporal_role_ids.long())
+                    + self.polarization_embed(polarization_ids.long())
+                )
+                chn_embs = chn_embs + metadata_embs
         x += chn_embs.unsqueeze(2)
 
         # abstract away L

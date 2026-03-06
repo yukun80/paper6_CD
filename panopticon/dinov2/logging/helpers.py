@@ -12,7 +12,6 @@ import time
 import torch
 import numpy as np
 import dinov2.distributed as distributed
-import wandb 
 import os
 import math
 
@@ -20,21 +19,16 @@ logger = logging.getLogger("dinov2")
 
 
 class MetricLogger(object):
-    def __init__(self, delimiter="\t", output_dir=None, output_file=None, use_wandb=False):
+    def __init__(self, delimiter="\t", output_dir=None, output_file=None):
         self.meters = defaultdict(SmoothedValue)
         self.expert_meters = {}  # Separate dict for expert metrics
         self.delimiter = delimiter
         self.output_file = os.path.join(output_dir, output_file) if output_dir else output_file
-        self.use_wandb = use_wandb
         self.epoch_len = None
         self.nsamples_per_iter = None
         self.dataset_len = None
         # Track which metrics should be logged as bar charts
         self.expert_metrics = set()
-
-        if use_wandb:
-            assert wandb.run is not None, 'wandb.run needs to be initialized before MetricLogger'
-            self.run = wandb.run
         self.iter_time = SmoothedValue(fmt="{avg:.6f}")
         self.data_time = SmoothedValue(fmt="{avg:.6f}")
         self.epoch_time = SmoothedValue(fmt="{avg:.6f}")
@@ -92,41 +86,6 @@ class MetricLogger(object):
     
         with open(self.output_file, "a") as f:
             f.write(json.dumps(dict_to_dump) + "\n")
-
-        if self.use_wandb:
-            # improved ordering for wandb online GUI
-            pattern = {
-                'params': ['lr','wd','mom','teacher_temp', 'repa_alpha'],
-                'loss': ['total_loss','dino_local_crops_loss','dino_global_crops_loss','koleo_loss','ibot_loss','aux_loss','pe_distil_loss'],
-                'expert_activations': [k for k in self.expert_meters.keys()]
-            }
-            for pat, v in pattern.items():
-                to_log = {}
-                for k in v:
-                    if k in dict_to_dump:
-                        to_log[k] = dict_to_dump.pop(k)
-                self.log_wandb(iteration, to_log, prefix=pat)
-            if len(dict_to_dump) > 0:
-                self.log_wandb(iteration, dict_to_dump)
-
-    def log_wandb(self, iteration, metric_dict, prefix=None, log_step=True):
-        if not self.use_wandb:
-            return
-        if prefix:
-            metric_dict = {os.path.join(prefix,str(k)): v for k, v in metric_dict.items()}
-
-        # define progress values
-        metric_dict['iteration'] = iteration
-        metric_dict['epoch'] = iteration // self.epoch_len
-        if self.nsamples_per_iter is not None:
-            metric_dict['nsamples'] = iteration * self.nsamples_per_iter
-            if self.dataset_len is not None:
-                metric_dict['epoch_act'] = (iteration * self.nsamples_per_iter) // self.dataset_len
-
-        if log_step:
-            self.run.log(metric_dict, step=iteration)
-        else:
-            self.run.log(metric_dict)
     
 
     def log_every(self, 

@@ -34,7 +34,6 @@ train:
   num_workers: 2
   OFFICIAL_EPOCH_LENGTH: 10
 
-  use_wandb: true
   saveckp_freq: 5
   seed: 21
   log_every_n_steps: 10

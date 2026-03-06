@@ -79,7 +79,6 @@ train:
   pin_memory: true
   persistent_workers: true
 
-  use_wandb: False
   output_dir: .
   saveckp_freq: 5
   seed: 0

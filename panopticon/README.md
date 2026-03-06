@@ -60,7 +60,6 @@ pip install -r requirements.txt
 
 The following env variables need to be put in `.env` file in the codebase root
 ```
-WANDB_PROJECT=your_wandb_proj_name
 GEO_BENCH_DIR=/path/to/geobench/dir
 RDIR=/path/to/resource/dir
 CDIR=/.../panopticon/dinov2/configs

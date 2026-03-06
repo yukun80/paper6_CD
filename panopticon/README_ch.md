@@ -69,7 +69,6 @@ pip install -r requirements.txt
 在代码根目录下创建一个 `.env` 文件，并配置以下环境变量：
 
 ```bash
-WANDB_PROJECT=你的wandb项目名称
 GEO_BENCH_DIR=/geobench/数据集/路径
 RDIR=/资源/文件夹/路径
 CDIR=/.../panopticon/dinov2/configs

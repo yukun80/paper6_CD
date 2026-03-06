@@ -1,0 +1,54 @@
+seed: 42
+
+data:
+  root: ../datasets/urban_sar_floods_256
+  train_split: Train_dataset.txt
+  val_split: Valid_dataset.txt
+  ignore_index: 255
+  crop_size: 252
+  # Band1..8:
+  # Pre coh VH, Pre coh VV, Co coh VH, Co coh VV,
+  # Pre int VH, Pre int VV, Co int VH, Co int VV
+  channel_ids: [2101, 2102, 2201, 2202, -2, -1, -2, -1]
+  time_ids: [0, 0, 1, 1, 0, 0, 1, 1]
+  mean: [0.23651549, 0.31761484, 0.18514981, 0.26901252, -14.57879175, -8.6098158, -14.29073382, -8.33534564]
+  std: [0.16280619, 0.20849304, 0.14008107, 0.19767644, 4.07141682, 3.94773216, 4.21006244, 4.05494136]
+
+model:
+  checkpoint_path: checkpoints/panopticon_vitb14_teacher.pth
+  num_classes: 3
+  block_indices: [3, 5, 7, 11]
+  decode_channels: 256
+  use_time_embed: true
+
+runtime:
+  require_cuda: true
+  allow_tf32: true
+  amp:
+    enabled: true
+    dtype: fp16
+
+loss:
+  auto_class_weights: true
+  ce_weight: 1.0
+  dice_weight: 0.5
+  eps: 1.0e-6
+
+optim:
+  lr_backbone: 1.0e-5
+  lr_head: 1.0e-4
+  weight_decay: 0.01
+
+train:
+  output_dir: ./panopticon/outputs/urban_floods_panopticon
+  epochs: 100
+  freeze_backbone_epochs: 8
+  batch_size: 8
+  val_batch_size: 1
+  num_workers: 4
+  grad_clip_norm: 1.0
+  log_interval: 50
+  positive_classes: [1, 2]
+  selection_metric: pos_mIoU
+  selection_mode: max
+  selection_tie_breakers: [IoU_2, mIoU]
