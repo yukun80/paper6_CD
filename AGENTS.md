@@ -39,6 +39,13 @@ python datasets/script/convert_urban_sar_floods_to_cd.py --src-root datasets/urb
 PYTHONPATH=panopticon python panopticon/urban_floods/train.py --config-file panopticon/configs/urban_floods_seg.yaml
 PYTHONPATH=panopticon python panopticon/urban_floods/eval.py --config-file panopticon/configs/urban_floods_seg.yaml --ckpt <ckpt_path> --split val
 
+# Panopticon Hierarchical PanFlood-Adapter training / eval
+PYTHONPATH=panopticon python panopticon/urban_floods_hier/train_hier.py --config-file panopticon/configs/urban_floods_hier_seg.yaml
+PYTHONPATH=panopticon python panopticon/urban_floods_hier/eval_hier.py --config-file panopticon/configs/urban_floods_hier_seg.yaml --ckpt <ckpt_path> --split val
+
+# Compute robust 12ch normalization stats (train split only)
+python datasets/script/compute_urban_sar_floods_ch12_stats.py --data-root datasets/urban_sar_floods_ch12_256 --split-file Train_dataset.txt --strict
+
 # Check samples that become all-ignore after center crop
 python datasets/script/check_urban_sar_floods_ignore_samples.py --data-root datasets/urban_sar_floods_256 --crop-size 252 --num-workers 8
 ```
@@ -80,6 +87,10 @@ python datasets/script/check_urban_sar_floods_ignore_samples.py --data-root data
   - `panopticon/urban_floods/train.py`
   - `panopticon/urban_floods/eval.py`
   - `panopticon/configs/urban_floods_seg.yaml`
+- Hierarchical downstream task entry:
+  - `panopticon/urban_floods_hier/train_hier.py`
+  - `panopticon/urban_floods_hier/eval_hier.py`
+  - `panopticon/configs/urban_floods_hier_seg.yaml`
 - Dataset check utility:
   - `datasets/script/check_urban_sar_floods_ignore_samples.py`
   - `ignore_check_train.txt` / `ignore_check_val.txt` now output `SAR` paths.
@@ -89,9 +100,23 @@ python datasets/script/check_urban_sar_floods_ignore_samples.py --data-root data
   - `datasets/script/rebuild_urban_sar_floods_hier_labels.py`
   - 输出并行目录：`GT_floodness/` 与 `GT_flood_type/`（不覆盖原 `GT/`）
   - `GT_flood_type` 默认忽略值：`255`（与现有 `ignore_index` 配置一致）
+- 12 通道顺序（`urban_sar_floods_ch12_256`，VH/VV 版）：
+  - `pre_coh_vh, pre_coh_vv, co_coh_vh, co_coh_vv, pre_int_vh, pre_int_vv, co_int_vh, co_int_vv, dcoh_vh, dcoh_vv, dint_vh, dint_vv`
+  - 层次化配置需与该顺序对齐：`channel_ids/time_ids/feature_type_ids/temporal_role_ids/polarization_ids`
+- 12 通道统计量脚本：
+  - `datasets/script/compute_urban_sar_floods_ch12_stats.py`
+  - 默认使用 `Train_dataset.txt`，输出 `datasets/urban_sar_floods_ch12_256/channel_stats_ch12_train.json`
+  - 优先使用上述 JSON 的 `recommended_config_fields.mean/std` 回填配置
+- Hierarchical 评估与监督口径（`urban_floods_hier`）：
+  - 评估主指标：`pos_mIoU`（正类 `[1, 2]`），并记录 `IoU_1/IoU_2/mIoU/pos_mF1`
+  - 三标签使用：`main_label` 用于三分类一致性 CE；`floodness_label` 用于洪水二分类；`flood_type_label` 仅在非 `ignore_index` 像素参与类型损失
+  - 最终三类概率重组：`P(BG)=1-Pf`, `P(FO)=Pf*(1-Pu)`, `P(FU)=Pf*Pu`，预测为 `argmax`
 - Best-checkpoint selection for panopticon urban floods is configured in YAML:
   - default `selection_metric: pos_mIoU` (positive classes `[1, 2]`)
   - tie-breakers: `IoU_2`, then `mIoU`.
+- xformers 运行提示：
+  - `TypedStorage is deprecated` 多为 xformers 内部兼容告警，通常不导致训练失败
+  - 是否真正报错以 traceback 和进程退出码为准
 
 ## Commit & Pull Request Guidelines
 - Current history uses short one-line commit messages (Chinese or English). Keep them concise and specific.
