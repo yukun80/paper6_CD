@@ -1,0 +1,8 @@
+mmengine>=0.10.7
+git+https://github.com/StarsMyDestination/torchsparse.git@mine
+pycocotools>=2.0.0
+matplotlib
+jupyter>=1.0.0
+easydict
+supervision
+open3d
