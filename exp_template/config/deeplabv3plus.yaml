@@ -47,7 +47,7 @@ train:
     layout_style: grouped
   show_progress: true
   progress_leave: false
-  max_epochs: 120
+  max_epochs: 80
   batch_size: 8
   val_batch_size: 4
   num_workers: 8
