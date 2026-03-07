@@ -65,9 +65,7 @@ class UrbanFloodSegDataset(Dataset):
         gt = _read_gt(sample.gt_path)
 
         if sar.shape[0] != len(self.mean):
-            raise ValueError(
-                f"通道数不匹配: sample={sample.sar_path}, got={sar.shape[0]}, expected={len(self.mean)}"
-            )
+            raise ValueError(f"通道数不匹配: sample={sample.sar_path}, got={sar.shape[0]}, expected={len(self.mean)}")
 
         sar, gt = _sanitize_invalid_pixels(sar, gt, self.mean, self.ignore_index)
         gt = _sanitize_label_values(gt, self.ignore_index)
@@ -216,9 +214,7 @@ def _parse_split_file(data_root: Path, split_path: Path) -> List[SampleRecord]:
         gt_path = (data_root / gt_rel).resolve()
         sar_path = (data_root / sar_rel).resolve()
         if not gt_path.exists() or not sar_path.exists():
-            raise FileNotFoundError(
-                f"样本文件不存在: gt={gt_path.exists()} sar={sar_path.exists()} | line={raw}"
-            )
+            raise FileNotFoundError(f"样本文件不存在: gt={gt_path.exists()} sar={sar_path.exists()} | line={raw}")
 
         samples.append(
             SampleRecord(

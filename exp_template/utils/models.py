@@ -11,9 +11,11 @@ import torch.nn.functional as F
 from torchvision.models import (
     ResNet50_Weights,
     ResNet101_Weights,
+    Swin_B_Weights,
     Swin_T_Weights,
     resnet50,
     resnet101,
+    swin_b,
     swin_t,
 )
 from torchvision.models._utils import IntermediateLayerGetter
@@ -87,20 +89,36 @@ def expand_input_conv(conv: nn.Conv2d, in_channels: int) -> nn.Conv2d:
 
 
 class SwinUPerLite(nn.Module):
-    """Swin-T backbone + 轻量 FPN 解码头。"""
+    """Swin backbone + 轻量 FPN 解码头。"""
 
-    def __init__(self, in_channels: int, num_classes: int, pretrained: bool = True, fpn_dim: int = 128) -> None:
+    def __init__(
+        self,
+        in_channels: int,
+        num_classes: int,
+        pretrained: bool = True,
+        fpn_dim: int = 128,
+        backbone: str = "swin_t",
+    ) -> None:
         super().__init__()
-        weights = Swin_T_Weights.IMAGENET1K_V1 if pretrained else None
-        self.backbone = swin_t(weights=weights)
+        backbone = backbone.lower()
+        if backbone in {"swin_t", "swin_tiny"}:
+            weights = Swin_T_Weights.IMAGENET1K_V1 if pretrained else None
+            self.backbone = swin_t(weights=weights)
+            stage_channels = [96, 192, 384, 768]
+        elif backbone in {"swin_b", "swin_base", "mid"}:
+            weights = Swin_B_Weights.IMAGENET1K_V1 if pretrained else None
+            self.backbone = swin_b(weights=weights)
+            stage_channels = [128, 256, 512, 1024]
+        else:
+            raise ValueError(f"不支持的 Swin backbone: {backbone}")
 
         # patch embedding 首层通道扩展
         self.backbone.features[0][0] = expand_input_conv(self.backbone.features[0][0], in_channels)
 
-        self.lateral1 = nn.Conv2d(96, fpn_dim, 1)
-        self.lateral2 = nn.Conv2d(192, fpn_dim, 1)
-        self.lateral3 = nn.Conv2d(384, fpn_dim, 1)
-        self.lateral4 = nn.Conv2d(768, fpn_dim, 1)
+        self.lateral1 = nn.Conv2d(stage_channels[0], fpn_dim, 1)
+        self.lateral2 = nn.Conv2d(stage_channels[1], fpn_dim, 1)
+        self.lateral3 = nn.Conv2d(stage_channels[2], fpn_dim, 1)
+        self.lateral4 = nn.Conv2d(stage_channels[3], fpn_dim, 1)
 
         self.smooth1 = nn.Conv2d(fpn_dim, fpn_dim, 3, padding=1)
         self.smooth2 = nn.Conv2d(fpn_dim, fpn_dim, 3, padding=1)
@@ -247,6 +265,7 @@ def _build_swin_uperlite(model_cfg: Dict) -> nn.Module:
         num_classes=int(model_cfg.get("num_classes", 3)),
         pretrained=bool(model_cfg.get("pretrained", True)),
         fpn_dim=int(model_cfg.get("fpn_dim", 128)),
+        backbone=str(model_cfg.get("backbone", "swin_t")),
     )
 
 
@@ -294,6 +313,29 @@ def build_scheduler(optimizer: torch.optim.Optimizer, sched_cfg: Dict, max_epoch
             T_max=max_epochs,
             eta_min=float(sched_cfg.get("min_lr", 1e-6)),
         )
+    if name == "warmup_cosine":
+        warmup_epochs = int(sched_cfg.get("warmup_epochs", 5))
+        min_lr = float(sched_cfg.get("min_lr", 1e-6))
+        total_epochs = int(max_epochs)
+
+        # 使用分组 lambda，支持不同参数组的初始 lr。
+        lambdas = []
+        for pg in optimizer.param_groups:
+            base_lr = float(pg.get("lr", 0.0))
+            min_factor = (min_lr / base_lr) if base_lr > 0 else 0.0
+
+            def _lr_lambda(epoch: int, *, min_factor=min_factor) -> float:
+                if warmup_epochs > 0 and epoch < warmup_epochs:
+                    return float(epoch + 1) / float(warmup_epochs)
+                denom = max(total_epochs - warmup_epochs, 1)
+                progress = float(epoch - warmup_epochs) / float(denom)
+                progress = min(max(progress, 0.0), 1.0)
+                cosine = 0.5 * (1.0 + math.cos(math.pi * progress))
+                return min_factor + (1.0 - min_factor) * cosine
+
+            lambdas.append(_lr_lambda)
+
+        return torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambdas)
     if name == "step":
         return torch.optim.lr_scheduler.StepLR(
             optimizer,

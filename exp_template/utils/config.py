@@ -56,13 +56,13 @@ def make_run_dirs(cfg: Dict, project_root: str, work_dir_override: str = "") -> 
     root = work_dir_override or work_cfg.get("root", "exp_template/work_dir")
     root_path = Path(resolve_path(root, project_root))
 
-    exp_subdir = work_cfg.get("exp_subdir", "urban_sar_floods_ch12")
     model_name = cfg.get("model", {}).get("name", "model")
     backbone = cfg.get("model", {}).get("backbone", "default")
     run_template = work_cfg.get("run_name_template", "{model}_{backbone}_{time}")
     run_name = run_template.format(model=model_name, backbone=backbone, time=now_str())
 
-    run_root = root_path / exp_subdir / run_name
+    # 直接在 work_dir 下按 run_name 建目录，不再增加额外 exp_subdir 层级。
+    run_root = root_path / run_name
     paths = {
         "root": run_root,
         "checkpoints": run_root / "checkpoints",

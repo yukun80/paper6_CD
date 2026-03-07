@@ -1,11 +1,14 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-
-try:
-    from . import resnet as models
-except ImportError:  # pragma: no cover
-    import model.resnet as models
+from torchvision.models import (
+    ResNet101_Weights,
+    ResNet152_Weights,
+    ResNet50_Weights,
+    resnet101,
+    resnet152,
+    resnet50,
+)
 
 
 class PPM(nn.Module):
@@ -52,21 +55,19 @@ class PSPNet(nn.Module):
         self.use_ppm = use_ppm
         self.use_aux = use_aux
 
+        # 统一使用 torchvision 标准 ResNet，避免与自定义 deep-base 结构产生权重不兼容。
         if layers == 50:
-            resnet = models.resnet50(pretrained=pretrained)
+            weights = ResNet50_Weights.IMAGENET1K_V1 if pretrained else None
+            resnet = resnet50(weights=weights)
         elif layers == 101:
-            resnet = models.resnet101(pretrained=pretrained)
+            weights = ResNet101_Weights.IMAGENET1K_V1 if pretrained else None
+            resnet = resnet101(weights=weights)
         else:
-            resnet = models.resnet152(pretrained=pretrained)
+            weights = ResNet152_Weights.IMAGENET1K_V1 if pretrained else None
+            resnet = resnet152(weights=weights)
         self.layer0 = nn.Sequential(
             resnet.conv1,
             resnet.bn1,
-            resnet.relu,
-            resnet.conv2,
-            resnet.bn2,
-            resnet.relu,
-            resnet.conv3,
-            resnet.bn3,
             resnet.relu,
             resnet.maxpool,
         )

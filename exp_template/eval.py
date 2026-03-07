@@ -52,6 +52,8 @@ def main() -> None:
 
     amp_enabled = bool(cfg.get("train", {}).get("amp", True) and device.type == "cuda")
     pos_classes = tuple(cfg.get("eval", {}).get("pos_classes", [1, 2]))
+    show_progress = bool(cfg.get("train", {}).get("show_progress", True))
+    progress_leave = bool(cfg.get("train", {}).get("progress_leave", False))
 
     with torch.no_grad():
         _, metrics = run_one_epoch(
@@ -59,13 +61,20 @@ def main() -> None:
             loader=loader,
             criterion=criterion,
             device=device,
+            epoch=1,
+            max_epochs=1,
+            phase_name=f"eval-{args.split}",
             train_mode=False,
             optimizer=None,
             scaler=None,
             amp_enabled=amp_enabled,
+            current_lr=0.0,
+            show_progress=show_progress,
+            progress_leave=progress_leave,
             ignore_index=int(cfg["data"].get("ignore_index", 255)),
             num_classes=int(cfg["model"].get("num_classes", 3)),
             aux_loss_weight=float(cfg.get("loss", {}).get("aux_loss_weight", 0.4)),
+            grad_clip_norm=0.0,
             pos_classes=pos_classes,
         )
 

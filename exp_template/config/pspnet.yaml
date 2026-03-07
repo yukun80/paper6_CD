@@ -1,7 +1,7 @@
 exp_name: urban_sar_floods_ch12
 
 runtime:
-  require_cuda: false
+  require_cuda: true
 
 data:
   root: datasets/urban_sar_floods_ch12_256
@@ -27,15 +27,16 @@ model:
   zoom_factor: 1
   use_ppm: true
   use_aux: true
-  pretrained: false
+  pretrained: true
 
 optim:
   type: adamw
-  lr: 0.0002
+  lr: 0.00015
   weight_decay: 0.0001
 
 scheduler:
-  type: cosine
+  type: warmup_cosine
+  warmup_epochs: 5
   min_lr: 0.000001
 
 loss:
@@ -45,6 +46,12 @@ train:
   seed: 42
   deterministic: false
   amp: true
+  tensorboard:
+    enabled: true
+    log_subdir: tb
+    layout_style: grouped
+  show_progress: true
+  progress_leave: false
   max_epochs: 80
   batch_size: 6
   val_batch_size: 2
@@ -52,6 +59,7 @@ train:
   pin_memory: true
   drop_last: false
   save_every: 10
+  grad_clip_norm: 1.0
   resume_from: ""
 
 eval:
@@ -65,5 +73,4 @@ visualize:
 
 work_dir:
   root: exp_template/work_dir
-  exp_subdir: urban_sar_floods_ch12
   run_name_template: "{model}_{backbone}_{time}"

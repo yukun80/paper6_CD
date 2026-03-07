@@ -48,6 +48,17 @@ python datasets/script/compute_urban_sar_floods_ch12_stats.py --data-root datase
 
 # Check samples that become all-ignore after center crop
 python datasets/script/check_urban_sar_floods_ignore_samples.py --data-root datasets/urban_sar_floods_256 --crop-size 252 --num-workers 8
+
+# exp_template 单模型训练 / 评估 / 推理可视化（以 unet 为例）
+python exp_template/train.py --config-file exp_template/config/unet.yaml
+python exp_template/eval.py --config-file exp_template/config/unet.yaml --ckpt exp_template/work_dir/<run_name>/checkpoints/best.pth --split val
+python exp_template/visualize.py --config-file exp_template/config/unet.yaml --ckpt exp_template/work_dir/<run_name>/checkpoints/best.pth --split val --max-samples 50
+
+# exp_template 一次性批训练全部对比模型（失败继续，最后汇总）
+bash exp_template/train_all_models.sh
+
+# TensorBoard（可选，若提示未安装）
+pip install tensorboard
 ```
 
 ## Coding Style & Naming Conventions
@@ -117,6 +128,25 @@ python datasets/script/check_urban_sar_floods_ignore_samples.py --data-root data
 - xformers 运行提示：
   - `TypedStorage is deprecated` 多为 xformers 内部兼容告警，通常不导致训练失败
   - 是否真正报错以 traceback 和进程退出码为准
+
+## exp_template UrbanSARFloods Notes
+- 入口脚本：
+  - `exp_template/train.py`
+  - `exp_template/eval.py`
+  - `exp_template/visualize.py`
+  - `exp_template/train_all_models.sh`
+- 模型配置：
+  - `exp_template/config/{resnet_fcn,unet,deeplabv3plus,pspnet,swin_uperlite}.yaml`
+- 数据与标签口径：
+  - 数据目录：`datasets/urban_sar_floods_ch12_256`
+  - 标签直接使用原始三分类 `0/1/2`，不使用二分类构造标签
+- 评估指标口径：
+  - 包含 `IoU / Precision / Recall / F1 / OA`
+  - 同时记录 `mIoU/mPrecision/mRecall/mF1` 与 `pos_mIoU/pos_mPrecision/pos_mRecall/pos_mF1`
+- TensorBoard 约定：
+  - 默认开启：`train.tensorboard.enabled: true`
+  - 默认布局：`train.tensorboard.layout_style: grouped`（按 Loss 和 Validation Metrics 分组，避免单列堆叠）
+  - 若环境缺失 TensorBoard，请先安装 `tensorboard`
 
 ## Commit & Pull Request Guidelines
 - Current history uses short one-line commit messages (Chinese or English). Keep them concise and specific.
