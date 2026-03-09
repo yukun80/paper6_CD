@@ -1,0 +1,16 @@
+base_config: base.yaml
+
+train:
+  run_name: stage3_state_memory
+  epochs: 35
+
+model:
+  enable_router: true
+  enable_memory: true
+  enable_prompt_refiner: false
+
+loss:
+  w_router: 0.3
+  w_open: 0.6
+  w_urban: 1.0
+  w_consistency: 0.1

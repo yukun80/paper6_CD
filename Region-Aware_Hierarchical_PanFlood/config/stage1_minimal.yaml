@@ -1,0 +1,16 @@
+base_config: base.yaml
+
+train:
+  run_name: stage1_minimal
+  epochs: 20
+
+model:
+  enable_router: false
+  enable_memory: false
+  enable_prompt_refiner: false
+
+loss:
+  w_router: 0.0
+  w_open: 0.2
+  w_urban: 0.2
+  w_consistency: 0.0
