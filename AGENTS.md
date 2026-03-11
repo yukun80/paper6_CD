@@ -10,7 +10,7 @@ This repository is a multi-baseline workspace for remote sensing change detectio
   - `datasets/urban_sar_floods_CD/`: converted CD/SCD-ready dataset.
   - `datasets/GF3_Henan/`: GF3 河南灾前/灾后 HV 极化幅度图。
   - `datasets/script/`: conversion and preprocessing scripts.
-- `sar_prompt_flood/`: GF3_Henan-only 的双时相 SAR prompt 优化 + SAM 洪水/变化分割工具。
+- `sar_prompt_flood/`: 基于有标注参考集训练、面向 GF3_Henan 零样本迁移的双时相 SAR prompt 优化 + SAM 洪水分割工具。
 - `doc/`: experiment logs and design notes (for example `doc/工作日志_2026-03-03.md`).
 - `dinov3_RS_CD/`, `panopticon/`, `AdaptOVCD-main/`, `baselines/CMCDNet/`: auxiliary research codebases kept in-tree.
 
@@ -51,9 +51,15 @@ python datasets/script/compute_urban_sar_floods_ch12_stats.py --data-root datase
 # Download SAM ViT-B checkpoint for GF3 prompt segmentation
 python datasets/script/download_sam_vit_b.py
 
-# GF3_Henan preprocessing / full SAM pipeline
-python datasets/script/prepare_gf3_henan_pair.py --config-file sar_prompt_flood/config/gf3_henan.json
-python -m sar_prompt_flood.run_gf3_pipeline --config-file sar_prompt_flood/config/gf3_henan.json
+# Download SAM ViT-B checkpoint for reference-guided SAR prompt segmentation
+python datasets/script/download_sam_vit_b.py
+
+# Train reference-guided prompt proposal / prompt policy
+python -m sar_prompt_flood.train_reference_prompt --config-file sar_prompt_flood/config/urban_sar_reference.json
+python -m sar_prompt_flood.train_prompt_policy --config-file sar_prompt_flood/config/urban_sar_reference.json
+
+# Run zero-shot transfer on GF3_Henan tile dataset
+python -m sar_prompt_flood.run_reference_prompt_pipeline --config-file sar_prompt_flood/config/urban_sar_reference.json
 
 # Check samples that become all-ignore after center crop
 python datasets/script/check_urban_sar_floods_ignore_samples.py --data-root datasets/urban_sar_floods_256 --crop-size 252 --num-workers 8
@@ -84,7 +90,7 @@ pip install tensorboard
 - No single root test suite is enforced; validate changes in the touched module.
 - Open-CD changes: run `smoke-train` before long runs.
 - Dataset pipeline changes: run converter with `--dry-run` first, then a short train/eval sanity run.
-- `sar_prompt_flood` changes: at minimum run `python -m py_compile sar_prompt_flood/*.py datasets/script/download_sam_vit_b.py datasets/script/prepare_gf3_henan_pair.py`; use `--preprocess-only` or a reduced `max_tiles` config for smoke validation before full-scene runs.
+- `sar_prompt_flood` changes: at minimum run `python -m py_compile sar_prompt_flood/*.py datasets/script/download_sam_vit_b.py`; then smoke-check one reference tile read and one GF3 target tile read before full training/inference.
 - CMCDNet-specific updates can use:
   - `pytest baselines/CMCDNet/tests -q`
 
@@ -158,26 +164,30 @@ pip install tensorboard
   - 默认布局：`train.tensorboard.layout_style: grouped`（按 Loss 和 Validation Metrics 分组，避免单列堆叠）
   - 若环境缺失 TensorBoard，请先安装 `tensorboard`
 
-## sar_prompt_flood GF3_Henan Notes
-- 任务入口：
-  - `sar_prompt_flood/run_gf3_pipeline.py`
-  - `sar_prompt_flood/config/gf3_henan.json`
-  - `datasets/script/prepare_gf3_henan_pair.py`
+## sar_prompt_flood Reference-to-GF3 Notes
+- 当前任务入口：
+  - `sar_prompt_flood/train_reference_prompt.py`
+  - `sar_prompt_flood/train_prompt_policy.py`
+  - `sar_prompt_flood/run_reference_prompt_pipeline.py`
+  - `sar_prompt_flood/config/urban_sar_reference.json`
   - `datasets/script/download_sam_vit_b.py`
+- 当前数据角色：
+  - 参考训练集：`datasets/urban_sar_floods_test/urban_sar_floods_test_tiles_512_band5_band7`
+  - 目录结构：`pre/`, `post/`, `GT/`
+  - 目标推理集：`datasets/GF3_Henan/GF3_Henan_tiles_512`
+  - 目录结构：`pre/`, `post/`
 - 当前任务定义：
-  - 输入：`datasets/GF3_Henan/Pre_Zhengzhou_ascending_clip.tif` 与 `Post_Zhengzhou_ascending_clip.tif`
-  - 输出：全图 `init_mask/opt_mask/final_mask/change_score/uncertainty`
-  - 分割器：仅支持 `SAM vit_b`，不再保留 heuristic fallback
+  - 在参考训练集上训练 reference-guided prompt proposal 与 prompt policy
+  - 在 GF3_Henan 无标签目标集上做单参考检索、prompt 优化和 tile 级零样本推理
+  - 推理阶段不微调 `SAM vit_b`
 - 权重约定：
-  - checkpoint 路径：`PPO-main/segmenter/checkpoint/sam_vit_b_01ec64.pth`
-  - 若权重缺失或 `segment_anything` 导入失败，pipeline 应直接报错，不做降级
-- 预处理要点：
-  - 必须先做 `Post -> Pre` 网格对齐与 nodata 清洗，不能直接对原始两景逐像素相减
-  - 默认切片：`512x512`，`overlap=128`
-- 优化/分割口径：
-  - prompt 优化与最终解码都使用同一个 SAM 后端
-  - `opt_mask` 表示优化后 prompts 送入 SAM 的 tile 回拼结果
-  - `final_mask` 表示对 `opt_mask` 经全图阈值化后的最终二值结果
+  - SAM checkpoint 路径：`PPO-main/segmenter/checkpoint/sam_vit_b_01ec64.pth`
+  - 训练输出目录：`sar_prompt_flood/work_dir/reference_supervised`
+  - GF3 推理输出目录：`sar_prompt_flood/outputs/reference_supervised_gf3`
+- 评估/输出口径：
+  - 参考集验证阶段输出 `IoU/Dice`
+  - GF3 目标集无标签，`summary.json` 只输出无监督统计，不输出 IoU/Dice
+  - 当前默认每个 GF3 tile 只检索一个参考样本，不做多参考融合和全图回拼
 
 ## Commit & Pull Request Guidelines
 - Current history uses short one-line commit messages (Chinese or English). Keep them concise and specific.

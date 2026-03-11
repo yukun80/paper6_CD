@@ -1,0 +1,30 @@
+{
+  "reference_data": {
+    "root": "datasets/urban_sar_floods_test/urban_sar_floods_test_tiles_512_band5_band7",
+    "split_dir": "datasets/urban_sar_floods_test/urban_sar_floods_test_tiles_512_band5_band7/splits",
+    "train_split": "train.txt",
+    "val_split": "val.txt",
+    "ref_bank_split": "ref_bank.txt",
+    "val_ratio": 0.2,
+    "seed": 42
+  },
+  "target_data": {
+    "root": "datasets/GF3_Henan/GF3_Henan_tiles_512",
+    "max_samples": -1
+  },
+  "train": {
+    "work_dir": "sar_prompt_flood/work_dir/reference_supervised",
+    "epochs": 6,
+    "batch_size": 4,
+    "lr": 0.001,
+    "weight_decay": 0.0001,
+    "num_workers": 0
+  },
+  "inference": {
+    "output_dir": "sar_prompt_flood/outputs/reference_supervised_gf3",
+    "save_geotiff": true,
+    "save_visuals": true,
+    "use_policy": true,
+    "max_samples": -1
+  }
+}
