@@ -9,6 +9,7 @@ from typing import Sequence
 
 import numpy as np
 
+from .ops import binary_close, binary_open
 
 class BasePromptSegmenter:
     """统一的 promptable 分割接口。"""
@@ -78,11 +79,31 @@ class SamPromptSegmenter(BasePromptSegmenter):
         masks, _, _ = self.predictor.predict(
             point_coords=np.asarray(coords, dtype=np.float32),
             point_labels=np.asarray(labels, dtype=np.int64),
-            multimask_output=False,
+            multimask_output=True,
         )
-        mask = masks[0].astype(np.uint8)
+        mask = self._select_best_mask(masks.astype(np.uint8), change_score, valid_mask)
+        mask = binary_open(binary_close(mask, 3), 3).astype(np.uint8)
         mask[~valid_mask] = 0
         return mask
+
+    def _select_best_mask(self, masks: np.ndarray, change_score: np.ndarray, valid_mask: np.ndarray) -> np.ndarray:
+        best_idx = 0
+        best_score = -1e9
+        valid = valid_mask.astype(bool)
+        for idx, candidate in enumerate(masks):
+            mask = candidate.astype(bool) & valid
+            area_ratio = float(mask.sum() / max(valid.sum(), 1))
+            inside = float(change_score[mask].mean()) if np.any(mask) else 0.0
+            outside = float(change_score[valid & ~mask].mean()) if np.any(valid & ~mask) else 0.0
+            score = 0.7 * inside + 0.3 * max(inside - outside, 0.0)
+            if area_ratio < 0.001:
+                score -= 1.0
+            if area_ratio > 0.75:
+                score -= 0.5
+            if score > best_score:
+                best_score = score
+                best_idx = idx
+        return masks[best_idx].astype(np.uint8)
 
 
 def build_segmenter(cfg: dict) -> SamPromptSegmenter:

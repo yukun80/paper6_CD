@@ -13,8 +13,8 @@ import rasterio
 import torch
 from torch.utils.data import Dataset
 
-from .feature_utils import robust_unit, safe_log_ratio
-from .ops import gradient_magnitude
+from .feature_utils import joint_robust_norm, local_change_strength, robust_unit, safe_log_ratio
+from .ops import connected_components_with_stats, gradient_magnitude
 
 
 @dataclass(frozen=True)
@@ -140,7 +140,7 @@ class UrbanSARReferenceTileDataset(Dataset):
             crs = ds_pre.crs
 
         valid_mask = np.isfinite(pre) & np.isfinite(post)
-        maps = build_reference_feature_maps(pre, post, valid_mask)
+        maps = build_reference_feature_maps(pre, post, valid_mask, sample_id=rec.sample_id)
         gt = gt.astype(np.int64)
         gt[~valid_mask] = self.ignore_index
         sample = {
@@ -149,10 +149,13 @@ class UrbanSARReferenceTileDataset(Dataset):
             "post": torch.from_numpy(maps["post_norm"].astype(np.float32)),
             "diff": torch.from_numpy(maps["diff"].astype(np.float32)),
             "neg_diff": torch.from_numpy(maps["neg_diff"].astype(np.float32)),
+            "darkening_score": torch.from_numpy(maps["darkening_score"].astype(np.float32)),
+            "brightening_score": torch.from_numpy(maps["brightening_score"].astype(np.float32)),
             "change_score": torch.from_numpy(maps["change_score"].astype(np.float32)),
             "stable_score": torch.from_numpy(maps["stable_score"].astype(np.float32)),
             "boundary_score": torch.from_numpy(maps["boundary_score"].astype(np.float32)),
             "log_ratio_like": torch.from_numpy(maps["log_ratio_like"].astype(np.float32)),
+            "local_contrast_score": torch.from_numpy(maps["local_contrast_score"].astype(np.float32)),
             "features": torch.from_numpy(maps["model_input"].astype(np.float32)),
             "pseudo_rgb": torch.from_numpy(maps["pseudo_rgb"].astype(np.uint8)),
             "gt": torch.from_numpy(gt),
@@ -238,17 +241,20 @@ class GF3TargetTileDataset(Dataset):
             crs = ds_pre.crs
 
         valid_mask = np.isfinite(pre) & np.isfinite(post)
-        maps = build_reference_feature_maps(pre, post, valid_mask)
+        maps = build_reference_feature_maps(pre, post, valid_mask, sample_id=rec.sample_id)
         return {
             "sample_id": rec.sample_id,
             "pre": torch.from_numpy(maps["pre_norm"].astype(np.float32)),
             "post": torch.from_numpy(maps["post_norm"].astype(np.float32)),
             "diff": torch.from_numpy(maps["diff"].astype(np.float32)),
             "neg_diff": torch.from_numpy(maps["neg_diff"].astype(np.float32)),
+            "darkening_score": torch.from_numpy(maps["darkening_score"].astype(np.float32)),
+            "brightening_score": torch.from_numpy(maps["brightening_score"].astype(np.float32)),
             "change_score": torch.from_numpy(maps["change_score"].astype(np.float32)),
             "stable_score": torch.from_numpy(maps["stable_score"].astype(np.float32)),
             "boundary_score": torch.from_numpy(maps["boundary_score"].astype(np.float32)),
             "log_ratio_like": torch.from_numpy(maps["log_ratio_like"].astype(np.float32)),
+            "local_contrast_score": torch.from_numpy(maps["local_contrast_score"].astype(np.float32)),
             "features": torch.from_numpy(maps["model_input"].astype(np.float32)),
             "pseudo_rgb": torch.from_numpy(maps["pseudo_rgb"].astype(np.uint8)),
             "valid_mask": torch.from_numpy(valid_mask.astype(bool)),
@@ -296,38 +302,82 @@ class ReferenceQueryPairDataset(Dataset):
         return {"query": query, "reference": reference}
 
 
-def build_reference_feature_maps(pre: np.ndarray, post: np.ndarray, valid_mask: np.ndarray) -> Dict[str, np.ndarray]:
+def build_reference_feature_maps(
+    pre: np.ndarray,
+    post: np.ndarray,
+    valid_mask: np.ndarray,
+    sample_id: str | None = None,
+) -> Dict[str, np.ndarray]:
     """从配对 SAR tile 构造监督参考实验的特征图。"""
-    pre_norm = robust_unit(pre, valid_mask)
-    post_norm = robust_unit(post, valid_mask)
+    pre_norm, post_norm = joint_robust_norm(pre, post, valid_mask)
     diff = post_norm - pre_norm
-    neg_diff = np.clip(pre_norm - post_norm, 0.0, None)
-    log_ratio_like = safe_log_ratio(pre, post, valid_mask)
-    log_ratio_like = robust_unit(-log_ratio_like, valid_mask)
-    change_score = np.clip(0.75 * robust_unit(neg_diff, valid_mask) + 0.25 * log_ratio_like, 0.0, 1.0)
-    stable_score = np.clip(0.8 * (1.0 - change_score) + 0.2 * (1.0 - np.abs(diff)), 0.0, 1.0)
+    darkening_raw = np.clip(pre_norm - post_norm, 0.0, None)
+    brightening_raw = np.clip(post_norm - pre_norm, 0.0, None)
+    neg_diff = darkening_raw.copy()
+    log_ratio_like = robust_unit(-safe_log_ratio(pre, post, valid_mask), valid_mask)
+    local_contrast_score = robust_unit(local_change_strength(pre, post, valid_mask), valid_mask)
+    darkening_score = robust_unit(darkening_raw, valid_mask)
+    brightening_score = robust_unit(brightening_raw, valid_mask)
+    change_score = np.clip(
+        0.45 * darkening_score + 0.30 * log_ratio_like + 0.20 * local_contrast_score + 0.05 * (1.0 - brightening_score),
+        0.0,
+        1.0,
+    )
+    stable_score = np.clip(0.65 * (1.0 - change_score) + 0.20 * (1.0 - local_contrast_score) + 0.15 * brightening_score, 0.0, 1.0)
     boundary_score = robust_unit(gradient_magnitude(change_score), valid_mask)
-    for arr in [pre_norm, post_norm, diff, neg_diff, log_ratio_like, change_score, stable_score, boundary_score]:
+    named_maps = {
+        "pre_norm": pre_norm,
+        "post_norm": post_norm,
+        "diff": diff,
+        "neg_diff": neg_diff,
+        "darkening_score": darkening_score,
+        "brightening_score": brightening_score,
+        "log_ratio_like": log_ratio_like,
+        "local_contrast_score": local_contrast_score,
+        "change_score": change_score,
+        "stable_score": stable_score,
+        "boundary_score": boundary_score,
+    }
+    for name, arr in named_maps.items():
+        arr[~np.isfinite(arr)] = 0.0
         arr[~valid_mask] = 0.0
+        if np.any(np.isnan(arr)) or np.any(np.isinf(arr)):
+            raise ValueError(f"Non-finite values remain in {name} for sample {sample_id or '<unknown>'}")
     pseudo_rgb = np.stack(
         [
             np.clip(pre_norm * 255.0, 0, 255).astype(np.uint8),
             np.clip(post_norm * 255.0, 0, 255).astype(np.uint8),
-            np.clip(change_score * 255.0, 0, 255).astype(np.uint8),
+            np.clip((0.65 * darkening_score + 0.35 * log_ratio_like) * 255.0, 0, 255).astype(np.uint8),
         ],
         axis=-1,
     )
     pseudo_rgb[~valid_mask] = 0
     model_input = np.stack(
-        [pre_norm, post_norm, diff, neg_diff, log_ratio_like, change_score, stable_score, boundary_score],
+        [
+            pre_norm,
+            post_norm,
+            diff,
+            darkening_score,
+            brightening_score,
+            log_ratio_like,
+            local_contrast_score,
+            change_score,
+            stable_score,
+            boundary_score,
+        ],
         axis=0,
     ).astype(np.float32)
+    if not np.isfinite(model_input).all():
+        raise ValueError(f"Non-finite values remain in model_input for sample {sample_id or '<unknown>'}")
     return {
         "pre_norm": pre_norm.astype(np.float32),
         "post_norm": post_norm.astype(np.float32),
         "diff": diff.astype(np.float32),
         "neg_diff": neg_diff.astype(np.float32),
+        "darkening_score": darkening_score.astype(np.float32),
+        "brightening_score": brightening_score.astype(np.float32),
         "log_ratio_like": log_ratio_like.astype(np.float32),
+        "local_contrast_score": local_contrast_score.astype(np.float32),
         "change_score": change_score.astype(np.float32),
         "stable_score": stable_score.astype(np.float32),
         "boundary_score": boundary_score.astype(np.float32),
@@ -340,13 +390,24 @@ def build_global_descriptor(sample: Dict) -> np.ndarray:
     """构造用于参考样本检索的全局描述子。"""
     valid = sample["valid_mask"].numpy().astype(bool)
     feats = []
-    for key in ["pre", "post", "diff", "change_score", "stable_score", "boundary_score"]:
+    for key in ["pre", "post", "darkening_score", "log_ratio_like", "change_score", "boundary_score", "local_contrast_score"]:
         arr = sample[key].numpy().astype(np.float32)
         vals = arr[valid]
         if vals.size == 0:
             feats.extend([0.0, 0.0, 0.0])
         else:
             feats.extend([float(vals.mean()), float(vals.std()), float(vals.max())])
+    pos_mask = (sample["change_score"].numpy() > 0.6) & valid
+    num_labels, _, stats = connected_components_with_stats(pos_mask.astype(np.uint8))
+    comp_areas = np.asarray([item["area"] for item in stats[1:]], dtype=np.float32)
+    feats.extend(
+        [
+            float(pos_mask.mean()) if valid.any() else 0.0,
+            float(num_labels - 1),
+            float(comp_areas.max() / max(pos_mask.sum(), 1)) if comp_areas.size > 0 else 0.0,
+            float(sample["boundary_score"].numpy()[valid].mean()) if valid.any() else 0.0,
+        ]
+    )
     return np.asarray(feats, dtype=np.float32)
 
 
@@ -365,8 +426,11 @@ def select_reference_id(
         if exclude_id and sample_id == exclude_id and len(candidate_ids) > 1:
             continue
         ref_desc = ref_dataset.get_descriptor(sample_id)
-        dist = float(np.linalg.norm(query_desc - ref_desc))
-        dist += 0.25 * abs(ref_dataset.get_positive_ratio(sample_id) - _query_positive_proxy(query_sample))
+        diff = np.abs(query_desc - ref_desc)
+        stats_dist = float(np.mean(diff[: 7 * 3]))
+        morph_dist = float(np.mean(diff[7 * 3 :]))
+        area_dist = abs(ref_dataset.get_positive_ratio(sample_id) - _query_positive_proxy(query_sample))
+        dist = 0.55 * stats_dist + 0.25 * area_dist + 0.20 * morph_dist
         if dist < best_dist:
             best_dist = dist
             best_id = sample_id

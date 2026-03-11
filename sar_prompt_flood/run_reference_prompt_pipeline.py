@@ -122,6 +122,7 @@ def main() -> None:
             max_positive_points=cfg["optimizer"].get("max_positive_points", 10),
             min_negative_points=cfg["optimizer"].get("min_negative_points", 2),
             max_negative_points=cfg["optimizer"].get("max_negative_points", 10),
+            objective_weights=cfg["optimizer"].get("objective_weights"),
         )
         init_summary = env.export_summary()
         if use_policy and policy_model is not None:

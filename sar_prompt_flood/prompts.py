@@ -29,11 +29,14 @@ class PromptSet:
     initial_positive_ids: List[int]
     initial_negative_ids: List[int]
     change_score: np.ndarray
+    darkening_score: np.ndarray
+    log_ratio_score: np.ndarray
     stable_score: np.ndarray
     boundary_score: np.ndarray
     pseudo_rgb: np.ndarray
     valid_mask: np.ndarray
     low_confidence: bool
+    area_prior: float
 
 
 def extract_node_feature(maps: Dict[str, np.ndarray], y: int, x: int, radius: int) -> Tuple[float, ...]:
@@ -45,19 +48,23 @@ def extract_node_feature(maps: Dict[str, np.ndarray], y: int, x: int, radius: in
     right = min(w, x + radius + 1)
     pre_patch = maps["pre"][top:bottom, left:right]
     post_patch = maps["post"][top:bottom, left:right]
-    diff_patch = maps["diff"][top:bottom, left:right]
-    score_patch = maps["change_score"][top:bottom, left:right]
+    dark_patch = maps["darkening_score"][top:bottom, left:right]
+    log_ratio_patch = maps["log_ratio_like"][top:bottom, left:right]
+    local_patch = maps["local_contrast_score"][top:bottom, left:right]
+    stable_patch = maps["stable_score"][top:bottom, left:right]
     boundary_patch = maps["boundary_score"][top:bottom, left:right]
     feat = (
         float(pre_patch.mean()),
         float(pre_patch.std()),
         float(post_patch.mean()),
         float(post_patch.std()),
-        float(diff_patch.mean()),
-        float(diff_patch.std()),
-        float(score_patch.mean()),
-        float(score_patch.max()),
+        float(dark_patch.mean()),
+        float(dark_patch.max()),
+        float(log_ratio_patch.mean()),
+        float(log_ratio_patch.max()),
+        float(local_patch.mean()),
         float(boundary_patch.mean()),
+        float(stable_patch.mean()),
         float(y / max(h - 1, 1)),
         float(x / max(w - 1, 1)),
     )

@@ -1,32 +1,50 @@
 [
   {
     "epoch": 1,
-    "train_loss": 1.471856693426768,
-    "val_iou": 0.2336025599183308
+    "train_loss": 1.375400682290395,
+    "val_iou": 0.12611967063060514,
+    "num_batches": 27,
+    "valid_train_batches": 27,
+    "skipped_batches": 0
   },
   {
     "epoch": 2,
-    "train_loss": 1.0877441918408428,
-    "val_iou": 0.24126552562746736
+    "train_loss": 1.02660690413581,
+    "val_iou": 0.24183332926973147,
+    "num_batches": 27,
+    "valid_train_batches": 27,
+    "skipped_batches": 0
   },
   {
     "epoch": 3,
-    "train_loss": 0.9231030941009521,
-    "val_iou": 0.22480075733943117
+    "train_loss": 0.9145070093649404,
+    "val_iou": 0.19845464232343216,
+    "num_batches": 27,
+    "valid_train_batches": 27,
+    "skipped_batches": 0
   },
   {
     "epoch": 4,
-    "train_loss": 0.7822389437092675,
-    "val_iou": 0.2019988788222825
+    "train_loss": 0.8696549623100845,
+    "val_iou": 0.16686139404299427,
+    "num_batches": 27,
+    "valid_train_batches": 27,
+    "skipped_batches": 0
   },
   {
     "epoch": 5,
-    "train_loss": 0.6738048339331592,
-    "val_iou": 0.22907384797171862
+    "train_loss": 0.7735521164205339,
+    "val_iou": 0.23979850301381062,
+    "num_batches": 27,
+    "valid_train_batches": 27,
+    "skipped_batches": 0
   },
   {
     "epoch": 6,
-    "train_loss": 0.731550144928473,
-    "val_iou": 0.2434030658720682
+    "train_loss": 0.8171380482338093,
+    "val_iou": 0.22878849671946633,
+    "num_batches": 27,
+    "valid_train_batches": 27,
+    "skipped_batches": 0
   }
 ]

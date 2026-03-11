@@ -118,18 +118,68 @@ def main() -> None:
     for epoch in range(1, epochs + 1):
         model.train()
         train_loss = 0.0
+        valid_train_batches = 0
+        skipped_batches = 0
         for batch_idx, batch in enumerate(train_loader, start=1):
             query_inputs = batch["query"]["features"].to(device)
             ref_inputs = batch["reference"]["features"].to(device)
             ref_gt = batch["reference"]["gt"].to(device)
             query_gt = batch["query"]["gt"].to(device)
             ref_valid = batch["reference"]["valid_mask"].to(device)
+            query_ids = batch["query"]["sample_id"]
+            ref_ids = batch["reference"]["sample_id"]
+            if not torch.isfinite(query_inputs).all() or not torch.isfinite(ref_inputs).all():
+                skipped_batches += 1
+                print(
+                    json.dumps(
+                        {
+                            "epoch": epoch,
+                            "batch": batch_idx,
+                            "warning": "skip_non_finite_input",
+                            "query_ids": query_ids,
+                            "ref_ids": ref_ids,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+                continue
             optimizer.zero_grad()
             output = model(query_inputs, ref_inputs, ref_gt, valid_mask=ref_valid)
+            if not all(torch.isfinite(tensor).all() for tensor in [output.segmentation_logit, output.positive_logit, output.negative_logit, output.boundary_logit]):
+                skipped_batches += 1
+                print(
+                    json.dumps(
+                        {
+                            "epoch": epoch,
+                            "batch": batch_idx,
+                            "warning": "skip_non_finite_output",
+                            "query_ids": query_ids,
+                            "ref_ids": ref_ids,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+                continue
             losses = proposal_loss(output, query_gt, ignore_index=ignore_index)
+            if not torch.isfinite(losses["loss"]):
+                skipped_batches += 1
+                print(
+                    json.dumps(
+                        {
+                            "epoch": epoch,
+                            "batch": batch_idx,
+                            "warning": "skip_non_finite_loss",
+                            "query_ids": query_ids,
+                            "ref_ids": ref_ids,
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+                continue
             losses["loss"].backward()
             optimizer.step()
             train_loss += float(losses["loss"].item())
+            valid_train_batches += 1
 
         model.eval()
         val_ious: List[float] = []
@@ -145,8 +195,17 @@ def main() -> None:
                 for idx in range(pred.shape[0]):
                     val_ious.append(binary_iou(pred[idx], query_gt[idx], ignore_index=ignore_index))
         mean_val_iou = float(np.mean(val_ious)) if val_ious else 0.0
-        train_loss /= max(len(train_loader), 1)
-        history.append({"epoch": epoch, "train_loss": train_loss, "val_iou": mean_val_iou})
+        train_loss /= max(valid_train_batches, 1)
+        history.append(
+            {
+                "epoch": epoch,
+                "train_loss": train_loss if valid_train_batches > 0 else 0.0,
+                "val_iou": mean_val_iou,
+                "num_batches": len(train_loader),
+                "valid_train_batches": valid_train_batches,
+                "skipped_batches": skipped_batches,
+            }
+        )
         print(json.dumps(history[-1], ensure_ascii=False))
         torch.save({"model": model.state_dict(), "cfg": cfg, "epoch": epoch}, work_dir / "last_reference_prompt.pth")
         if mean_val_iou > best_iou:

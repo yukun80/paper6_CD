@@ -120,6 +120,7 @@ def main() -> None:
                 max_positive_points=cfg["optimizer"].get("max_positive_points", 10),
                 min_negative_points=cfg["optimizer"].get("min_negative_points", 2),
                 max_negative_points=cfg["optimizer"].get("max_negative_points", 10),
+                objective_weights=cfg["optimizer"].get("objective_weights"),
             )
             action_samples = collect_supervised_action_samples(env, query["gt"].numpy(), ignore_index=ignore_index)
             if not action_samples:
@@ -149,6 +150,7 @@ def main() -> None:
                     max_positive_points=cfg["optimizer"].get("max_positive_points", 10),
                     min_negative_points=cfg["optimizer"].get("min_negative_points", 2),
                     max_negative_points=cfg["optimizer"].get("max_negative_points", 10),
+                    objective_weights=cfg["optimizer"].get("objective_weights"),
                 )
                 init_summary = env.export_summary()
                 summary = policy_greedy_optimize(env, scorer, device=device, stop_threshold=float(cfg["policy"].get("stop_threshold", 0.0)))

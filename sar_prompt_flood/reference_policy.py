@@ -45,18 +45,22 @@ class ActionSample:
 
 
 FEATURE_KEYS: Tuple[str, ...] = (
-    "overlap_high_change",
-    "mask_focus",
-    "coverage",
-    "neg_coverage",
+    "darkening_support",
+    "log_ratio_support",
+    "outside_contrast",
+    "boundary_alignment",
+    "component_quality",
+    "shape_spread",
+    "neg_ring_score",
     "cross_sep",
     "redundancy",
-    "fragments",
     "area_ratio",
     "area_penalty",
     "mean_pos_score",
     "mean_neg_score",
 )
+
+NODE_FEATURE_DIM = 18
 
 
 def collect_supervised_action_samples(env: PromptOptimizationEnv, gt: np.ndarray, ignore_index: int = 255) -> List[ActionSample]:
@@ -122,7 +126,7 @@ def policy_greedy_optimize(
 
 
 def infer_policy_feature_dim() -> int:
-    return len(ACTIONS) + 3 + len(FEATURE_KEYS) + 16
+    return len(ACTIONS) + 3 + len(FEATURE_KEYS) + NODE_FEATURE_DIM
 
 
 def _resolve_action_node(env: PromptOptimizationEnv, action: str) -> CandidateNode | None:
@@ -143,11 +147,12 @@ def _resolve_action_node(env: PromptOptimizationEnv, action: str) -> CandidateNo
 
 def _node_feature_vector(node: CandidateNode | None, env: PromptOptimizationEnv) -> np.ndarray:
     if node is None:
-        return np.zeros(16, dtype=np.float32)
-    base = list(node.feature[:11])
+        return np.zeros(NODE_FEATURE_DIM, dtype=np.float32)
+    base = list(node.feature)
     extras = [
         float(node.score),
-        float(env.prompt_set.change_score[node.y, node.x]),
+        float(env.prompt_set.darkening_score[node.y, node.x]),
+        float(env.prompt_set.log_ratio_score[node.y, node.x]),
         float(env.prompt_set.stable_score[node.y, node.x]),
         float(env.prompt_set.boundary_score[node.y, node.x]),
         float(node.label == "pos"),

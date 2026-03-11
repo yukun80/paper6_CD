@@ -7,7 +7,7 @@ from typing import Dict, List, Sequence, Tuple
 
 import numpy as np
 
-from .ops import connected_components_with_stats
+from .ops import binary_dilate, binary_erode, connected_components_with_stats
 from .prompts import CandidateNode, PromptSet
 from .segmenter import BasePromptSegmenter
 
@@ -21,7 +21,24 @@ ACTIONS: Tuple[str, ...] = (
     "swap_neg_best",
     "swap_pos_diverse",
     "swap_neg_boundary",
+    "inject_boundary_pos",
+    "inject_hard_negative",
 )
+
+DEFAULT_OBJECTIVE_WEIGHTS: Dict[str, float] = {
+    "darkening_support": 0.22,
+    "log_ratio_support": 0.08,
+    "outside_contrast": 0.18,
+    "boundary_alignment": 0.14,
+    "component_quality": 0.10,
+    "shape_spread": 0.07,
+    "neg_ring_score": 0.08,
+    "cross_sep": 0.08,
+    "mean_pos_score": 0.05,
+    "mean_neg_score": 0.04,
+    "redundancy": -0.08,
+    "area_penalty": -0.10,
+}
 
 
 @dataclass
@@ -44,9 +61,10 @@ class PromptOptimizationEnv:
         segmenter: BasePromptSegmenter,
         max_steps: int = 10,
         min_positive_points: int = 2,
-        max_positive_points: int = 10,
+        max_positive_points: int = 12,
         min_negative_points: int = 2,
-        max_negative_points: int = 10,
+        max_negative_points: int = 12,
+        objective_weights: Dict[str, float] | None = None,
     ) -> None:
         self.prompt_set = prompt_set
         self.segmenter = segmenter
@@ -59,6 +77,7 @@ class PromptOptimizationEnv:
         self.neg_nodes = {node.node_id: node for node in prompt_set.negative_nodes}
         self.pos_sorted = sorted(prompt_set.positive_nodes, key=lambda x: x.score, reverse=True)
         self.neg_sorted = sorted(prompt_set.negative_nodes, key=lambda x: x.score, reverse=True)
+        self.objective_weights = {**DEFAULT_OBJECTIVE_WEIGHTS, **(objective_weights or {})}
         self.eval_cache: Dict[Tuple[Tuple[int, ...], Tuple[int, ...]], Tuple[float, Dict[str, float], np.ndarray]] = {}
         self.reset()
 
@@ -77,13 +96,13 @@ class PromptOptimizationEnv:
         if len(self.selected_neg) > self.min_negative_points:
             actions.append("drop_neg_worst")
         if len(self.selected_pos) < self.max_positive_points and len(self.selected_pos) < len(self.pos_nodes):
-            actions.extend(["restore_pos_best", "swap_pos_best", "swap_pos_diverse"])
+            actions.extend(["restore_pos_best", "swap_pos_best", "swap_pos_diverse", "inject_boundary_pos"])
         if len(self.selected_neg) < self.max_negative_points and len(self.selected_neg) < len(self.neg_nodes):
-            actions.extend(["restore_neg_best", "swap_neg_best", "swap_neg_boundary"])
+            actions.extend(["restore_neg_best", "swap_neg_best", "swap_neg_boundary", "inject_hard_negative"])
         if len(self.selected_pos) >= self.max_positive_points:
-            actions.extend(["swap_pos_best", "swap_pos_diverse"])
+            actions.extend(["swap_pos_best", "swap_pos_diverse", "inject_boundary_pos"])
         if len(self.selected_neg) >= self.max_negative_points:
-            actions.extend(["swap_neg_best", "swap_neg_boundary"])
+            actions.extend(["swap_neg_best", "swap_neg_boundary", "inject_hard_negative"])
         return [a for a in ACTIONS if a in actions]
 
     def evaluate_action_delta(self, action: str) -> Tuple[float, Dict[str, float], np.ndarray]:
@@ -107,7 +126,13 @@ class PromptOptimizationEnv:
     def export_summary(self) -> OptimizationSummary:
         pos_points = [[node.x, node.y] for node in self._selected_nodes(self.pos_nodes, self.selected_pos)]
         neg_points = [[node.x, node.y] for node in self._selected_nodes(self.neg_nodes, self.selected_neg)]
-        return OptimizationSummary(pos_points=pos_points, neg_points=neg_points, mask=self.current_mask.copy(), metrics=dict(self.current_metrics), action_history=list(self.action_history))
+        return OptimizationSummary(
+            pos_points=pos_points,
+            neg_points=neg_points,
+            mask=self.current_mask.copy(),
+            metrics=dict(self.current_metrics),
+            action_history=list(self.action_history),
+        )
 
     def _apply_action_to_sets(self, action: str, pos_sel: set[int], neg_sel: set[int]) -> bool:
         if action == "drop_pos_worst":
@@ -148,7 +173,28 @@ class PromptOptimizationEnv:
             neg_sel.remove(worst.node_id)
             neg_sel.add(node.node_id)
             return True
+        if action == "inject_boundary_pos":
+            node = self._boundary_reserve(self.pos_sorted, pos_sel)
+            return self._inject_with_replacement(node, self.pos_nodes, pos_sel, self.max_positive_points)
+        if action == "inject_hard_negative":
+            node = self._hard_negative_reserve(neg_sel)
+            return self._inject_with_replacement(node, self.neg_nodes, neg_sel, self.max_negative_points)
         return False
+
+    def _inject_with_replacement(self, node: CandidateNode | None, table: Dict[int, CandidateNode], selected: set[int], limit: int) -> bool:
+        if node is None:
+            return False
+        if node.node_id in selected:
+            return False
+        if len(selected) < limit:
+            selected.add(node.node_id)
+            return True
+        worst = self._worst_selected(table, selected)
+        if worst is None or worst.node_id == node.node_id:
+            return False
+        selected.remove(worst.node_id)
+        selected.add(node.node_id)
+        return True
 
     def _evaluate_selection(self, pos_sel: Sequence[int], neg_sel: Sequence[int]) -> Tuple[float, Dict[str, float], np.ndarray]:
         key = (tuple(sorted(pos_sel)), tuple(sorted(neg_sel)))
@@ -158,41 +204,46 @@ class PromptOptimizationEnv:
 
         pos_points = [[node.x, node.y] for node in self._selected_nodes(self.pos_nodes, pos_sel)]
         neg_points = [[node.x, node.y] for node in self._selected_nodes(self.neg_nodes, neg_sel)]
-        mask = self.segmenter.segment(self.prompt_set.pseudo_rgb, pos_points, neg_points, self.prompt_set.change_score, self.prompt_set.valid_mask).astype(np.uint8)
-
-        valid = self.prompt_set.valid_mask
-        high_thr = float(np.quantile(self.prompt_set.change_score[valid], 0.90)) if valid.any() else 1.0
-        high_change = (self.prompt_set.change_score >= max(high_thr, 0.4)) & valid
+        mask = self.segmenter.segment(
+            self.prompt_set.pseudo_rgb,
+            pos_points,
+            neg_points,
+            self.prompt_set.change_score,
+            self.prompt_set.valid_mask,
+        ).astype(np.uint8)
         mask_bool = mask > 0
-        overlap = float((mask_bool & high_change).sum() / max(high_change.sum(), 1))
-        focus = float(self.prompt_set.change_score[mask_bool & valid].mean()) if np.any(mask_bool & valid) else 0.0
-        area_ratio = float(mask_bool.sum() / max(valid.sum(), 1))
-        area_penalty = 1.0 if area_ratio < 0.002 or area_ratio > 0.65 else 0.0
+        valid = self.prompt_set.valid_mask
+        dark_map = self.prompt_set.darkening_score
+        log_map = self.prompt_set.log_ratio_score
+        boundary_map = self.prompt_set.boundary_score
+        inside_valid = mask_bool & valid
+        outside_valid = (~mask_bool) & valid
+        dark_inside = float(dark_map[inside_valid].mean()) if np.any(inside_valid) else 0.0
+        dark_outside = float(dark_map[outside_valid].mean()) if np.any(outside_valid) else 0.0
+        log_inside = float(log_map[inside_valid].mean()) if np.any(inside_valid) else 0.0
+        mask_boundary = self._mask_boundary(mask_bool)
+        boundary_alignment = float(boundary_map[mask_boundary & valid].mean()) if np.any(mask_boundary & valid) else 0.0
+        area_ratio = float(inside_valid.sum() / max(valid.sum(), 1))
+        area_penalty = self._area_penalty(area_ratio)
         metrics = {
-            "overlap_high_change": overlap,
-            "mask_focus": focus,
-            "coverage": self._spatial_dispersion(self._selected_nodes(self.pos_nodes, pos_sel)),
-            "neg_coverage": self._spatial_dispersion(self._selected_nodes(self.neg_nodes, neg_sel)),
+            "darkening_support": dark_inside,
+            "log_ratio_support": log_inside,
+            "outside_contrast": float(np.clip(dark_inside - dark_outside, 0.0, 1.0)),
+            "boundary_alignment": boundary_alignment,
+            "component_quality": self._component_quality(mask),
+            "shape_spread": self._spatial_dispersion(self._selected_nodes(self.pos_nodes, pos_sel)),
+            "neg_ring_score": self._neg_ring_score(self._selected_nodes(self.pos_nodes, pos_sel), self._selected_nodes(self.neg_nodes, neg_sel)),
             "cross_sep": self._feature_separation(pos_sel, neg_sel),
             "redundancy": self._redundancy_penalty(pos_sel, neg_sel),
-            "fragments": self._fragment_penalty(mask),
             "area_ratio": area_ratio,
             "area_penalty": area_penalty,
             "mean_pos_score": float(np.mean([self.pos_nodes[i].score for i in pos_sel])) if pos_sel else 0.0,
             "mean_neg_score": float(np.mean([self.neg_nodes[i].score for i in neg_sel])) if neg_sel else 0.0,
         }
-        objective = (
-            0.35 * metrics["overlap_high_change"]
-            + 0.25 * metrics["mask_focus"]
-            + 0.15 * metrics["cross_sep"]
-            + 0.10 * metrics["coverage"]
-            + 0.05 * metrics["neg_coverage"]
-            + 0.05 * metrics["mean_pos_score"]
-            + 0.05 * metrics["mean_neg_score"]
-            - 0.15 * metrics["redundancy"]
-            - 0.08 * metrics["fragments"]
-            - 0.10 * metrics["area_penalty"]
-        )
+        objective = 0.0
+        for key_name, value in metrics.items():
+            if key_name in self.objective_weights:
+                objective += self.objective_weights[key_name] * value
         self.eval_cache[key] = (objective, dict(metrics), mask.copy())
         return objective, metrics, mask
 
@@ -240,7 +291,7 @@ class PromptOptimizationEnv:
             if node.node_id in selected_ids:
                 continue
             min_dist = min(_node_distance(node, other) for other in selected_nodes)
-            score = 0.7 * node.score + 0.3 * min(1.0, min_dist / 64.0)
+            score = 0.65 * node.score + 0.35 * min(1.0, min_dist / 96.0)
             if score > best_score:
                 best_score = score
                 best_node = node
@@ -253,7 +304,25 @@ class PromptOptimizationEnv:
         for node in sorted_nodes:
             if node.node_id in selected_ids:
                 continue
-            score = 0.7 * node.score + 0.3 * float(self.prompt_set.boundary_score[node.y, node.x])
+            boundary_value = float(self.prompt_set.boundary_score[node.y, node.x])
+            dark_value = float(self.prompt_set.darkening_score[node.y, node.x])
+            score = 0.55 * node.score + 0.30 * boundary_value + 0.15 * dark_value
+            if score > best_score:
+                best_score = score
+                best_node = node
+        return best_node
+
+    def _hard_negative_reserve(self, selected: Sequence[int]) -> CandidateNode | None:
+        selected_ids = set(selected)
+        pos_nodes = self._selected_nodes(self.pos_nodes, self.selected_pos)
+        best_node = None
+        best_score = -1.0
+        for node in self.neg_sorted:
+            if node.node_id in selected_ids:
+                continue
+            ring_score = self._node_ring_score(node, pos_nodes)
+            stable = float(self.prompt_set.stable_score[node.y, node.x])
+            score = 0.55 * node.score + 0.25 * ring_score + 0.20 * stable
             if score > best_score:
                 best_score = score
                 best_node = node
@@ -264,7 +333,7 @@ class PromptOptimizationEnv:
             return 0.0
         coords = np.asarray([[node.x, node.y] for node in nodes], dtype=np.float32)
         dist = np.linalg.norm(coords[:, None, :] - coords[None, :, :], axis=-1)
-        return float(np.clip(dist[np.triu_indices(len(nodes), k=1)].mean() / 96.0, 0.0, 1.0))
+        return float(np.clip(dist[np.triu_indices(len(nodes), k=1)].mean() / 128.0, 0.0, 1.0))
 
     def _feature_separation(self, pos_sel: Sequence[int], neg_sel: Sequence[int]) -> float:
         pos_nodes = self._selected_nodes(self.pos_nodes, pos_sel)
@@ -274,7 +343,7 @@ class PromptOptimizationEnv:
         pos_feat = np.asarray([node.feature for node in pos_nodes], dtype=np.float32)
         neg_feat = np.asarray([node.feature for node in neg_nodes], dtype=np.float32)
         dist = np.linalg.norm(pos_feat[:, None, :] - neg_feat[None, :, :], axis=-1).mean()
-        return float(np.clip(dist / 4.0, 0.0, 1.0))
+        return float(np.clip(dist / 5.0, 0.0, 1.0))
 
     def _redundancy_penalty(self, pos_sel: Sequence[int], neg_sel: Sequence[int]) -> float:
         penalty = 0.0
@@ -283,17 +352,42 @@ class PromptOptimizationEnv:
                 continue
             coords = np.asarray([[node.x, node.y] for node in nodes], dtype=np.float32)
             dist = np.linalg.norm(coords[:, None, :] - coords[None, :, :], axis=-1)
-            penalty += float((dist[np.triu_indices(len(nodes), k=1)] < 12.0).mean())
+            penalty += float((dist[np.triu_indices(len(nodes), k=1)] < 10.0).mean())
         return float(np.clip(penalty / 2.0, 0.0, 1.0))
 
-    def _fragment_penalty(self, mask: np.ndarray) -> float:
+    def _component_quality(self, mask: np.ndarray) -> float:
         num_labels, _, stats = connected_components_with_stats(mask.astype(np.uint8))
         if num_labels <= 1:
             return 0.0
-        areas = np.asarray([s["area"] for s in stats[1:]], dtype=np.float32)
-        tiny_ratio = float((areas < 24).mean()) if areas.size > 0 else 0.0
-        fragment_penalty = min(1.0, (num_labels - 1) / 12.0)
-        return float(np.clip(0.5 * fragment_penalty + 0.5 * tiny_ratio, 0.0, 1.0))
+        areas = np.asarray([item["area"] for item in stats[1:]], dtype=np.float32)
+        total = float(areas.sum())
+        if total <= 0.0:
+            return 0.0
+        largest_ratio = float(areas.max() / total)
+        tiny_ratio = float((areas < 20).mean())
+        return float(np.clip(0.7 * largest_ratio + 0.3 * (1.0 - tiny_ratio), 0.0, 1.0))
+
+    def _mask_boundary(self, mask: np.ndarray) -> np.ndarray:
+        mask_u8 = mask.astype(np.uint8)
+        return (binary_dilate(mask_u8, 3) > 0) & ~(binary_erode(mask_u8, 3) > 0)
+
+    def _area_penalty(self, area_ratio: float) -> float:
+        target = float(np.clip(self.prompt_set.area_prior, 0.01, 0.45))
+        tolerance = max(0.03, 0.50 * target)
+        deviation = max(abs(area_ratio - target) - tolerance, 0.0)
+        return float(np.clip(deviation / max(target + tolerance, 1e-3), 0.0, 1.0))
+
+    def _neg_ring_score(self, pos_nodes: Sequence[CandidateNode], neg_nodes: Sequence[CandidateNode]) -> float:
+        if not pos_nodes or not neg_nodes:
+            return 0.0
+        scores = [self._node_ring_score(node, pos_nodes) for node in neg_nodes]
+        return float(np.mean(scores)) if scores else 0.0
+
+    def _node_ring_score(self, node: CandidateNode, pos_nodes: Sequence[CandidateNode]) -> float:
+        if not pos_nodes:
+            return 0.0
+        min_dist = min(_node_distance(node, other) for other in pos_nodes)
+        return float(np.exp(-((min_dist - 24.0) ** 2) / (2.0 * 14.0 * 14.0)))
 
 
 def rule_greedy_optimize(env: PromptOptimizationEnv) -> OptimizationSummary:
