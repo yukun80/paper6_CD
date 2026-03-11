@@ -5,7 +5,7 @@ from .data import GF3TileDataset, build_gf3_tile_dataloader
 from .gf3_preprocess import derive_change_products, generate_windows, prepare_gf3_pair
 from .optimizer import PromptOptimizationEnv, rule_greedy_optimize
 from .prompts import PromptCandidateGenerator
-from .segmenter import build_segmenters, select_final_mask
+from .segmenter import build_segmenter
 
 __all__ = [
     "load_config",
@@ -17,6 +17,5 @@ __all__ = [
     "PromptOptimizationEnv",
     "rule_greedy_optimize",
     "PromptCandidateGenerator",
-    "build_segmenters",
-    "select_final_mask",
+    "build_segmenter",
 ]

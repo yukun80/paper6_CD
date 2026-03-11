@@ -7,7 +7,7 @@
 - 输入：`Pre_Zhengzhou_ascending_clip.tif` 与 `Post_Zhengzhou_ascending_clip.tif`
 - 输出：全图二值变化/洪水 mask，以及变化置信图
 - 数据条件：无标签
-- 主流程：预处理 -> 变化先验 -> prompt 生成 -> 规则优化 -> SAM/启发式分割 -> 全图回拼
+- 主流程：预处理 -> 变化先验 -> prompt 生成 -> 规则优化 -> SAM 分割 -> 全图回拼
 
 ## 为什么必须先做预处理
 
@@ -20,10 +20,17 @@
 
 ## 运行
 
+先下载 SAM 权重：
+
+```bash
+python datasets/script/download_sam_vit_b.py
+```
+
 只做预处理：
 
 ```bash
-python datasets/script/prepare_gf3_henan_pair.py
+python datasets/script/prepare_gf3_henan_pair.py \
+  --config-file sar_prompt_flood/config/gf3_henan.json
 ```
 
 跑完整 pipeline：
@@ -33,8 +40,8 @@ python -m sar_prompt_flood.run_gf3_pipeline \
   --config-file sar_prompt_flood/config/gf3_henan.json
 ```
 
-若要启用真实 SAM，请在配置中填写：
+默认权重路径：
 
-- `segmenter.sam_checkpoint`
+- `PPO-main/segmenter/checkpoint/sam_vit_b_01ec64.pth`
 
-若未提供 checkpoint，pipeline 会自动只使用启发式分割结果。
+当前版本只支持 `SAM vit_b`。若权重缺失、`segment_anything` 导入失败或 SAM 推理报错，pipeline 会直接停止，不再回退到启发式分割。

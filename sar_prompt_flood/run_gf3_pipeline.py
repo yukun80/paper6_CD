@@ -16,7 +16,7 @@ from .data import GF3TileDataset
 from .gf3_preprocess import prepare_gf3_pair
 from .optimizer import PromptOptimizationEnv, rule_greedy_optimize
 from .prompts import PromptCandidateGenerator
-from .segmenter import build_segmenters, select_final_mask
+from .segmenter import build_segmenter
 
 
 def parse_args():
@@ -59,7 +59,7 @@ def main():
 
     dataset = GF3TileDataset(str(processed_root), max_tiles=cfg["inference"].get("max_tiles", -1))
     prompt_generator = PromptCandidateGenerator(**cfg["prompts"])
-    heuristic_segmenter, sam_segmenter = build_segmenters(cfg)
+    sam_segmenter = build_segmenter(cfg)
 
     out_dir = Path(cfg["runtime"]["output_dir"])
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -73,14 +73,13 @@ def main():
     acc_final = np.zeros((height, width), dtype=np.float32)
     acc_change = np.zeros((height, width), dtype=np.float32)
     acc_weight = np.zeros((height, width), dtype=np.float32)
-    backend_counts = {"sam": 0, "heuristic": 0}
     records = []
 
     for sample in tqdm(dataset, desc="GF3 tiles"):
         prompt_set = prompt_generator.generate(sample)
         env = PromptOptimizationEnv(
             prompt_set=prompt_set,
-            segmenter=heuristic_segmenter,
+            segmenter=sam_segmenter,
             max_steps=cfg["optimizer"].get("max_steps", 10),
             min_positive_points=cfg["optimizer"].get("min_positive_points", 2),
             max_positive_points=cfg["optimizer"].get("max_positive_points", 10),
@@ -89,11 +88,7 @@ def main():
         )
         init_summary = env.export_summary()
         opt_summary = rule_greedy_optimize(env)
-        sam_mask = None
-        if sam_segmenter is not None and opt_summary.pos_points:
-            sam_mask = sam_segmenter.segment(prompt_set.pseudo_rgb, opt_summary.pos_points, opt_summary.neg_points, prompt_set.change_score, prompt_set.valid_mask)
-        final_mask, backend = select_final_mask(sam_mask, opt_summary.mask, prompt_set.change_score, prompt_set.valid_mask)
-        backend_counts[backend] += 1
+        final_mask = opt_summary.mask
 
         top = int(sample["meta"]["row_off"])
         left = int(sample["meta"]["col_off"])
@@ -113,11 +108,13 @@ def main():
         records.append(
             {
                 "tile_id": sample["tile_id"],
-                "backend": backend,
+                "selected_backend": "sam",
                 "low_confidence": prompt_set.low_confidence or bool(sample["meta"]["low_confidence"]),
                 "init_metrics": init_summary.metrics,
                 "opt_metrics": opt_summary.metrics,
                 "actions": opt_summary.action_history,
+                "init_mask_area_ratio": float(init_summary.mask.mean()),
+                "opt_mask_area_ratio": float(opt_summary.mask.mean()),
             }
         )
 
@@ -137,8 +134,10 @@ def main():
 
     summary = {
         "num_tiles": len(records),
-        "backend_counts": backend_counts,
+        "selected_backend": "sam",
         "low_confidence_tiles": int(sum(1 for x in records if x["low_confidence"])),
+        "mean_init_area_ratio": float(init_prob.mean()),
+        "mean_opt_area_ratio": float(opt_prob.mean()),
         "mean_final_area_ratio": float(final_mask.mean()),
     }
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")

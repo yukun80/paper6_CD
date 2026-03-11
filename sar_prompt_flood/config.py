@@ -37,7 +37,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "segmenter": {
         "backend": "sam",
         "sam_model_type": "vit_b",
-        "sam_checkpoint": "",
+        "sam_checkpoint": "PPO-main/segmenter/checkpoint/sam_vit_b_01ec64.pth",
         "sam_module_root": "PPO-main/segmenter",
     },
     "optimizer": {
