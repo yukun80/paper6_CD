@@ -1,0 +1,9 @@
+{
+  "data": {
+    "pair_root": "datasets/GF3_Henan",
+    "processed_root": "datasets/GF3_Henan_processed"
+  },
+  "runtime": {
+    "output_dir": "sar_prompt_flood/outputs/gf3_henan"
+  }
+}
