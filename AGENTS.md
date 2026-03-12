@@ -188,6 +188,12 @@ pip install tensorboard
   - 参考集验证阶段输出 `IoU/Dice`
   - GF3 目标集无标签，`summary.json` 只输出无监督统计，不输出 IoU/Dice
   - 当前默认每个 GF3 tile 只检索一个参考样本，不做多参考融合和全图回拼
+- dB 特征设计与稳定性约定（2026-03-12）：
+  - `datasets/urban_sar_floods_test/urban_sar_floods_test_tiles_512_band5_band7` 当前像素按 dB/log 值处理，不再假定为线性幅度
+  - `sar_prompt_flood/reference_data.py` 当前默认采用“固定 dB 裁剪 + dB 差分”特征，不使用逐 tile `joint_robust_norm` 作为主特征语义
+  - `log_ratio_like` 当前仅保留接口名，语义已改为 `|delta_db|` 的幅度分数，不应再按“对 dB 再取 log-ratio”理解
+  - 若新增/修改特征，优先保留 `pre_db / post_db / delta_db / darkening_db / local_contrast` 的物理意义，再考虑额外归一化
+  - `sar_prompt_flood/feature_utils.py` 与 `sar_prompt_flood/train_reference_prompt.py` 已增加 finite-safe 处理与坏 batch 跳过逻辑；若再次出现 `loss=NaN`，先检查特征图是否含非有限值，再看损失项
 
 ## Commit & Pull Request Guidelines
 - Current history uses short one-line commit messages (Chinese or English). Keep them concise and specific.
