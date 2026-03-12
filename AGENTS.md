@@ -8,9 +8,8 @@ This repository is a multi-baseline workspace for remote sensing change detectio
   - `datasets/urban_sar_floods/`: raw source data.
   - `datasets/urban_sar_floods_ch12_256/`: 256 切片、12 通道输入数据（含层次化标签可选目录）。
   - `datasets/urban_sar_floods_CD/`: converted CD/SCD-ready dataset.
-  - `datasets/GF3_Henan/`: GF3 河南灾前/灾后 HV 极化幅度图。
+  - `datasets/GF3_Henan/`: GF3 河南灾前/灾后 HV 极化幅度图（当前仅保留为数据资产，不绑定已废弃的 prompt/SAM/PPO 实验链路）。
   - `datasets/script/`: conversion and preprocessing scripts.
-- `sar_prompt_flood/`: 基于有标注参考集训练、面向 GF3_Henan 零样本迁移的双时相 SAR prompt 优化 + SAM 洪水分割工具。
 - `doc/`: experiment logs and design notes (for example `doc/工作日志_2026-03-03.md`).
 - `dinov3_RS_CD/`, `panopticon/`, `AdaptOVCD-main/`, `baselines/CMCDNet/`: auxiliary research codebases kept in-tree.
 
@@ -48,19 +47,6 @@ PYTHONPATH=panopticon python panopticon/urban_floods_hier/eval_hier.py --config-
 # Compute robust 12ch normalization stats (train split only)
 python datasets/script/compute_urban_sar_floods_ch12_stats.py --data-root datasets/urban_sar_floods_ch12_256 --split-file Train_dataset.txt --strict
 
-# Download SAM ViT-B checkpoint for GF3 prompt segmentation
-python datasets/script/download_sam_vit_b.py
-
-# Download SAM ViT-B checkpoint for reference-guided SAR prompt segmentation
-python datasets/script/download_sam_vit_b.py
-
-# Train reference-guided prompt proposal / prompt policy
-python -m sar_prompt_flood.train_reference_prompt --config-file sar_prompt_flood/config/urban_sar_reference.json
-python -m sar_prompt_flood.train_prompt_policy --config-file sar_prompt_flood/config/urban_sar_reference.json
-
-# Run zero-shot transfer on GF3_Henan tile dataset
-python -m sar_prompt_flood.run_reference_prompt_pipeline --config-file sar_prompt_flood/config/urban_sar_reference.json
-
 # Check samples that become all-ignore after center crop
 python datasets/script/check_urban_sar_floods_ignore_samples.py --data-root datasets/urban_sar_floods_256 --crop-size 252 --num-workers 8
 
@@ -90,7 +76,6 @@ pip install tensorboard
 - No single root test suite is enforced; validate changes in the touched module.
 - Open-CD changes: run `smoke-train` before long runs.
 - Dataset pipeline changes: run converter with `--dry-run` first, then a short train/eval sanity run.
-- `sar_prompt_flood` changes: at minimum run `python -m py_compile sar_prompt_flood/*.py datasets/script/download_sam_vit_b.py`; then smoke-check one reference tile read and one GF3 target tile read before full training/inference.
 - CMCDNet-specific updates can use:
   - `pytest baselines/CMCDNet/tests -q`
 
@@ -164,36 +149,10 @@ pip install tensorboard
   - 默认布局：`train.tensorboard.layout_style: grouped`（按 Loss 和 Validation Metrics 分组，避免单列堆叠）
   - 若环境缺失 TensorBoard，请先安装 `tensorboard`
 
-## sar_prompt_flood Reference-to-GF3 Notes
-- 当前任务入口：
-  - `sar_prompt_flood/train_reference_prompt.py`
-  - `sar_prompt_flood/train_prompt_policy.py`
-  - `sar_prompt_flood/run_reference_prompt_pipeline.py`
-  - `sar_prompt_flood/config/urban_sar_reference.json`
-  - `datasets/script/download_sam_vit_b.py`
-- 当前数据角色：
-  - 参考训练集：`datasets/urban_sar_floods_test/urban_sar_floods_test_tiles_512_band5_band7`
-  - 目录结构：`pre/`, `post/`, `GT/`
-  - 目标推理集：`datasets/GF3_Henan/GF3_Henan_tiles_512`
-  - 目录结构：`pre/`, `post/`
-- 当前任务定义：
-  - 在参考训练集上训练 reference-guided prompt proposal 与 prompt policy
-  - 在 GF3_Henan 无标签目标集上做单参考检索、prompt 优化和 tile 级零样本推理
-  - 推理阶段不微调 `SAM vit_b`
-- 权重约定：
-  - SAM checkpoint 路径：`PPO-main/segmenter/checkpoint/sam_vit_b_01ec64.pth`
-  - 训练输出目录：`sar_prompt_flood/work_dir/reference_supervised`
-  - GF3 推理输出目录：`sar_prompt_flood/outputs/reference_supervised_gf3`
-- 评估/输出口径：
-  - 参考集验证阶段输出 `IoU/Dice`
-  - GF3 目标集无标签，`summary.json` 只输出无监督统计，不输出 IoU/Dice
-  - 当前默认每个 GF3 tile 只检索一个参考样本，不做多参考融合和全图回拼
-- dB 特征设计与稳定性约定（2026-03-12）：
-  - `datasets/urban_sar_floods_test/urban_sar_floods_test_tiles_512_band5_band7` 当前像素按 dB/log 值处理，不再假定为线性幅度
-  - `sar_prompt_flood/reference_data.py` 当前默认采用“固定 dB 裁剪 + dB 差分”特征，不使用逐 tile `joint_robust_norm` 作为主特征语义
-  - `log_ratio_like` 当前仅保留接口名，语义已改为 `|delta_db|` 的幅度分数，不应再按“对 dB 再取 log-ratio”理解
-  - 若新增/修改特征，优先保留 `pre_db / post_db / delta_db / darkening_db / local_contrast` 的物理意义，再考虑额外归一化
-  - `sar_prompt_flood/feature_utils.py` 与 `sar_prompt_flood/train_reference_prompt.py` 已增加 finite-safe 处理与坏 batch 跳过逻辑；若再次出现 `loss=NaN`，先检查特征图是否含非有限值，再看损失项
+## Archived Attempts
+- `PPO-main/` 与 `sar_prompt_flood/` 相关实验链路已从当前仓库移除，因为无法继续使用。
+- 相关命令、checkpoint、配置、日志结论与设计假设均已废弃；后续分析、实现与协作时不要再把这两次尝试纳入当前上下文。
+- `datasets/GF3_Henan/` 目前仅作为数据资产保留；若未来重启该方向，应基于新的独立方案重新立项与记文档。
 
 ## Commit & Pull Request Guidelines
 - Current history uses short one-line commit messages (Chinese or English). Keep them concise and specific.
