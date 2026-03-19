@@ -5,6 +5,7 @@ tqdm
 numpy
 matplotlib
 Pillow
+rasterio
 opencv-python
 triton
 huggingface_hub

@@ -41,8 +41,14 @@ def resolve_norm_stats(opt) -> tuple[List[float], List[float]]:
     if opt.stats_file:
         return _load_stats_from_json(Path(opt.stats_file))
 
-    if str(opt.dataset).startswith("S1GFloods"):
+    dataset_name = str(opt.dataset)
+    if dataset_name.startswith("S1GFloods"):
         default_stats = Path(opt.dataroot) / "S1GFloods_CD" / "channel_stats_s1gfloods_train.json"
+        if default_stats.exists():
+            return _load_stats_from_json(default_stats)
+        return [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
+    if dataset_name.startswith("VarFloods"):
+        default_stats = Path(opt.dataroot) / "VarFloods_CD" / "channel_stats_varfloods_train.json"
         if default_stats.exists():
             return _load_stats_from_json(default_stats)
         return [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
@@ -140,7 +146,7 @@ class Options:
         self.opt = self.parser.parse_args()
 
         if self.opt.dataset_mode == "auto":
-            if str(self.opt.dataset).startswith("S1GFloods"):
+            if str(self.opt.dataset).startswith(("S1GFloods", "VarFloods")):
                 self.opt.dataset_mode = "sar"
             else:
                 self.opt.dataset_mode = "default"

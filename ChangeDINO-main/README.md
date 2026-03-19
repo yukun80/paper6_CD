@@ -70,6 +70,46 @@ python ChangeDINO-main/scripts/compute_s1gfloods_cd_stats.py \
   --output datasets/S1GFloods_CD/channel_stats_s1gfloods_train.json
 ```
 
+### VarFloods
+For this repository, raw `datasets/VarFloods` is organized by region:
+```text
+datasets/VarFloods/
+├── Bolivia/
+│   └── PRO/
+│       ├── A/*.tif
+│       ├── B/*.tif
+│       └── label/*.tif
+├── France/
+├── Honduras/
+├── Libya/
+└── VietNam/
+```
+
+Prepare ChangeDINO-ready tiles from `PRO` only:
+```bash
+python ChangeDINO-main/scripts/prepare_varfloods_cd.py \
+  --src-root datasets/VarFloods \
+  --out-root datasets/VarFloods_CD \
+  --tile-size 256 \
+  --stride 256 \
+  --seed 42 \
+  --overwrite \
+  --strict
+```
+
+Then compute train-split normalization stats:
+```bash
+python ChangeDINO-main/scripts/compute_varfloods_cd_stats.py \
+  --data-root datasets/VarFloods_CD \
+  --split train \
+  --output datasets/VarFloods_CD/channel_stats_varfloods_train.json
+```
+
+Notes for VarFloods:
+- The prepared dataset keeps image tiles as single-band `float32` GeoTIFFs.
+- ChangeDINO now reads SAR `tif` tiles directly via `rasterio`, applies a stable percentile stretch, and expands them to 3-channel tensors internally.
+- Labels are converted to binary `0/1` tif tiles during preparation.
+
 ## Pre-trained Weights (Google Drive)
 For the DINOv3 pre-trained weight, please [download here](https://drive.google.com/file/d/1r6g0D6zV-1e8gJHij1edsE_uzvZ72L3u/view?usp=drive_link) and place it under `dinov3/weights/`.
 
@@ -120,6 +160,27 @@ Notes for S1GFloods:
 - You still need the DINOv3 checkpoint under `ChangeDINO-main/dinov3/weights/`.
 - If you rename the prepared dataset directory (for example `S1GFloods_CD_DINO`), keep `--dataset` and `--stats_file` consistent with that exact folder name.
 
+### Train / Validate on VarFloods
+```bash
+cd ChangeDINO-main
+bash trainval_varfloods.sh
+```
+
+Equivalent explicit command:
+```bash
+python trainval.py \
+  --name VarFloods-ChangeDINO \
+  --dataset VarFloods_CD \
+  --dataroot ../datasets \
+  --dataset_mode sar \
+  --stats_file ../datasets/VarFloods_CD/channel_stats_varfloods_train.json \
+  --gpu_ids 0 \
+  --batch_size 8 \
+  --input_size 256 \
+  --num_epochs 100 \
+  --lr 1e-4
+```
+
 ## Test
 ```bash
 python test.py \
@@ -139,6 +200,18 @@ python test.py \
   --dataroot ../datasets \
   --dataset_mode sar \
   --stats_file ../datasets/S1GFloods_CD/channel_stats_s1gfloods_train.json \
+  --gpu_ids 0 \
+  --save_test
+```
+
+VarFloods example:
+```bash
+python test.py \
+  --name VarFloods-ChangeDINO \
+  --dataset VarFloods_CD \
+  --dataroot ../datasets \
+  --dataset_mode sar \
+  --stats_file ../datasets/VarFloods_CD/channel_stats_varfloods_train.json \
   --gpu_ids 0 \
   --save_test
 ```

@@ -7,12 +7,16 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 
 from .transform import Transforms
+from .tif_io import is_tiff_path, read_binary_label_tif, read_sar_tif
+
+
+VALID_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
 
 
 def _scan_split_dir(split_dir: Path) -> dict[str, Path]:
     if not split_dir.is_dir():
         raise FileNotFoundError(f"Split directory not found: {split_dir}")
-    files = sorted(p for p in split_dir.iterdir() if p.is_file())
+    files = sorted(p for p in split_dir.iterdir() if p.is_file() and p.suffix.lower() in VALID_IMAGE_SUFFIXES)
     return {p.name: p for p in files}
 
 
@@ -32,8 +36,37 @@ def _normalize_to_rgb(image: Image.Image) -> Image.Image:
     return image.convert("RGB")
 
 
+def _load_image(path: Path):
+    """兼容普通图像与单波段 SAR tif。"""
+    if is_tiff_path(path):
+        return read_sar_tif(path)
+    return _normalize_to_rgb(Image.open(path))
+
+
+def _load_label(path: Path) -> Image.Image:
+    if is_tiff_path(path):
+        return Image.fromarray(read_binary_label_tif(path))
+    label = np.array(Image.open(path).convert("L"), dtype=np.uint8)
+    label = (label > 0).astype(np.uint8)
+    return Image.fromarray(label)
+
+
+def _to_tensor_image(image, to_tensor: transforms.ToTensor) -> torch.Tensor:
+    if torch.is_tensor(image):
+        return image.float()
+    return to_tensor(image)
+
+
+def _to_label_tensor(label) -> torch.Tensor:
+    if torch.is_tensor(label):
+        if label.ndim == 3 and label.shape[0] == 1:
+            label = label.squeeze(0)
+        return label.to(dtype=torch.int64)
+    return torch.from_numpy(np.array(label, dtype=np.int64))
+
+
 class Load_Dataset(Dataset):
-    """读取标准变化检测目录，并兼容 S1GFloods 的 SAR PNG 输入。"""
+    """读取标准变化检测目录，并兼容 SAR tif / PNG 输入。"""
 
     def __init__(self, opt):
         super().__init__()
@@ -50,10 +83,7 @@ class Load_Dataset(Dataset):
         self.fnames = sorted(self.t1_map.keys())
 
         if self.fnames != sorted(self.t2_map.keys()) or self.fnames != sorted(self.label_map.keys()):
-            raise ValueError(
-                f"File mismatch under split {split_root}: "
-                "A/B/label must have identical file names."
-            )
+            raise ValueError(f"File mismatch under split {split_root}: " "A/B/label must have identical file names.")
         if not self.fnames:
             raise ValueError(f"No samples found under split: {split_root}")
 
@@ -67,20 +97,17 @@ class Load_Dataset(Dataset):
 
     def __getitem__(self, index):
         fname = self.fnames[index]
-        img1 = _normalize_to_rgb(Image.open(self.t1_map[fname]))
-        img2 = _normalize_to_rgb(Image.open(self.t2_map[fname]))
-
-        label = np.array(Image.open(self.label_map[fname]).convert("L"), dtype=np.uint8)
-        label = (label > 0).astype(np.uint8)
-        cd_label = Image.fromarray(label)
+        img1 = _load_image(self.t1_map[fname])
+        img2 = _load_image(self.t2_map[fname])
+        cd_label = _load_label(self.label_map[fname])
 
         if self.opt.phase == "train":
             data = self.transform({"img1": img1, "img2": img2, "cd_label": cd_label})
             img1, img2, cd_label = data["img1"], data["img2"], data["cd_label"]
 
-        img1 = self.normalize(self.to_tensor(img1))
-        img2 = self.normalize(self.to_tensor(img2))
-        cd_label = torch.from_numpy(np.array(cd_label, dtype=np.int64))
+        img1 = self.normalize(_to_tensor_image(img1, self.to_tensor))
+        img2 = self.normalize(_to_tensor_image(img2, self.to_tensor))
+        cd_label = _to_label_tensor(cd_label)
 
         return {"img1": img1, "img2": img2, "cd_label": cd_label, "fname": fname}
 

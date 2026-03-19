@@ -5,6 +5,7 @@ import torch
 from PIL import Image
 from torchvision import transforms
 
+from data.tif_io import is_tiff_path, read_sar_tif
 from model.create_ChangeDINO import create_model
 from option import Options, resolve_norm_stats
 
@@ -34,7 +35,7 @@ def parse_and_prepare() -> object:
     opt = parser.parse_args()
 
     if opt.dataset_mode == "auto":
-        if str(opt.dataset).startswith("S1GFloods"):
+        if str(opt.dataset).startswith(("S1GFloods", "VarFloods")):
             opt.dataset_mode = "sar"
         else:
             opt.dataset_mode = "default"
@@ -70,6 +71,9 @@ def parse_and_prepare() -> object:
 def load_image(path, to_tensor, normalize):
     if not os.path.isfile(path):
         raise FileNotFoundError(f"{path} does not exist.")
+    if is_tiff_path(path):
+        tensor = normalize(read_sar_tif(path)).unsqueeze(0)
+        return None, tensor
     img = Image.open(path).convert("RGB")
     tensor = normalize(to_tensor(img)).unsqueeze(0)
     return img, tensor
