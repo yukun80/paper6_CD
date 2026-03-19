@@ -44,6 +44,32 @@ Expect the data structure:
         └── label/
 ```
 
+### S1GFloods
+For this repository, raw `datasets/S1GFloods` is a flat layout:
+```text
+datasets/S1GFloods/
+├── A/
+├── B/
+└── Label/
+```
+
+Convert it to ChangeDINO layout first:
+```bash
+python ChangeDINO-main/scripts/prepare_s1gfloods_cd.py \
+  --src-root datasets/S1GFloods \
+  --out-root datasets/S1GFloods_CD \
+  --seed 42 \
+  --overwrite
+```
+
+Then compute train-split normalization stats:
+```bash
+python ChangeDINO-main/scripts/compute_s1gfloods_cd_stats.py \
+  --data-root datasets/S1GFloods_CD \
+  --split train \
+  --output datasets/S1GFloods_CD/channel_stats_s1gfloods_train.json
+```
+
 ## Pre-trained Weights (Google Drive)
 For the DINOv3 pre-trained weight, please [download here](https://drive.google.com/file/d/1r6g0D6zV-1e8gJHij1edsE_uzvZ72L3u/view?usp=drive_link) and place it under `dinov3/weights/`.
 
@@ -68,6 +94,32 @@ python trainval.py \
 ```
 Important flags live in `option.py` (datasets, GPUs, checkpoints, backbone/FPN choices, learning rate, etc.). Results are saved to `checkpoints/<name>`; the best checkpoint is `<name>_<backbone>_best.pth`.
 
+### Train / Validate on S1GFloods
+```bash
+cd ChangeDINO-main
+bash trainval_s1gfloods.sh
+```
+
+Equivalent explicit command:
+```bash
+python trainval.py \
+  --name S1GFloods-ChangeDINO \
+  --dataset S1GFloods_CD \
+  --dataroot ../datasets \
+  --dataset_mode sar \
+  --stats_file ../datasets/S1GFloods_CD/channel_stats_s1gfloods_train.json \
+  --gpu_ids 0 \
+  --batch_size 16 \
+  --num_epochs 100 \
+  --lr 1e-4
+```
+
+Notes for S1GFloods:
+- Input PNGs can be true grayscale or RGB-converted grayscale; loader normalizes both to 3-channel RGB tensors.
+- SAR mode disables saturation jitter and uses milder brightness/contrast perturbation.
+- You still need the DINOv3 checkpoint under `ChangeDINO-main/dinov3/weights/`.
+- If you rename the prepared dataset directory (for example `S1GFloods_CD_DINO`), keep `--dataset` and `--stats_file` consistent with that exact folder name.
+
 ## Test
 ```bash
 python test.py \
@@ -78,6 +130,18 @@ python test.py \
   --save_test
 ```
 This loads the best checkpoint, runs on the `test` split, prints metrics, and saves predictions (if `--save_test`) under `checkpoints/<name>/pred/`.
+
+S1GFloods example:
+```bash
+python test.py \
+  --name S1GFloods-ChangeDINO \
+  --dataset S1GFloods_CD \
+  --dataroot ../datasets \
+  --dataset_mode sar \
+  --stats_file ../datasets/S1GFloods_CD/channel_stats_s1gfloods_train.json \
+  --gpu_ids 0 \
+  --save_test
+```
 
 Adjust `--gpu_ids`, `--num_workers`, and other options as needed, and use `trainval.sh` for ready-made command examples.
 

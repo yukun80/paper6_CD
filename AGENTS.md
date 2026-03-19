@@ -28,6 +28,10 @@ python datasets/script/rebuild_urban_sar_floods_hier_labels.py --data-root datas
 # Convert raw UrbanSARFloods to CD layout
 python datasets/script/convert_urban_sar_floods_to_cd.py --src-root datasets/urban_sar_floods --out-root datasets/urban_sar_floods_CD --overwrite --strict
 
+# Prepare flat S1GFloods PNG data for ChangeDINO and compute train stats
+python ChangeDINO-main/scripts/prepare_s1gfloods_cd.py --src-root datasets/S1GFloods --out-root datasets/S1GFloods_CD --seed 42 --overwrite
+python ChangeDINO-main/scripts/compute_s1gfloods_cd_stats.py --data-root datasets/S1GFloods_CD --split train --output datasets/S1GFloods_CD/channel_stats_s1gfloods_train.json
+
 # Check OpenMMLab environment compatibility
 ./baselines/open-cd/scripts/urban_sar_floods/run_fcsiam_conc_3c.sh check-env
 
@@ -57,6 +61,9 @@ python exp_template/visualize.py --config-file exp_template/config/unet.yaml --c
 
 # exp_template 一次性批训练全部对比模型（失败继续，最后汇总）
 bash exp_template/train_all_models.sh
+
+# ChangeDINO on S1GFloods
+bash ChangeDINO-main/trainval_s1gfloods.sh
 
 # TensorBoard（可选，若提示未安装）
 pip install tensorboard

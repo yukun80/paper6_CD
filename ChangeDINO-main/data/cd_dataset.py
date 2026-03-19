@@ -1,80 +1,91 @@
-from .transform import Transforms
+from pathlib import Path
+
 import numpy as np
-import os
-from PIL import Image
 import torch
+from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 
+from .transform import Transforms
 
-def make_dataset(dir):
-    img_paths = []
-    names = []
-    assert os.path.isdir(dir), "%s is not a valid directory" % dir
 
-    for root, _, fnames in sorted(os.walk(dir)):
-        for fname in fnames:
-            path = os.path.join(root, fname)
-            img_paths.append(path)
-            names.append(fname)
+def _scan_split_dir(split_dir: Path) -> dict[str, Path]:
+    if not split_dir.is_dir():
+        raise FileNotFoundError(f"Split directory not found: {split_dir}")
+    files = sorted(p for p in split_dir.iterdir() if p.is_file())
+    return {p.name: p for p in files}
 
-    return img_paths, names
+
+def _resolve_label_dir(base_dir: Path) -> Path:
+    candidates = [base_dir / "label", base_dir / "Label"]
+    for candidate in candidates:
+        if candidate.is_dir():
+            return candidate
+    raise FileNotFoundError(f"Cannot find label directory under: {base_dir}")
+
+
+def _normalize_to_rgb(image: Image.Image) -> Image.Image:
+    if image.mode == "RGB":
+        return image
+    if image.mode in {"L", "I", "F", "P", "LA"}:
+        return image.convert("RGB")
+    return image.convert("RGB")
 
 
 class Load_Dataset(Dataset):
+    """读取标准变化检测目录，并兼容 S1GFloods 的 SAR PNG 输入。"""
+
     def __init__(self, opt):
-        super(Load_Dataset, self).__init__()
+        super().__init__()
         self.opt = opt
 
-        self.dir1 = os.path.join(opt.dataroot, opt.dataset, opt.phase, "A")
-        self.t1_paths, self.fnames = sorted(make_dataset(self.dir1))
+        split_root = Path(opt.dataroot) / opt.dataset / opt.phase
+        dir1 = split_root / "A"
+        dir2 = split_root / "B"
+        dir_label = _resolve_label_dir(split_root)
 
-        self.dir2 = os.path.join(opt.dataroot, opt.dataset, opt.phase, "B")
-        self.t2_paths, _ = sorted(make_dataset(self.dir2))
+        self.t1_map = _scan_split_dir(dir1)
+        self.t2_map = _scan_split_dir(dir2)
+        self.label_map = _scan_split_dir(dir_label)
+        self.fnames = sorted(self.t1_map.keys())
 
-        self.dir_label = os.path.join(opt.dataroot, opt.dataset, opt.phase, "label")
-        self.label_paths, _ = sorted(make_dataset(self.dir_label))
+        if self.fnames != sorted(self.t2_map.keys()) or self.fnames != sorted(self.label_map.keys()):
+            raise ValueError(
+                f"File mismatch under split {split_root}: "
+                "A/B/label must have identical file names."
+            )
+        if not self.fnames:
+            raise ValueError(f"No samples found under split: {split_root}")
 
-        self.dataset_size = len(self.t1_paths)
-
-        self.normalize = transforms.Compose(
-            [transforms.Normalize((0.430, 0.411, 0.296), (0.213, 0.156, 0.143))]
-        )
-        self.transform = transforms.Compose([Transforms()])
-        self.to_tensor = transforms.Compose([transforms.ToTensor()])
+        self.dataset_size = len(self.fnames)
+        self.normalize = transforms.Normalize(tuple(opt.mean), tuple(opt.std))
+        self.transform = Transforms(input_size=opt.input_size, dataset_mode=opt.dataset_mode)
+        self.to_tensor = transforms.ToTensor()
 
     def __len__(self):
         return self.dataset_size
 
     def __getitem__(self, index):
-        t1_path = self.t1_paths[index]
         fname = self.fnames[index]
-        img1 = Image.open(t1_path)
+        img1 = _normalize_to_rgb(Image.open(self.t1_map[fname]))
+        img2 = _normalize_to_rgb(Image.open(self.t2_map[fname]))
 
-        t2_path = self.t2_paths[index]
-        img2 = Image.open(t2_path)
-
-        label_path = self.label_paths[index]
-        label = np.array(Image.open(label_path)) / 255
-        label[label > 0] = 1
+        label = np.array(Image.open(self.label_map[fname]).convert("L"), dtype=np.uint8)
+        label = (label > 0).astype(np.uint8)
         cd_label = Image.fromarray(label)
 
         if self.opt.phase == "train":
-            _data = self.transform({"img1": img1, "img2": img2, "cd_label": cd_label})
-            img1, img2, cd_label = _data["img1"], _data["img2"], _data["cd_label"]
+            data = self.transform({"img1": img1, "img2": img2, "cd_label": cd_label})
+            img1, img2, cd_label = data["img1"], data["img2"], data["cd_label"]
 
-        img1 = self.to_tensor(img1)
-        img2 = self.to_tensor(img2)
-        img1 = self.normalize(img1)
-        img2 = self.normalize(img2)
-        cd_label = torch.from_numpy(np.array(cd_label))
-        input_dict = {"img1": img1, "img2": img2, "cd_label": cd_label, "fname": fname}
+        img1 = self.normalize(self.to_tensor(img1))
+        img2 = self.normalize(self.to_tensor(img2))
+        cd_label = torch.from_numpy(np.array(cd_label, dtype=np.int64))
 
-        return input_dict
+        return {"img1": img1, "img2": img2, "cd_label": cd_label, "fname": fname}
 
 
 class DataLoader(torch.utils.data.Dataset):
-
     def __init__(self, opt):
         self.dataset = Load_Dataset(opt)
         self.dataloader = torch.utils.data.DataLoader(

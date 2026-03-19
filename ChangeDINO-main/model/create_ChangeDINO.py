@@ -35,6 +35,7 @@ class Model(nn.Module):
             beta_mode=opt.beta_mode,
             n_layers=opt.n_layers,
             extract_ids=opt.extract_ids,
+            dino_weight=opt.dino_weight,
         )
         self.focal = FocalLoss(alpha=opt.alpha, gamma=opt.gamma)
         self.dice = DICELoss()

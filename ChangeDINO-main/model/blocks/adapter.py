@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import re
+from pathlib import Path
 
 REPO_DIR = "dinov3"
 DINO_NAME = "dinov3_vitl16"
@@ -24,6 +25,11 @@ class DINOV3Wrapper(nn.Module):
     ):
         super().__init__()
         self.device = device
+        if not Path(weights_path).is_file():
+            raise FileNotFoundError(
+                f"DINOv3 weights not found: {weights_path}. "
+                "Please download the checkpoint and place it under ChangeDINO-main/dinov3/weights/."
+            )
         self.model = torch.hub.load(
             REPO_DIR,
             DINO_NAME,

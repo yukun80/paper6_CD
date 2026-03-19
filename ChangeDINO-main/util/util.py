@@ -50,9 +50,9 @@ def make_numpy_grid(tensor_data, pad_value=0, padding=0):
     return vis
 
 
-def de_norm(tensor_data):
-    mean = (0.430, 0.411, 0.296)
-    std = (0.213, 0.156, 0.143)
+def de_norm(tensor_data, mean=None, std=None):
+    mean = mean or (0.430, 0.411, 0.296)
+    std = std or (0.213, 0.156, 0.143)
     for i in range(tensor_data.shape[1]):
         tensor_data[:, i, :, :] = tensor_data[:, i, :, :] * std[i] + mean[i]
     return tensor_data

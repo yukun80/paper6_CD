@@ -96,8 +96,8 @@ class Trainval(object):
     def _plot_cd_result(self, x1, x2, pred, target, epoch, stage):
         if len(pred.shape) == 4:
             pred = torch.argmax(pred, dim=1)
-        vis_input = make_numpy_grid(de_norm(x1[0:8]))
-        vis_input2 = make_numpy_grid(de_norm(x2[0:8]))
+        vis_input = make_numpy_grid(de_norm(x1[0:8], self.opt.mean, self.opt.std))
+        vis_input2 = make_numpy_grid(de_norm(x2[0:8], self.opt.mean, self.opt.std))
         vis_pred = make_numpy_grid(pred[0:8].unsqueeze(1).repeat(1, 3, 1, 1))
         vis_gt = make_numpy_grid(target[0:8].unsqueeze(1).repeat(1, 3, 1, 1))
         vis = np.concatenate([vis_input, vis_input2, vis_pred, vis_gt], axis=0)

@@ -6,7 +6,7 @@ from PIL import Image
 from torchvision import transforms
 
 from model.create_ChangeDINO import create_model
-from option import Options
+from option import Options, resolve_norm_stats
 
 
 def build_parser() -> ArgumentParser:
@@ -33,6 +33,12 @@ def parse_and_prepare() -> object:
     parser = build_parser()
     opt = parser.parse_args()
 
+    if opt.dataset_mode == "auto":
+        if str(opt.dataset).startswith("S1GFloods"):
+            opt.dataset_mode = "sar"
+        else:
+            opt.dataset_mode = "default"
+
     str_ids = opt.gpu_ids.split(",")
     opt.gpu_ids = []
     for str_id in str_ids:
@@ -51,6 +57,7 @@ def parse_and_prepare() -> object:
     opt.load_pretrain = True
     opt.batch_size = 1
     opt.num_workers = 0
+    opt.mean, opt.std = resolve_norm_stats(opt)
 
     print("------------ Options -------------")
     for k, v in sorted(vars(opt).items()):
@@ -73,7 +80,7 @@ def main():
 
     os.makedirs(os.path.dirname(opt.output) or ".", exist_ok=True)
     to_tensor = transforms.ToTensor()
-    normalize = transforms.Normalize((0.430, 0.411, 0.296), (0.213, 0.156, 0.143))
+    normalize = transforms.Normalize(tuple(opt.mean), tuple(opt.std))
 
     _, img_A = load_image(opt.img_A, to_tensor, normalize)
     _, img_B = load_image(opt.img_B, to_tensor, normalize)
