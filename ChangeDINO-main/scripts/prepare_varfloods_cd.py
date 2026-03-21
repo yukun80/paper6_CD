@@ -239,7 +239,7 @@ def write_split(
 
             write_tile(ds_a, arr_a, out_root / split / "A" / tile_id, window, "float32", ds_a.nodata, dry_run)
             write_tile(ds_b, arr_b, out_root / split / "B" / tile_id, window, "float32", ds_b.nodata, dry_run)
-            write_tile(ds_l, label_tile, out_root / split / "label" / tile_id, window, "uint8", 0, dry_run)
+            write_tile(ds_l, label_tile, out_root / split / "label" / tile_id, window, "uint8", None, dry_run)
 
         manifest_rows.append(
             {
