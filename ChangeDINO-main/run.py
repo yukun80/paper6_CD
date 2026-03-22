@@ -35,7 +35,7 @@ def parse_and_prepare() -> object:
     opt = parser.parse_args()
 
     if opt.dataset_mode == "auto":
-        if str(opt.dataset).startswith(("S1GFloods", "VarFloods")):
+        if str(opt.dataset).startswith("S1GFloods"):
             opt.dataset_mode = "sar"
         else:
             opt.dataset_mode = "default"

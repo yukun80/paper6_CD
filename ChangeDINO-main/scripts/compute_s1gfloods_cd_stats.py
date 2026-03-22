@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""统计 S1GFloods_CD 训练集输入图像的三通道 mean/std。"""
+"""统计 S1GFloods_CD_DINO 训练集输入图像的三通道 mean/std。"""
 
 from __future__ import annotations
 
@@ -19,13 +19,13 @@ python ChangeDINO-main/scripts/compute_s1gfloods_cd_stats.py \
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser("Compute channel stats for S1GFloods_CD")
-    parser.add_argument("--data-root", type=Path, default=Path("datasets/S1GFloods_CD"))
+    parser = argparse.ArgumentParser("Compute channel stats for S1GFloods_CD_DINO")
+    parser.add_argument("--data-root", type=Path, default=Path("datasets/S1GFloods_CD_DINO"))
     parser.add_argument("--split", type=str, default="train", choices=["train", "val", "test"])
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("datasets/S1GFloods_CD/channel_stats_s1gfloods_train.json"),
+        default=Path("datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json"),
     )
     parser.add_argument("--max-samples", type=int, default=-1, help="仅处理前 N 个样本；-1 表示全部。")
     return parser.parse_args()

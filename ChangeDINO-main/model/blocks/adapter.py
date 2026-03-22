@@ -24,7 +24,8 @@ class DINOV3Wrapper(nn.Module):
         device="cuda",
     ):
         super().__init__()
-        self.device = device
+        self.device = torch.device(device)
+        self.device_type = self.device.type
         if not Path(weights_path).is_file():
             raise FileNotFoundError(
                 f"DINOv3 weights not found: {weights_path}. "
@@ -36,7 +37,7 @@ class DINOV3Wrapper(nn.Module):
             source="local",
             weights=weights_path,
         )
-        self.model = self.model.eval().to(device)
+        self.model = self.model.eval().to(self.device)
         self.n_layers = MODEL_TO_NUM_LAYERS[
             re.sub(r"\d+", "", DINO_NAME.split("_")[-1]).upper()
         ]
@@ -53,7 +54,9 @@ class DINOV3Wrapper(nn.Module):
             x, size=(512, 512), mode="bilinear", align_corners=True, antialias=True
         )
         with torch.no_grad():
-            with torch.autocast(device_type=self.device, dtype=torch.float32):
+            # autocast 仅在 CUDA 上开启；CPU 侧保持普通 float32 更稳妥。
+            autocast_enabled = self.device_type == "cuda"
+            with torch.autocast(device_type=self.device_type, dtype=torch.float16, enabled=autocast_enabled):
                 feats = self.model.get_intermediate_layers(
                     x, n=range(self.n_layers), reshape=True, norm=True
                 )

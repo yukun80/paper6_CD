@@ -36,6 +36,7 @@ class Model(nn.Module):
             n_layers=opt.n_layers,
             extract_ids=opt.extract_ids,
             dino_weight=opt.dino_weight,
+            device=self.device,
         )
         self.focal = FocalLoss(alpha=opt.alpha, gamma=opt.gamma)
         self.dice = DICELoss()
@@ -49,7 +50,7 @@ class Model(nn.Module):
         )
         if opt.load_pretrain:
             self.load_ckpt(self.model, self.optimizer, opt.name, opt.backbone)
-        self.model.cuda()
+        self.model.to(self.device)
 
         print("---------- Networks initialized -------------")
 
@@ -108,4 +109,4 @@ def create_model(opt):
     model = Model(opt)
     print("model [%s] was created" % model.name())
 
-    return model.cuda()
+    return model.to(model.device)

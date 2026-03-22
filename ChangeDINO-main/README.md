@@ -57,7 +57,7 @@ Convert it to ChangeDINO layout first:
 ```bash
 python ChangeDINO-main/scripts/prepare_s1gfloods_cd.py \
   --src-root datasets/S1GFloods \
-  --out-root datasets/S1GFloods_CD \
+  --out-root datasets/S1GFloods_CD_DINO \
   --seed 42 \
   --overwrite
 ```
@@ -65,50 +65,10 @@ python ChangeDINO-main/scripts/prepare_s1gfloods_cd.py \
 Then compute train-split normalization stats:
 ```bash
 python ChangeDINO-main/scripts/compute_s1gfloods_cd_stats.py \
-  --data-root datasets/S1GFloods_CD \
+  --data-root datasets/S1GFloods_CD_DINO \
   --split train \
-  --output datasets/S1GFloods_CD/channel_stats_s1gfloods_train.json
+  --output datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json
 ```
-
-### VarFloods
-For this repository, raw `datasets/VarFloods` is organized by region:
-```text
-datasets/VarFloods/
-├── Bolivia/
-│   └── PRO/
-│       ├── A/*.tif
-│       ├── B/*.tif
-│       └── label/*.tif
-├── France/
-├── Honduras/
-├── Libya/
-└── VietNam/
-```
-
-Prepare ChangeDINO-ready tiles from `PRO` only:
-```bash
-python ChangeDINO-main/scripts/prepare_varfloods_cd.py \
-  --src-root datasets/VarFloods \
-  --out-root datasets/VarFloods_CD \
-  --tile-size 256 \
-  --stride 256 \
-  --seed 42 \
-  --overwrite \
-  --strict
-```
-
-Then compute train-split normalization stats:
-```bash
-python ChangeDINO-main/scripts/compute_varfloods_cd_stats.py \
-  --data-root datasets/VarFloods_CD \
-  --split train \
-  --output datasets/VarFloods_CD/channel_stats_varfloods_train.json
-```
-
-Notes for VarFloods:
-- The prepared dataset keeps image tiles as single-band `float32` GeoTIFFs.
-- ChangeDINO now reads SAR `tif` tiles directly via `rasterio`, applies a stable percentile stretch, and expands them to 3-channel tensors internally.
-- Labels are converted to binary `0/1` tif tiles during preparation.
 
 ## Pre-trained Weights (Google Drive)
 For the DINOv3 pre-trained weight, please [download here](https://drive.google.com/file/d/1r6g0D6zV-1e8gJHij1edsE_uzvZ72L3u/view?usp=drive_link) and place it under `dinov3/weights/`.
@@ -144,12 +104,12 @@ Equivalent explicit command:
 ```bash
 python trainval.py \
   --name S1GFloods-ChangeDINO \
-  --dataset S1GFloods_CD \
+  --dataset S1GFloods_CD_DINO \
   --dataroot ../datasets \
   --dataset_mode sar \
-  --stats_file ../datasets/S1GFloods_CD/channel_stats_s1gfloods_train.json \
+  --stats_file ../datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
   --gpu_ids 0 \
-  --batch_size 16 \
+  --batch_size 8 \
   --num_epochs 100 \
   --lr 1e-4
 ```
@@ -158,28 +118,69 @@ Notes for S1GFloods:
 - Input PNGs can be true grayscale or RGB-converted grayscale; loader normalizes both to 3-channel RGB tensors.
 - SAR mode disables saturation jitter and uses milder brightness/contrast perturbation.
 - You still need the DINOv3 checkpoint under `ChangeDINO-main/dinov3/weights/`.
-- If you rename the prepared dataset directory (for example `S1GFloods_CD_DINO`), keep `--dataset` and `--stats_file` consistent with that exact folder name.
+- If you rename the prepared dataset directory, keep `--dataset` and `--stats_file` consistent with that exact folder name.
 
-### Train / Validate on VarFloods
+### GF3 Henan Whole-Scene Inference
+Use the S1GFloods-trained checkpoint to run tiled inference on the GF3 Henan pre/post pair.
+
+1. Prepare PNG/TIF tiles with explicit valid masks:
 ```bash
-cd ChangeDINO-main
-bash trainval_varfloods.sh
+python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
+  --src-root datasets/GF3_Henan \
+  --pre-image Pre_Zhengzhou_descending_clip.tif \
+  --post-image Post_Zhengzhou_descending_clip.tif \
+  --out-root datasets/GF3_Henan_CD_infer \
+  --tile-size 256 \
+  --stride 128 \
+  --overwrite
 ```
 
-Equivalent explicit command:
+2. Run tiled inference and stitch back to whole-scene outputs:
 ```bash
-python trainval.py \
-  --name VarFloods-ChangeDINO \
-  --dataset VarFloods_CD \
-  --dataroot ../datasets \
-  --dataset_mode sar \
-  --stats_file ../datasets/VarFloods_CD/channel_stats_varfloods_train.json \
+python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
+  --tiles-root datasets/GF3_Henan_CD_infer \
+  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO/S1GFloods-ChangeDINO_mobilenetv2_best.pth \
+  --stats_file <path_to_s1gfloods_stats.json> \
   --gpu_ids 0 \
   --batch_size 8 \
-  --input_size 256 \
-  --num_epochs 100 \
-  --lr 1e-4
+  --output-dir ChangeDINO-main/outputs/gf3_henan
 ```
+
+Notes for GF3 Henan:
+- Tiles are saved as both `PNG` and `tif`: `PNG` is the actual model input to stay closer to S1GFloods training data, while `tif` preserves original float32 values and georeferencing.
+- `valid_mask` is generated for every tile and is used during stitching so `nodata` pixels do not contribute to predictions.
+- Final outputs include `change_prob.tif`, `change_binary.tif`, and `change_binary.png`.
+
+### S1 Henan Whole-Scene Inference
+Use the same S1GFloods-trained checkpoint to run tiled inference on the Sentinel-1 Henan pre/post VH pair.
+
+1. Prepare PNG/TIF tiles with explicit valid masks:
+```bash
+python ChangeDINO-main/scripts/prepare_s1_henan_infer.py \
+  --src-root datasets/S1_Henan \
+  --pre-image Zhengzhou_S1GRD_ASCENDING_VH_pre.tif \
+  --post-image Zhengzhou_S1GRD_ASCENDING_VH_Post.tif \
+  --out-root datasets/S1_Henan_CD_infer \
+  --tile-size 256 \
+  --stride 128 \
+  --overwrite
+```
+
+2. Run tiled inference and stitch back to whole-scene outputs:
+```bash
+python ChangeDINO-main/scripts/infer_s1_henan_tiles.py \
+  --tiles-root datasets/S1_Henan_CD_infer \
+  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO/S1GFloods-ChangeDINO_mobilenetv2_best.pth \
+  --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+  --gpu_ids 0 \
+  --batch_size 8 \
+  --output-dir ChangeDINO-main/outputs/s1_henan
+```
+
+Notes for S1 Henan:
+- Current defaults expect single-band Sentinel-1 VH tif inputs.
+- Pre/Post tif must share the same shape, CRS, transform, and nodata definition.
+- Final outputs include `change_prob.tif`, `change_binary.tif`, and `change_binary.png`.
 
 ## Test
 ```bash
@@ -196,22 +197,10 @@ S1GFloods example:
 ```bash
 python test.py \
   --name S1GFloods-ChangeDINO \
-  --dataset S1GFloods_CD \
+  --dataset S1GFloods_CD_DINO \
   --dataroot ../datasets \
   --dataset_mode sar \
-  --stats_file ../datasets/S1GFloods_CD/channel_stats_s1gfloods_train.json \
-  --gpu_ids 0 \
-  --save_test
-```
-
-VarFloods example:
-```bash
-python test.py \
-  --name VarFloods-ChangeDINO \
-  --dataset VarFloods_CD \
-  --dataroot ../datasets \
-  --dataset_mode sar \
-  --stats_file ../datasets/VarFloods_CD/channel_stats_varfloods_train.json \
+  --stats_file ../datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
   --gpu_ids 0 \
   --save_test
 ```

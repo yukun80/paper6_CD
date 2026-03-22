@@ -22,7 +22,7 @@ python ChangeDINO-main/scripts/prepare_s1gfloods_cd.py \
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser("Prepare S1GFloods in train/val/test CD layout")
     parser.add_argument("--src-root", type=Path, default=Path("datasets/S1GFloods"))
-    parser.add_argument("--out-root", type=Path, default=Path("datasets/S1GFloods_CD"))
+    parser.add_argument("--out-root", type=Path, default=Path("datasets/S1GFloods_CD_DINO"))
     parser.add_argument("--train-ratio", type=float, default=0.8)
     parser.add_argument("--val-ratio", type=float, default=0.1)
     parser.add_argument("--seed", type=int, default=42)

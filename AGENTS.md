@@ -29,12 +29,8 @@ python datasets/script/rebuild_urban_sar_floods_hier_labels.py --data-root datas
 python datasets/script/convert_urban_sar_floods_to_cd.py --src-root datasets/urban_sar_floods --out-root datasets/urban_sar_floods_CD --overwrite --strict
 
 # Prepare flat S1GFloods PNG data for ChangeDINO and compute train stats
-python ChangeDINO-main/scripts/prepare_s1gfloods_cd.py --src-root datasets/S1GFloods --out-root datasets/S1GFloods_CD --seed 42 --overwrite
-python ChangeDINO-main/scripts/compute_s1gfloods_cd_stats.py --data-root datasets/S1GFloods_CD --split train --output datasets/S1GFloods_CD/channel_stats_s1gfloods_train.json
-
-# Prepare ETCI-2021 temporal tiles for ChangeDINO and compute train stats
-python ChangeDINO-main/scripts/prepare_etci2021_cd.py --src-root datasets/ETCI-2021 --out-root datasets/ETCI2021_CD_DINO --seed 42 --overwrite
-python ChangeDINO-main/scripts/compute_etci2021_cd_stats.py --data-root datasets/ETCI2021_CD_DINO --split train --output datasets/ETCI2021_CD_DINO/channel_stats_etci2021_train.json
+python ChangeDINO-main/scripts/prepare_s1gfloods_cd.py --src-root datasets/S1GFloods --out-root datasets/S1GFloods_CD_DINO --seed 42 --overwrite
+python ChangeDINO-main/scripts/compute_s1gfloods_cd_stats.py --data-root datasets/S1GFloods_CD_DINO --split train --output datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json
 
 # Check OpenMMLab environment compatibility
 ./baselines/open-cd/scripts/urban_sar_floods/run_fcsiam_conc_3c.sh check-env
@@ -69,8 +65,9 @@ bash exp_template/train_all_models.sh
 # ChangeDINO on S1GFloods
 bash ChangeDINO-main/trainval_s1gfloods.sh
 
-# ChangeDINO on ETCI-2021
-bash ChangeDINO-main/trainval_etci2021.sh
+# ChangeDINO on S1 Henan whole-scene inference
+python ChangeDINO-main/scripts/prepare_s1_henan_infer.py --src-root datasets/S1_Henan --pre-image Zhengzhou_S1GRD_ASCENDING_VH_pre.tif --post-image Zhengzhou_S1GRD_ASCENDING_VH_Post.tif --out-root datasets/S1_Henan_CD_infer --tile-size 256 --stride 128 --overwrite
+python ChangeDINO-main/scripts/infer_s1_henan_tiles.py --tiles-root datasets/S1_Henan_CD_infer --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO/S1GFloods-ChangeDINO_mobilenetv2_best.pth --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json --gpu_ids 0 --batch_size 8 --output-dir ChangeDINO-main/outputs/s1_henan
 
 # TensorBoard（可选，若提示未安装）
 pip install tensorboard
