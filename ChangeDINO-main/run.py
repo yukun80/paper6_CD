@@ -8,6 +8,7 @@ from torchvision import transforms
 from data.tif_io import is_tiff_path, read_sar_tif
 from model.create_ChangeDINO import create_model
 from option import Options, resolve_norm_stats
+from model.blocks.dinov3_meta import resolve_dino_arch, resolve_extract_ids
 
 
 def build_parser() -> ArgumentParser:
@@ -58,6 +59,8 @@ def parse_and_prepare() -> object:
     opt.load_pretrain = True
     opt.batch_size = 1
     opt.num_workers = 0
+    opt.dino_arch = resolve_dino_arch(opt.dino_arch, opt.dino_weight)
+    opt.extract_ids = resolve_extract_ids(opt.dino_arch, opt.extract_ids)
     opt.mean, opt.std = resolve_norm_stats(opt)
 
     print("------------ Options -------------")

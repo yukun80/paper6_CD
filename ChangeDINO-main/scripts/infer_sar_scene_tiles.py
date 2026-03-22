@@ -25,6 +25,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from model.create_ChangeDINO import create_model  # noqa: E402
+from model.blocks.dinov3_meta import resolve_dino_arch, resolve_extract_ids  # noqa: E402
 from option import Options, resolve_norm_stats  # noqa: E402
 
 
@@ -160,6 +161,8 @@ def parse_and_prepare(
 
     opt.phase = "test"
     opt.load_pretrain = False
+    opt.dino_arch = resolve_dino_arch(opt.dino_arch, opt.dino_weight)
+    opt.extract_ids = resolve_extract_ids(opt.dino_arch, opt.extract_ids)
     opt.mean, opt.std = resolve_norm_stats(opt)
     opt.output_dir.mkdir(parents=True, exist_ok=True)
 

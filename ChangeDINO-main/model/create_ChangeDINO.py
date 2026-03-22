@@ -34,6 +34,7 @@ class Model(nn.Module):
             gamma_mode=opt.gamma_mode,
             beta_mode=opt.beta_mode,
             n_layers=opt.n_layers,
+            dino_arch=opt.dino_arch,
             extract_ids=opt.extract_ids,
             dino_weight=opt.dino_weight,
             device=self.device,

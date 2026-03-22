@@ -5,6 +5,8 @@ from typing import List
 
 import torch
 
+from model.blocks.dinov3_meta import DINO_ARCH_CHOICES, resolve_dino_arch, resolve_extract_ids
+
 
 OPTICAL_MEAN = [0.430, 0.411, 0.296]
 OPTICAL_STD = [0.213, 0.156, 0.143]
@@ -95,6 +97,13 @@ class Options:
         self.parser.add_argument("--phase", type=str, default="train")
         self.parser.add_argument("--backbone", type=str, default="mobilenetv2")
         self.parser.add_argument(
+            "--dino_arch",
+            type=str,
+            default="auto",
+            choices=DINO_ARCH_CHOICES,
+            help="DINOv3 架构名；auto 会按权重文件名推断。",
+        )
+        self.parser.add_argument(
             "--dino_weight",
             type=str,
             default="dinov3/weights/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth",
@@ -106,7 +115,13 @@ class Options:
         self.parser.add_argument("--gamma_mode", type=str, default="SE")
         self.parser.add_argument("--beta_mode", type=str, default="contextgatedconv")
         self.parser.add_argument('--n_layers', nargs='+', type=int, default=[1, 1, 1, 1])
-        self.parser.add_argument('--extract_ids', nargs='+', type=int, default=[5, 11, 17, 23])
+        self.parser.add_argument(
+            '--extract_ids',
+            nargs='+',
+            type=int,
+            default=None,
+            help="从 DINO 主干抽取的层号；默认按 --dino_arch 自动选择。",
+        )
         self.parser.add_argument("--alpha", type=float, default=0.25)
         self.parser.add_argument("--gamma", type=int, default=4, help="gamma for Focal loss")
 
@@ -159,6 +174,8 @@ class Options:
         if len(self.opt.gpu_ids) > 0:
             torch.cuda.set_device(self.opt.gpu_ids[0])
 
+        self.opt.dino_arch = resolve_dino_arch(self.opt.dino_arch, self.opt.dino_weight)
+        self.opt.extract_ids = resolve_extract_ids(self.opt.dino_arch, self.opt.extract_ids)
         self.opt.mean, self.opt.std = resolve_norm_stats(self.opt)
 
         args = vars(self.opt)

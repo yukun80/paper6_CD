@@ -53,13 +53,30 @@ datasets/S1GFloods/
 └── Label/
 ```
 
-Convert it to ChangeDINO layout first:
+Build the fused ChangeDINO layout from raw `S1GFloods` plus `VarFloods/*/PRO` first:
 ```bash
-python ChangeDINO-main/scripts/prepare_s1gfloods_cd.py \
-  --src-root datasets/S1GFloods \
+python ChangeDINO-main/scripts/prepare_fused_sar_cd_dataset.py \
+  --s1gfloods-root datasets/S1GFloods \
+  --varfloods-root datasets/VarFloods \
   --out-root datasets/S1GFloods_CD_DINO \
+  --tile-size 256 \
+  --stride 128 \
+  --train-ratio 0.9 \
   --seed 42 \
   --overwrite
+```
+
+This rebuilds `datasets/S1GFloods_CD_DINO` into a train/val-only dataset:
+```text
+datasets/S1GFloods_CD_DINO/
+├── train/{A,B,label}
+├── val/{A,B,label}
+├── train_tif/{A,B,label}
+├── val_tif/{A,B,label}
+├── manifest_all.csv
+├── manifest_train.csv
+├── manifest_val.csv
+└── split_report.json
 ```
 
 Then compute train-split normalization stats:
@@ -100,14 +117,25 @@ cd ChangeDINO-main
 bash trainval_s1gfloods.sh
 ```
 
+Switch to a different local DINOv3 checkpoint by overriding env vars:
+```bash
+cd ChangeDINO-main
+DINO_ARCH=dinov3_vits16 \
+DINO_WEIGHT=dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth \
+RUN_NAME=S1GFloods-ChangeDINO-vits16 \
+bash trainval_s1gfloods.sh
+```
+
 Equivalent explicit command:
 ```bash
 python trainval.py \
-  --name S1GFloods-ChangeDINO \
+  --name S1GFloods-ChangeDINO-vitl16 \
   --dataset S1GFloods_CD_DINO \
   --dataroot ../datasets \
   --dataset_mode sar \
   --stats_file ../datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+  --dino_arch dinov3_vitl16 \
+  --dino_weight dinov3/weights/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth \
   --gpu_ids 0 \
   --batch_size 8 \
   --num_epochs 100 \
@@ -116,9 +144,13 @@ python trainval.py \
 
 Notes for S1GFloods:
 - Input PNGs can be true grayscale or RGB-converted grayscale; loader normalizes both to 3-channel RGB tensors.
+- The fused builder writes training PNGs under `train/` and `val/`, and preserves VarFloods tiles as GeoTIFF sidecars under `train_tif/` and `val_tif/`.
 - SAR mode disables saturation jitter and uses milder brightness/contrast perturbation.
 - You still need the DINOv3 checkpoint under `ChangeDINO-main/dinov3/weights/`.
+- `--dino_arch` now supports `dinov3_vits16`, `dinov3_vitb16`, and `dinov3_vitl16`; if omitted, it is inferred from `--dino_weight`.
+- `--extract_ids` defaults follow the chosen DINO architecture automatically, so `vits16` no longer reuses the old ViT-L layer ids.
 - If you rename the prepared dataset directory, keep `--dataset` and `--stats_file` consistent with that exact folder name.
+- The fused dataset no longer creates a `test/` split; `trainval.py` still works unchanged because it only consumes `train` and `val`.
 
 ### GF3 Henan Whole-Scene Inference
 Use the S1GFloods-trained checkpoint to run tiled inference on the GF3 Henan pre/post pair.

@@ -82,9 +82,10 @@ class Encoder(nn.Module):
         deform_groups=4,
         gamma_mode="SE",
         beta_mode="contextgatedconv",
+        dino_arch="auto",
         dino_weight="dinov3/weights/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth",
         device="cuda",
-        extract_ids=[5, 11, 17, 23],
+        extract_ids=None,
         **kwargs,
     ):
         super().__init__()
@@ -99,14 +100,14 @@ class Encoder(nn.Module):
         )
         dense_out_dim = fpn_channels * 2
         self.dino = DINOV3Wrapper(
-            weights_path=dino_weight, device=device, extract_ids=extract_ids
+            dino_arch=dino_arch, weights_path=dino_weight, device=device, extract_ids=extract_ids
         )
         self.dense_adp = DenseAdapterLite(
-            in_dim=1024, out_dim=dense_out_dim, bottleneck=fpn_channels // 2
+            in_dim=self.dino.embed_dim, out_dim=dense_out_dim, bottleneck=fpn_channels // 2
         )
         self.pff = PyramidFeatureFusion(
             in_dims=[fpn_channels] * 4,
-            dense_dim=1024,
+            dense_dim=self.dino.embed_dim,
             patch_size=self.dino.patch_size,
             hidden_dim=dense_out_dim,
         )

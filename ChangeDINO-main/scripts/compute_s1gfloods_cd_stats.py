@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
+import rasterio
 
 """
 python ChangeDINO-main/scripts/compute_s1gfloods_cd_stats.py \
@@ -36,6 +37,54 @@ def load_png_rgb(path: Path) -> np.ndarray:
     return arr.reshape(-1, 3)
 
 
+def build_valid_mask(arr: np.ndarray, nodata: float | int | None) -> np.ndarray:
+    """与训练阶段 tif 读取保持一致，只基于有效像素做统计。"""
+    valid = np.isfinite(arr)
+    if nodata is not None:
+        valid &= arr != nodata
+    return valid
+
+
+def stretch_sar_array(
+    arr: np.ndarray,
+    valid_mask: np.ndarray,
+    low: float = 2.0,
+    high: float = 98.0,
+) -> np.ndarray:
+    out = np.zeros(arr.shape, dtype=np.float32)
+    if not np.any(valid_mask):
+        return out
+
+    values = arr[valid_mask].astype(np.float32, copy=False)
+    lo = float(np.percentile(values, low))
+    hi = float(np.percentile(values, high))
+    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+        lo = float(values.min())
+        hi = float(values.max())
+    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+        return out
+
+    scaled = (arr[valid_mask].astype(np.float32, copy=False) - lo) / (hi - lo)
+    out[valid_mask] = np.clip(scaled, 0.0, 1.0)
+    return out
+
+
+def load_tif_rgb(path: Path) -> np.ndarray:
+    """按训练时的 SAR tif 读取方式转成 3 通道 [0, 1] 数组。"""
+    with rasterio.open(path) as ds:
+        arr = ds.read(1).astype(np.float32, copy=False)
+        valid_mask = build_valid_mask(arr, ds.nodata)
+    stretched = stretch_sar_array(arr, valid_mask)
+    rgb = np.repeat(stretched[:, :, None], 3, axis=2).astype(np.float64, copy=False)
+    return rgb.reshape(-1, 3)
+
+
+def load_image_rgb(path: Path) -> np.ndarray:
+    if path.suffix.lower() in {".tif", ".tiff"}:
+        return load_tif_rgb(path)
+    return load_png_rgb(path)
+
+
 def main() -> None:
     args = parse_args()
     split_root = args.data_root / args.split
@@ -44,7 +93,11 @@ def main() -> None:
     for img_dir in img_dirs:
         if not img_dir.is_dir():
             raise FileNotFoundError(f"Missing image directory: {img_dir}")
-        paths.extend(sorted(p for p in img_dir.iterdir() if p.is_file()))
+        paths.extend(
+            sorted(
+                p for p in img_dir.iterdir() if p.is_file() and p.suffix.lower() in {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
+            )
+        )
 
     if args.max_samples > 0:
         paths = paths[: args.max_samples]
@@ -55,7 +108,7 @@ def main() -> None:
     sumsq_arr = np.zeros(3, dtype=np.float64)
     pixel_count = 0
     for path in paths:
-        arr = load_png_rgb(path)
+        arr = load_image_rgb(path)
         sum_arr += arr.sum(axis=0)
         sumsq_arr += np.square(arr).sum(axis=0)
         pixel_count += arr.shape[0]

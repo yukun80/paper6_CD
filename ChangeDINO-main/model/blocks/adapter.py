@@ -1,26 +1,19 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import re
 from pathlib import Path
 
+from .dinov3_meta import get_dino_arch_spec, resolve_dino_arch, resolve_extract_ids
+
 REPO_DIR = "dinov3"
-DINO_NAME = "dinov3_vitl16"
-MODEL_TO_NUM_LAYERS = {
-    "VITS": 12,
-    "VITSP": 12,
-    "VITB": 12,
-    "VITL": 24,
-    "VITHP": 32,
-    "VIT7B": 40,
-}
 
 
 class DINOV3Wrapper(nn.Module):
     def __init__(
         self,
+        dino_arch="auto",
         weights_path="dinov3/weights/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth",
-        extract_ids=[5, 11, 17, 23],
+        extract_ids=None,
         device="cuda",
     ):
         super().__init__()
@@ -31,18 +24,19 @@ class DINOV3Wrapper(nn.Module):
                 f"DINOv3 weights not found: {weights_path}. "
                 "Please download the checkpoint and place it under ChangeDINO-main/dinov3/weights/."
             )
+        self.dino_arch = resolve_dino_arch(dino_arch, weights_path)
+        spec = get_dino_arch_spec(self.dino_arch)
         self.model = torch.hub.load(
             REPO_DIR,
-            DINO_NAME,
+            self.dino_arch,
             source="local",
             weights=weights_path,
         )
         self.model = self.model.eval().to(self.device)
-        self.n_layers = MODEL_TO_NUM_LAYERS[
-            re.sub(r"\d+", "", DINO_NAME.split("_")[-1]).upper()
-        ]
-        self.patch_size = int(re.findall(r"\d+", DINO_NAME.split("_")[-1])[-1])
-        self.extract_ids = extract_ids
+        self.embed_dim = int(spec["embed_dim"])
+        self.n_layers = int(spec["num_layers"])
+        self.patch_size = int(spec["patch_size"])
+        self.extract_ids = resolve_extract_ids(self.dino_arch, extract_ids)
 
         # freeze the backbone
         for p in self.model.parameters():
