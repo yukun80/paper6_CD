@@ -40,9 +40,9 @@
 
 ## 永久水体剔除逻辑
 
-先在 `XF` 上通过 `sigma_seed + sigma_RG + delta_sigma_CD` 得到洪水候选，再在 `XR` 上复用 `sigma_seed + sigma_RG` 提取参考期低散射水面样区域，最后：
+先在 `XF` 上通过 `sigma_seed + sigma_RG + delta_sigma_CD` 得到洪水候选，再在 `XR` 上复用 `sigma_seed + sigma_RG` 提取参考期低散射水面样区域。当前实现会对 `XF` 单时相结果、`XR` 单时相结果和最终洪水图都做连通域后处理，最后：
 
-`final_flood = cd_mask & (~permanent_water_mask)`
+`final_flood = cd_mask_raw & (~pre_event_water_mask_postprocessed)`
 
 ## 工程结构
 
@@ -81,7 +81,7 @@ python -m src.main --config configs/gf3_henan.yaml --config configs/s1_henan.yam
 
 每个数据集输出：
 
-- GeoTIFF: `valid_mask`, `XF_valid`, `XR_valid`, `XC_valid`, `BM_F`, `BM_C`, `BM_intersection`, `seed_mask`, `rg_mask`, `cd_mask`, `permanent_water_mask`, `final_flood_map`
+- GeoTIFF: `valid_mask`, `XF_valid`, `XR_valid`, `XC_valid`, `BM_F`, `BM_C`, `BM_intersection`, `post_event_water_mask`, `pre_event_water_mask`, `final_flood_map`
 - PNG: 预览图、BM 图、两张直方图拟合图、RMSE 热图、最终叠加图
 - 文本/参数: `run.log`, `config_used.yaml`, `fitted_params.json`, `summary_metrics.json`
 

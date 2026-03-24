@@ -39,10 +39,8 @@
    - BM_F.tif
    - BM_C.tif
    - BM_intersection.tif
-   - seed_mask.tif
-   - rg_mask.tif
-   - cd_mask.tif
-   - permanent_water_mask.tif
+   - post_event_water_mask.tif
+   - pre_event_water_mask.tif
    - final_flood_map.tif
 
 2. 中间结果图像 PNG
@@ -350,7 +348,7 @@ f. 保存到搜索热图矩阵
 1. 默认使用 8 邻域
 2. 严禁跨越 NoData 区域进行连通
 3. rg_mask 必须完全由 seed 可达
-4. 输出 seed_mask 和 rg_mask 供检查
+4. `seed_mask`、`rg_mask` 可作为内部调试结果保留在内存或日志中，但最终 tif 不必导出
 
 ========================
 九、变化检测约束
@@ -376,27 +374,30 @@ f. 保存到搜索热图矩阵
 
 实现要求：
 1. 使用 XR 而不是 XF
-2. 参考以下规则生成 permanent_water_mask：
+2. 参考以下规则生成灾前单时相掩膜：
    - 先用 XR <= sigma_seed 作为 seed
    - 在 XR <= sigma_RG_best 范围内做区域生长
-3. 得到 permanent_water_mask
-4. 最终洪水图：
-   final_flood = cd_mask & (~permanent_water_mask)
+3. 对该灾前单时相结果做与 final_flood 相同的轻量后处理
+4. 得到灾前单时相提取结果（建议导出为 `pre_event_water_mask`）
+5. 最终洪水图：
+   final_flood = cd_mask & (~pre_event_water_mask)
 
 注意：
 - 永久水体 mask 同样必须受 valid_mask 约束
-- 如果 permanent_water_mask 与 final_flood 存在重叠，必须从最终结果中删除
-- 输出 permanent_water_mask.tif
+- 如果灾前单时相结果与 final_flood 存在重叠，必须从最终结果中删除
+- 最终 tif 只需导出后处理后的 `pre_event_water_mask`
 
 ========================
 十一、后处理要求
 ========================
 
-在 final_flood 生成后，可做轻量后处理，但不能过度平滑：
+在最终输出前，需要对单时相结果和 final_flood 都做轻量后处理，但不能过度平滑：
 
 1. 去除面积很小的孤立连通域
    - 例如小于 9 像元或小于用户配置阈值
 2. 不能明显改变水体边界的主体结构
+3. 灾后单时相结果（XF 区域生长结果）与灾前单时相结果（XR 区域生长结果）也必须做相同后处理
+4. 最终导出的 tif 只保留后处理后的结果；未后处理版本作为计算过程可不保存
 
 ========================
 十二、工程结构要求

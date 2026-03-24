@@ -68,10 +68,8 @@ def _save_intermediate_rasters(
     write_mask_raster(output_dir / "BM_F.tif", hsba_results["BM_F"], profile, valid_mask=valid_mask)
     write_mask_raster(output_dir / "BM_C.tif", hsba_results["BM_C"], profile, valid_mask=valid_mask)
     write_mask_raster(output_dir / "BM_intersection.tif", hsba_results["BM"], profile, valid_mask=valid_mask)
-    write_mask_raster(output_dir / "seed_mask.tif", flood["seed_mask"], profile, valid_mask=valid_mask)
-    write_mask_raster(output_dir / "rg_mask.tif", flood["rg_mask"], profile, valid_mask=valid_mask)
-    write_mask_raster(output_dir / "cd_mask.tif", flood["cd_mask"], profile, valid_mask=valid_mask)
-    write_mask_raster(output_dir / "permanent_water_mask.tif", flood["permanent_water_mask"], profile, valid_mask=valid_mask)
+    write_mask_raster(output_dir / "post_event_water_mask.tif", flood["post_event_water"], profile, valid_mask=valid_mask)
+    write_mask_raster(output_dir / "pre_event_water_mask.tif", flood["pre_event_water"], profile, valid_mask=valid_mask)
     write_mask_raster(output_dir / "final_flood_map.tif", flood["final_flood"], profile, valid_mask=valid_mask)
 
 
