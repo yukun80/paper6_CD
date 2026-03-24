@@ -84,6 +84,22 @@ class Model(nn.Module):
             network.load_state_dict(checkpoint["network"], strict=False)
             print("load pre-trained")
 
+    def _build_checkpoint_meta(self):
+        """保存推理重建模型所需的最小配置，避免不同 DINO 尺寸下靠默认值猜结构。"""
+        return {
+            "model_config": {
+                "backbone": self.opt.backbone,
+                "fpn_channels": int(self.opt.fpn_channels),
+                "deform_groups": int(self.opt.deform_groups),
+                "gamma_mode": self.opt.gamma_mode,
+                "beta_mode": self.opt.beta_mode,
+                "n_layers": [int(v) for v in self.opt.n_layers],
+                "dino_arch": self.opt.dino_arch,
+                "dino_weight": self.opt.dino_weight,
+                "extract_ids": [int(v) for v in self.opt.extract_ids],
+            }
+        }
+
     def save_ckpt(self, network, optimizer, model_name, backbone):
         save_filename = "%s_%s_best.pth" % (model_name, backbone)
         save_path = os.path.join(self.save_dir, save_filename)
@@ -93,6 +109,7 @@ class Model(nn.Module):
             {
                 "network": network.cpu().state_dict(),
                 "optimizer": optimizer.state_dict(),
+                "meta": self._build_checkpoint_meta(),
             },
             save_path,
         )

@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Sequence
@@ -25,12 +26,23 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from model.create_ChangeDINO import create_model  # noqa: E402
-from model.blocks.dinov3_meta import resolve_dino_arch, resolve_extract_ids  # noqa: E402
+from model.blocks.dinov3_meta import get_dino_arch_spec, resolve_dino_arch, resolve_extract_ids  # noqa: E402
 from option import Options, resolve_norm_stats  # noqa: E402
 
 
 PROB_NODATA = -1.0
 BINARY_NODATA = 255
+INFER_MODEL_CONFIG_FIELDS = {
+    "backbone",
+    "fpn_channels",
+    "deform_groups",
+    "gamma_mode",
+    "beta_mode",
+    "n_layers",
+    "dino_arch",
+    "dino_weight",
+    "extract_ids",
+}
 
 
 class TileDataset(Dataset):
@@ -93,7 +105,10 @@ def build_parser(
     parser.add_argument(
         "--checkpoint",
         type=Path,
-        default=Path("ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO/S1GFloods-ChangeDINO_mobilenetv2_best.pth"),
+        default=Path(
+            "ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/"
+            "S1GFloods-ChangeDINO-vitl16_mobilenetv2_best.pth"
+        ),
         help="trainval_s1gfloods.sh 训练得到的 checkpoint 路径。",
     )
     parser.add_argument(
@@ -115,12 +130,141 @@ def parse_args(
     return build_parser(description=description, defaults=defaults).parse_args(argv)
 
 
+def collect_explicit_overrides(argv: Sequence[str] | None) -> set[str]:
+    """记录用户显式传入的结构参数，保证 CLI 覆盖优先级高于 checkpoint 元数据。"""
+    args = list(sys.argv[1:] if argv is None else argv)
+    explicit: set[str] = set()
+    for token in args:
+        if not token.startswith("--"):
+            continue
+        key = token[2:].split("=", 1)[0]
+        if key in INFER_MODEL_CONFIG_FIELDS:
+            explicit.add(key)
+    return explicit
+
+
+def load_checkpoint_model_config(checkpoint_path: Path) -> dict[str, object] | None:
+    """读取 checkpoint 中保存的模型结构元数据；旧 checkpoint 可能没有该字段。"""
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    if not isinstance(checkpoint, dict):
+        return None
+    meta = checkpoint.get("meta")
+    if not isinstance(meta, dict):
+        return None
+    model_config = meta.get("model_config")
+    return model_config if isinstance(model_config, dict) else None
+
+
+def _extract_state_dict(checkpoint_path: Path) -> dict[str, torch.Tensor]:
+    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
+    if isinstance(checkpoint, dict) and "network" in checkpoint:
+        state_dict = checkpoint["network"]
+    elif isinstance(checkpoint, dict):
+        state_dict = checkpoint
+    else:
+        raise ValueError(f"Unsupported checkpoint payload type: {type(checkpoint)}")
+    if not isinstance(state_dict, dict):
+        raise ValueError(f"Unsupported checkpoint state_dict type: {type(state_dict)}")
+    return state_dict
+
+
+def infer_local_dino_weight_for_arch(dino_arch: str) -> str | None:
+    weight_dir = PROJECT_ROOT / "dinov3" / "weights"
+    matches = sorted(weight_dir.glob(f"{dino_arch}*.pth"))
+    if len(matches) == 1:
+        return str(matches[0].resolve())
+    return None
+
+
+def count_transformer_blocks(state_dict: dict[str, torch.Tensor], prefix: str) -> int | None:
+    pattern = re.compile(rf"^{re.escape(prefix)}\.(\d+)\.")
+    indices = set()
+    for key in state_dict:
+        match = pattern.match(key)
+        if match:
+            indices.add(int(match.group(1)))
+    return (max(indices) + 1) if indices else None
+
+
+def infer_checkpoint_model_config_from_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, object] | None:
+    """兼容旧 checkpoint：从参数形状反推关键模型配置。"""
+    cfg: dict[str, object] = {}
+
+    cls_key = "encoder.dino.model.cls_token"
+    if cls_key in state_dict:
+        embed_dim = int(state_dict[cls_key].shape[-1])
+        arch_by_dim = {384: "dinov3_vits16", 768: "dinov3_vitb16", 1024: "dinov3_vitl16"}
+        dino_arch = arch_by_dim.get(embed_dim)
+        if dino_arch:
+            cfg["dino_arch"] = dino_arch
+            cfg["extract_ids"] = list(get_dino_arch_spec(dino_arch)["default_extract_ids"])
+            inferred_weight = infer_local_dino_weight_for_arch(dino_arch)
+            if inferred_weight:
+                cfg["dino_weight"] = inferred_weight
+
+    p5_head_key = "detector.p5_head.weight"
+    if p5_head_key in state_dict:
+        cfg["fpn_channels"] = int(state_dict[p5_head_key].shape[1])
+
+    offset_key = "encoder.fpn.p2.conv_offset.weight"
+    if offset_key in state_dict:
+        offset_weight = state_dict[offset_key]
+        cfg["deform_groups"] = int(offset_weight.shape[0] // 27)
+        in_channels = int(offset_weight.shape[1])
+        if in_channels == 24:
+            cfg["backbone"] = "mobilenetv2"
+        elif in_channels == 64:
+            cfg["backbone"] = "resnet18d"
+
+    n_layers = []
+    for prefix in ("detector.tb5", "detector.tb4", "detector.tb3", "detector.tb2"):
+        depth = count_transformer_blocks(state_dict, prefix)
+        if depth is None:
+            n_layers = []
+            break
+        n_layers.append(depth)
+    if n_layers:
+        cfg["n_layers"] = n_layers
+
+    if "backbone" not in cfg:
+        cfg["backbone"] = "mobilenetv2"
+    if "gamma_mode" not in cfg:
+        cfg["gamma_mode"] = "SE"
+    if "beta_mode" not in cfg:
+        cfg["beta_mode"] = "contextgatedconv"
+
+    return cfg or None
+
+
+def apply_checkpoint_model_config(
+    opt: argparse.Namespace,
+    checkpoint_model_config: dict[str, object] | None,
+    explicit_overrides: set[str],
+) -> tuple[argparse.Namespace, bool]:
+    """用 checkpoint 里的结构参数补全当前推理配置，但不覆盖用户显式传参。"""
+    if not checkpoint_model_config:
+        return opt, False
+
+    for field in INFER_MODEL_CONFIG_FIELDS:
+        cli_name = field
+        if cli_name in explicit_overrides:
+            continue
+        if field not in checkpoint_model_config:
+            continue
+        value = checkpoint_model_config[field]
+        if field in {"n_layers", "extract_ids"} and value is not None:
+            value = [int(v) for v in value]
+        setattr(opt, field, value)
+    return opt, True
+
+
 def parse_and_prepare(
     argv: Sequence[str] | None = None,
     *,
     defaults: dict[str, object] | None = None,
     description: str = "Infer ChangeDINO on SAR scene tiles",
 ) -> argparse.Namespace:
+    explicit_overrides = collect_explicit_overrides(argv)
     opt = parse_args(argv=argv, defaults=defaults, description=description)
     opt.tiles_root = Path(opt.tiles_root)
     opt.checkpoint = Path(opt.checkpoint)
@@ -143,6 +287,34 @@ def parse_and_prepare(
     opt.tiles_root = opt.tiles_root.resolve()
     opt.checkpoint = opt.checkpoint.resolve()
     opt.output_dir = opt.output_dir.resolve()
+
+    checkpoint_model_config = load_checkpoint_model_config(opt.checkpoint)
+    inferred_checkpoint_model_config = None
+    if checkpoint_model_config is None:
+        inferred_checkpoint_model_config = infer_checkpoint_model_config_from_state_dict(
+            _extract_state_dict(opt.checkpoint)
+        )
+        checkpoint_model_config = inferred_checkpoint_model_config
+    opt, used_checkpoint_model_config = apply_checkpoint_model_config(
+        opt, checkpoint_model_config, explicit_overrides
+    )
+
+    if inferred_checkpoint_model_config is not None:
+        print(
+            "[WARN] Checkpoint does not contain model_config metadata. "
+            "Inference inferred model structure from checkpoint tensor shapes."
+        )
+    elif not used_checkpoint_model_config:
+        print(
+            "[WARN] Checkpoint does not contain model_config metadata. "
+            "Inference will rely on CLI/default backbone and DINO settings."
+        )
+
+    dino_weight = Path(opt.dino_weight)
+    if not dino_weight.is_absolute():
+        candidate = (PROJECT_ROOT / dino_weight).resolve()
+        if candidate.is_file():
+            opt.dino_weight = str(candidate)
     if opt.stats_file:
         opt.stats_file = str(Path(opt.stats_file).resolve())
 
@@ -342,6 +514,17 @@ def main(
         },
         "source_image": str(source_pre),
         "source_shape": [full_height, full_width],
+        "model_config": {
+            "backbone": opt.backbone,
+            "fpn_channels": int(opt.fpn_channels),
+            "deform_groups": int(opt.deform_groups),
+            "gamma_mode": opt.gamma_mode,
+            "beta_mode": opt.beta_mode,
+            "n_layers": [int(v) for v in opt.n_layers],
+            "dino_arch": opt.dino_arch,
+            "dino_weight": str(opt.dino_weight),
+            "extract_ids": [int(v) for v in opt.extract_ids],
+        },
     }
     (opt.output_dir / "infer_report.json").write_text(
         json.dumps(report, indent=2, ensure_ascii=False),

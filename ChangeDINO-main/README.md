@@ -171,7 +171,7 @@ python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
 ```bash
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO/S1GFloods-ChangeDINO_mobilenetv2_best.pth \
+  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/S1GFloods-ChangeDINO-vitl16_mobilenetv2_best.pth \
   --stats_file <path_to_s1gfloods_stats.json> \
   --gpu_ids 0 \
   --batch_size 8 \
@@ -182,6 +182,8 @@ Notes for GF3 Henan:
 - Tiles are saved as both `PNG` and `tif`: `PNG` is the actual model input to stay closer to S1GFloods training data, while `tif` preserves original float32 values and georeferencing.
 - `valid_mask` is generated for every tile and is used during stitching so `nodata` pixels do not contribute to predictions.
 - Final outputs include `change_prob.tif`, `change_binary.tif`, and `change_binary.png`.
+- New checkpoints written by `trainval.py` carry `model_config` metadata, so the tiled inference script can auto-restore the trained DINO architecture and layer ids.
+- For old checkpoints without metadata, pass matching `--dino_arch` and `--dino_weight` explicitly during inference.
 
 ### S1 Henan Whole-Scene Inference
 Use the same S1GFloods-trained checkpoint to run tiled inference on the Sentinel-1 Henan pre/post VH pair.
@@ -202,7 +204,7 @@ python ChangeDINO-main/scripts/prepare_s1_henan_infer.py \
 ```bash
 python ChangeDINO-main/scripts/infer_s1_henan_tiles.py \
   --tiles-root datasets/S1_Henan_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO/S1GFloods-ChangeDINO_mobilenetv2_best.pth \
+  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/S1GFloods-ChangeDINO-vitl16_mobilenetv2_best.pth \
   --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
   --gpu_ids 0 \
   --batch_size 8 \
@@ -228,7 +230,7 @@ This loads the best checkpoint, runs on the `test` split, prints metrics, and sa
 S1GFloods example:
 ```bash
 python test.py \
-  --name S1GFloods-ChangeDINO \
+  --name S1GFloods-ChangeDINO-vitl16 \
   --dataset S1GFloods_CD_DINO \
   --dataroot ../datasets \
   --dataset_mode sar \

@@ -15,11 +15,19 @@ from infer_sar_scene_tiles import main as infer_main
 """
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
 --tiles-root datasets/GF3_Henan_CD_infer \
---checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO/S1GFloods-ChangeDINO_mobilenetv2_best.pth \
+--checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/S1GFloods-ChangeDINO-vitl16_mobilenetv2_best.pth \
 --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
 --gpu_ids 0 \
 --batch_size 8 \
 --output-dir ChangeDINO-main/outputs/gf3_henan
+
+python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
+--tiles-root datasets/GF3_Henan_CD_infer \
+--checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vits16/S1GFloods-ChangeDINO-vits16_mobilenetv2_best.pth \
+--stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+--gpu_ids 0 \
+--batch_size 8 \
+--output-dir ChangeDINO-main/outputs/gf3_henan_vits16
 """
 
 
