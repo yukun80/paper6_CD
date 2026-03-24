@@ -10,6 +10,20 @@ from model.blocks.dinov3_meta import DINO_ARCH_CHOICES, resolve_dino_arch, resol
 
 OPTICAL_MEAN = [0.430, 0.411, 0.296]
 OPTICAL_STD = [0.213, 0.156, 0.143]
+DEFAULT_BACKBONE_WEIGHT = "pretrained/convnextv2_nano_22k_224_ema.pt"
+
+
+def _resolve_repo_relative_path(path_str: str) -> str:
+    """将仓库内相对路径解析到 ChangeDINO-main 目录，避免受 cwd 影响。"""
+    path = Path(path_str).expanduser()
+    if path.is_absolute():
+        return str(path)
+
+    project_root = Path(__file__).resolve().parent
+    candidate = (project_root / path).resolve()
+    if candidate.exists():
+        return str(candidate)
+    return path_str
 
 def _parse_float_list(values: List[str] | None, field_name: str) -> List[float] | None:
     if values is None:
@@ -95,7 +109,13 @@ class Options:
         self.parser.add_argument("--use_morph", action='store_true')
 
         self.parser.add_argument("--phase", type=str, default="train")
-        self.parser.add_argument("--backbone", type=str, default="mobilenetv2")
+        self.parser.add_argument("--backbone", type=str, default="convnextv2_nano")
+        self.parser.add_argument(
+            "--backbone_weight",
+            type=str,
+            default=DEFAULT_BACKBONE_WEIGHT,
+            help="CNN backbone 预训练权重路径；默认使用仓库内 ConvNeXtV2 nano 权重。",
+        )
         self.parser.add_argument(
             "--dino_arch",
             type=str,
@@ -174,6 +194,9 @@ class Options:
         if len(self.opt.gpu_ids) > 0:
             torch.cuda.set_device(self.opt.gpu_ids[0])
 
+        self.opt.dino_weight = _resolve_repo_relative_path(self.opt.dino_weight)
+        if self.opt.backbone_weight:
+            self.opt.backbone_weight = _resolve_repo_relative_path(self.opt.backbone_weight)
         self.opt.dino_arch = resolve_dino_arch(self.opt.dino_arch, self.opt.dino_weight)
         self.opt.extract_ids = resolve_extract_ids(self.opt.dino_arch, self.opt.extract_ids)
         self.opt.mean, self.opt.std = resolve_norm_stats(self.opt)

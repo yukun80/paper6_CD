@@ -9,7 +9,7 @@ from .loss.focal import FocalLoss
 from .loss.dice import DICELoss
 
 
-def get_model(backbone_name="mobilenetv2", fpn_channels=128, n_layers=[1, 1, 1], **kwargs):
+def get_model(backbone_name="convnextv2_nano", fpn_channels=128, n_layers=[1, 1, 1, 1], **kwargs):
     model = ChangeModel(backbone_name, fpn_channels, n_layers=n_layers, **kwargs)
     # print(model)
     return model
@@ -29,6 +29,7 @@ class Model(nn.Module):
         self.model = get_model(
             backbone_name=opt.backbone,
             fpn_name=opt.fpn,
+            backbone_weight=opt.backbone_weight,
             fpn_channels=opt.fpn_channels,
             deform_groups=opt.deform_groups,
             gamma_mode=opt.gamma_mode,
@@ -89,6 +90,7 @@ class Model(nn.Module):
         return {
             "model_config": {
                 "backbone": self.opt.backbone,
+                "backbone_weight": self.opt.backbone_weight,
                 "fpn_channels": int(self.opt.fpn_channels),
                 "deform_groups": int(self.opt.deform_groups),
                 "gamma_mode": self.opt.gamma_mode,

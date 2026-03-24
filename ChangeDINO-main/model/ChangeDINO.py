@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -10,16 +12,79 @@ from .blocks.diffatts import TransformerBlock
 from .blocks.refine import LearnableSoftMorph
 from .backbone.mobilenetv2 import mobilenet_v2
 
+DEFAULT_CONVNEXTV2_NANO_WEIGHT = "pretrained/convnextv2_nano_22k_224_ema.pt"
 
-def get_backbone(backbone_name):
+
+class TimmFeatureBackbone(nn.Module):
+    """统一 `timm features_only` 骨干的输出接口，保证返回 list[Tensor]。"""
+
+    def __init__(self, model: nn.Module, channels: list[int]):
+        super().__init__()
+        self.model = model
+        self.channels = channels
+
+    def forward(self, x):
+        features = self.model(x)
+        if isinstance(features, tuple):
+            features = list(features)
+        return features
+
+
+def _load_local_backbone_weights(backbone, weight_path: str, backbone_name: str) -> None:
+    """优先加载本地骨干预训练权重，避免训练入口隐式依赖联网下载。"""
+    weight_file = Path(weight_path).expanduser()
+    if not weight_file.is_file():
+        raise FileNotFoundError(f"backbone weight not found: {weight_file}")
+
+    checkpoint = torch.load(weight_file, map_location="cpu", weights_only=True)
+    if isinstance(checkpoint, dict):
+        state_dict = (
+            checkpoint.get("state_dict")
+            or checkpoint.get("model")
+            or checkpoint.get("network")
+            or checkpoint
+        )
+    else:
+        state_dict = checkpoint
+    if not isinstance(state_dict, dict):
+        raise ValueError(f"unsupported backbone checkpoint type: {type(state_dict)}")
+
+    cleaned_state_dict = {}
+    for key, value in state_dict.items():
+        clean_key = str(key)
+        for prefix in ("module.", "model.", "backbone."):
+            if clean_key.startswith(prefix):
+                clean_key = clean_key[len(prefix) :]
+        cleaned_state_dict[clean_key] = value
+
+    missing, unexpected = backbone.load_state_dict(cleaned_state_dict, strict=False)
+    print(f"loaded local backbone weights for {backbone_name}: {weight_file}")
+    print(
+        f"backbone load summary | missing: {len(missing)} | unexpected: {len(unexpected)}"
+    )
+    if missing:
+        print(f"missing keys sample: {missing[:5]}")
+    if unexpected:
+        print(f"unexpected keys sample: {unexpected[:5]}")
+
+
+def get_backbone(backbone_name, backbone_weight=DEFAULT_CONVNEXTV2_NANO_WEIGHT):
     if backbone_name == "mobilenetv2":
         backbone = mobilenet_v2(pretrained=True, progress=True)
         backbone.channels = [16, 24, 32, 96, 320]
-    elif backbone_name == "resnet18d":
-        backbone = timm.create_model("resnet18d", pretrained=True, features_only=True)
-        backbone.channels = [64, 64, 128, 256, 512]
+    elif backbone_name == "convnextv2_nano":
+        timm_backbone = timm.create_model(
+            "convnextv2_nano", pretrained=False, features_only=True
+        )
+        backbone = TimmFeatureBackbone(timm_backbone, [80, 160, 320, 640])
+        if not backbone_weight:
+            raise ValueError("convnextv2_nano requires --backbone_weight")
+        _load_local_backbone_weights(backbone.model, backbone_weight, backbone_name)
     else:
-        raise NotImplementedError("BACKBONE [%s] is not implemented!\n" % backbone_name)
+        raise NotImplementedError(
+            "BACKBONE [%s] is not implemented! Supported backbones: mobilenetv2, convnextv2_nano\n"
+            % backbone_name
+        )
     return backbone
 
 
@@ -77,20 +142,21 @@ class PyramidFeatureFusion(nn.Module):
 class Encoder(nn.Module):
     def __init__(
         self,
-        backbone="mobilenetv2",
+        backbone="convnextv2_nano",
         fpn_channels=128,
         deform_groups=4,
         gamma_mode="SE",
         beta_mode="contextgatedconv",
         dino_arch="auto",
         dino_weight="dinov3/weights/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth",
+        backbone_weight=DEFAULT_CONVNEXTV2_NANO_WEIGHT,
         device="cuda",
         extract_ids=None,
         **kwargs,
     ):
         super().__init__()
         self.backbone_name = backbone
-        self.backbone = get_backbone(backbone)
+        self.backbone = get_backbone(backbone, backbone_weight=backbone_weight)
         self.fpn = FPN(
             in_channels=self.backbone.channels[-4:],
             out_channels=fpn_channels,
@@ -269,7 +335,7 @@ class Detector(nn.Module):
 
 class ChangeModel(nn.Module):
     def __init__(
-        self, backbone="mobilenetv2", fpn_channels=128, n_layers=[1, 1, 1, 1], **kwargs
+        self, backbone="convnextv2_nano", fpn_channels=128, n_layers=[1, 1, 1, 1], **kwargs
     ):
         super().__init__()
         self.encoder = Encoder(backbone=backbone, fpn_channels=fpn_channels, **kwargs)

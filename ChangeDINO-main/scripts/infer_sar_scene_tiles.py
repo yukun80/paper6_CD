@@ -27,13 +27,14 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from model.create_ChangeDINO import create_model  # noqa: E402
 from model.blocks.dinov3_meta import get_dino_arch_spec, resolve_dino_arch, resolve_extract_ids  # noqa: E402
-from option import Options, resolve_norm_stats  # noqa: E402
+from option import DEFAULT_BACKBONE_WEIGHT, Options, resolve_norm_stats  # noqa: E402
 
 
 PROB_NODATA = -1.0
 BINARY_NODATA = 255
 INFER_MODEL_CONFIG_FIELDS = {
     "backbone",
+    "backbone_weight",
     "fpn_channels",
     "deform_groups",
     "gamma_mode",
@@ -43,6 +44,7 @@ INFER_MODEL_CONFIG_FIELDS = {
     "dino_weight",
     "extract_ids",
 }
+SUPPORTED_BACKBONES = {"mobilenetv2", "convnextv2_nano"}
 
 
 class TileDataset(Dataset):
@@ -97,7 +99,8 @@ def build_parser(
         dataset="S1GFloods_CD_DINO",
         batch_size=8,
         num_workers=4,
-        backbone="mobilenetv2",
+        backbone="convnextv2_nano",
+        backbone_weight=DEFAULT_BACKBONE_WEIGHT,
         stats_file="datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json",
     )
     parser.description = description
@@ -107,7 +110,7 @@ def build_parser(
         type=Path,
         default=Path(
             "ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/"
-            "S1GFloods-ChangeDINO-vitl16_mobilenetv2_best.pth"
+            "S1GFloods-ChangeDINO-vitl16_convnextv2_nano_best.pth"
         ),
         help="trainval_s1gfloods.sh 训练得到的 checkpoint 路径。",
     )
@@ -213,8 +216,8 @@ def infer_checkpoint_model_config_from_state_dict(state_dict: dict[str, torch.Te
         in_channels = int(offset_weight.shape[1])
         if in_channels == 24:
             cfg["backbone"] = "mobilenetv2"
-        elif in_channels == 64:
-            cfg["backbone"] = "resnet18d"
+        elif in_channels == 80:
+            cfg["backbone"] = "convnextv2_nano"
 
     n_layers = []
     for prefix in ("detector.tb5", "detector.tb4", "detector.tb3", "detector.tb2"):
@@ -227,7 +230,7 @@ def infer_checkpoint_model_config_from_state_dict(state_dict: dict[str, torch.Te
         cfg["n_layers"] = n_layers
 
     if "backbone" not in cfg:
-        cfg["backbone"] = "mobilenetv2"
+        cfg["backbone"] = "convnextv2_nano"
     if "gamma_mode" not in cfg:
         cfg["gamma_mode"] = "SE"
     if "beta_mode" not in cfg:
@@ -298,6 +301,11 @@ def parse_and_prepare(
     opt, used_checkpoint_model_config = apply_checkpoint_model_config(
         opt, checkpoint_model_config, explicit_overrides
     )
+    if opt.backbone not in SUPPORTED_BACKBONES:
+        raise NotImplementedError(
+            f"Unsupported backbone from CLI/checkpoint: {opt.backbone}. "
+            "Only mobilenetv2 and convnextv2_nano are supported."
+        )
 
     if inferred_checkpoint_model_config is not None:
         print(
@@ -315,6 +323,12 @@ def parse_and_prepare(
         candidate = (PROJECT_ROOT / dino_weight).resolve()
         if candidate.is_file():
             opt.dino_weight = str(candidate)
+    if opt.backbone_weight:
+        backbone_weight = Path(opt.backbone_weight)
+        if not backbone_weight.is_absolute():
+            candidate = (PROJECT_ROOT / backbone_weight).resolve()
+            if candidate.is_file():
+                opt.backbone_weight = str(candidate)
     if opt.stats_file:
         opt.stats_file = str(Path(opt.stats_file).resolve())
 

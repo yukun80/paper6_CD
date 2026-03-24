@@ -46,11 +46,14 @@ python ChangeDINO-main/scripts/prepare_s1_henan_infer.py \
 
 python ChangeDINO-main/scripts/infer_s1_henan_tiles.py \
   --tiles-root datasets/S1_Henan_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO/S1GFloods-ChangeDINO_mobilenetv2_best.pth \
+  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/S1GFloods-ChangeDINO-vitl16_convnextv2_nano_best.pth \
   --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
   --gpu_ids 0 \
   --batch_size 8 \
   --output-dir ChangeDINO-main/outputs/s1_henan
+
+# Default ConvNeXtV2 nano local weight
+# Place at: ChangeDINO-main/pretrained/convnextv2_nano_22k_224_ema.pt
 
 # Optional dependency
 pip install kornia
@@ -76,12 +79,16 @@ pip install kornia
   - `ChangeDINO-main/option.py`
   - `ChangeDINO-main/data/cd_dataset.py`
   - `ChangeDINO-main/data/transform.py`
+  - `ChangeDINO-main/model/ChangeDINO.py`
   - `ChangeDINO-main/model/create_ChangeDINO.py`
   - `ChangeDINO-main/trainval.py`
   - `ChangeDINO-main/run.py`
   - `ChangeDINO-main/trainval_s1gfloods.sh`
 - `S1GFloods` labels are binary flood-change labels; dataset preparation scripts convert mask semantics to training-ready format.
 - Keep `--dataset` and `--stats_file` naming consistent with the actual output directory.
+- Current default CNN backbone is `convnextv2_nano`.
+- Default local backbone weight path is `ChangeDINO-main/pretrained/convnextv2_nano_22k_224_ema.pt`.
+- Only `convnextv2_nano` and `mobilenetv2` are supported; `resnet18d` must not be used as current spec.
 
 ## Deprecated Context (Do Not Use)
 - The following are deprecated and must not be used as current spec:

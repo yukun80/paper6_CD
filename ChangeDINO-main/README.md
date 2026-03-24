@@ -90,6 +90,12 @@ python ChangeDINO-main/scripts/compute_s1gfloods_cd_stats.py \
 ## Pre-trained Weights (Google Drive)
 For the DINOv3 pre-trained weight, please [download here](https://drive.google.com/file/d/1r6g0D6zV-1e8gJHij1edsE_uzvZ72L3u/view?usp=drive_link) and place it under `dinov3/weights/`.
 
+For the default CNN backbone, place the local ConvNeXtV2 nano weight at:
+```text
+ChangeDINO-main/pretrained/convnextv2_nano_22k_224_ema.pt
+```
+The current default training/inference configuration uses this file via `--backbone_weight pretrained/convnextv2_nano_22k_224_ema.pt`.
+
 For the full ChangeDINO's pre-trained weights, which can be obtained from the following links:
 
 + [LEVIR-CD](https://drive.google.com/file/d/1slYOZBmChzP7N7776ODGL4PB807xPr9d/view?usp=sharing)
@@ -114,6 +120,7 @@ Important flags live in `option.py` (datasets, GPUs, checkpoints, backbone/FPN c
 ### Train / Validate on S1GFloods
 ```bash
 cd ChangeDINO-main
+BACKBONE_WEIGHT=pretrained/convnextv2_nano_22k_224_ema.pt \
 bash trainval_s1gfloods.sh
 ```
 
@@ -122,6 +129,7 @@ Switch to a different local DINOv3 checkpoint by overriding env vars:
 cd ChangeDINO-main
 DINO_ARCH=dinov3_vits16 \
 DINO_WEIGHT=dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth \
+BACKBONE_WEIGHT=pretrained/convnextv2_nano_22k_224_ema.pt \
 RUN_NAME=S1GFloods-ChangeDINO-vits16 \
 bash trainval_s1gfloods.sh
 ```
@@ -134,6 +142,8 @@ python trainval.py \
   --dataroot ../datasets \
   --dataset_mode sar \
   --stats_file ../datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+  --backbone convnextv2_nano \
+  --backbone_weight pretrained/convnextv2_nano_22k_224_ema.pt \
   --dino_arch dinov3_vitl16 \
   --dino_weight dinov3/weights/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth \
   --gpu_ids 0 \
@@ -147,6 +157,8 @@ Notes for S1GFloods:
 - The fused builder writes training PNGs under `train/` and `val/`, and preserves VarFloods tiles as GeoTIFF sidecars under `train_tif/` and `val_tif/`.
 - SAR mode disables saturation jitter and uses milder brightness/contrast perturbation.
 - You still need the DINOv3 checkpoint under `ChangeDINO-main/dinov3/weights/`.
+- Current default CNN backbone is `convnextv2_nano`, and the default local weight path is `pretrained/convnextv2_nano_22k_224_ema.pt`.
+- Only `convnextv2_nano` and `mobilenetv2` are supported now; `resnet18d` has been removed.
 - `--dino_arch` now supports `dinov3_vits16`, `dinov3_vitb16`, and `dinov3_vitl16`; if omitted, it is inferred from `--dino_weight`.
 - `--extract_ids` defaults follow the chosen DINO architecture automatically, so `vits16` no longer reuses the old ViT-L layer ids.
 - If you rename the prepared dataset directory, keep `--dataset` and `--stats_file` consistent with that exact folder name.
@@ -171,7 +183,7 @@ python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
 ```bash
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/S1GFloods-ChangeDINO-vitl16_mobilenetv2_best.pth \
+  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/S1GFloods-ChangeDINO-vitl16_convnextv2_nano_best.pth \
   --stats_file <path_to_s1gfloods_stats.json> \
   --gpu_ids 0 \
   --batch_size 8 \
@@ -204,7 +216,7 @@ python ChangeDINO-main/scripts/prepare_s1_henan_infer.py \
 ```bash
 python ChangeDINO-main/scripts/infer_s1_henan_tiles.py \
   --tiles-root datasets/S1_Henan_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/S1GFloods-ChangeDINO-vitl16_mobilenetv2_best.pth \
+  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/S1GFloods-ChangeDINO-vitl16_convnextv2_nano_best.pth \
   --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
   --gpu_ids 0 \
   --batch_size 8 \

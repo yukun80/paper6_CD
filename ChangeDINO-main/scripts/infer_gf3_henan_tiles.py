@@ -15,7 +15,7 @@ from infer_sar_scene_tiles import main as infer_main
 """
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
 --tiles-root datasets/GF3_Henan_CD_infer \
---checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/S1GFloods-ChangeDINO-vitl16_mobilenetv2_best.pth \
+--checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/S1GFloods-ChangeDINO-vitl16_convnextv2_nano_best.pth \
 --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
 --gpu_ids 0 \
 --batch_size 8 \
@@ -23,7 +23,7 @@ python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
 
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
 --tiles-root datasets/GF3_Henan_CD_infer \
---checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vits16/S1GFloods-ChangeDINO-vits16_mobilenetv2_best.pth \
+--checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vits16/S1GFloods-ChangeDINO-vits16_convnextv2_nano_best.pth \
 --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
 --gpu_ids 0 \
 --batch_size 8 \
