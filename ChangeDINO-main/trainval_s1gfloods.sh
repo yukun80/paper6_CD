@@ -21,7 +21,7 @@ python trainval.py \
   --dino_weight "${DINO_WEIGHT}" \
   --gpu_ids 0 \
   --batch_size 10 \
-  --num_epochs 50 \
+  --num_epochs 100 \
   --lr 1e-4 \
 )
 
