@@ -40,6 +40,13 @@ INFER_MODEL_CONFIG_FIELDS = {
     "gamma_mode",
     "beta_mode",
     "n_layers",
+    "align_window",
+    "align_points",
+    "align_heads",
+    "align_on_levels",
+    "align_qkv_bias",
+    "align_offset_groups",
+    "directional_diff_expand",
     "dino_arch",
     "dino_weight",
     "extract_ids",
@@ -255,7 +262,7 @@ def apply_checkpoint_model_config(
         if field not in checkpoint_model_config:
             continue
         value = checkpoint_model_config[field]
-        if field in {"n_layers", "extract_ids"} and value is not None:
+        if field in {"n_layers", "extract_ids", "align_on_levels"} and value is not None:
             value = [int(v) for v in value]
         setattr(opt, field, value)
     return opt, True
@@ -535,6 +542,13 @@ def main(
             "gamma_mode": opt.gamma_mode,
             "beta_mode": opt.beta_mode,
             "n_layers": [int(v) for v in opt.n_layers],
+            "align_window": int(opt.align_window),
+            "align_points": int(opt.align_points),
+            "align_heads": int(opt.align_heads),
+            "align_on_levels": [int(v) for v in opt.align_on_levels],
+            "align_qkv_bias": bool(opt.align_qkv_bias),
+            "align_offset_groups": int(opt.align_offset_groups),
+            "directional_diff_expand": float(opt.directional_diff_expand),
             "dino_arch": opt.dino_arch,
             "dino_weight": str(opt.dino_weight),
             "extract_ids": [int(v) for v in opt.extract_ids],

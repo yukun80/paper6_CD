@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from einops import rearrange
 import os
 import torch.optim as optim
+from datetime import datetime
 from .loss.focal import FocalLoss
 from .loss.dice import DICELoss
 
@@ -15,6 +16,23 @@ def get_model(backbone_name="convnextv2_nano", fpn_channels=128, n_layers=[1, 1,
     return model
 
 
+def resolve_unique_run_name(checkpoint_dir: str, base_name: str) -> str:
+    """为训练实验名追加日期后缀，并在重名时递增序号，避免覆盖旧记录。"""
+    date_suffix = datetime.now().strftime("%Y%m%d")
+    candidate_name = f"{base_name}-{date_suffix}"
+    candidate_dir = os.path.join(checkpoint_dir, candidate_name)
+    if not os.path.exists(candidate_dir):
+        return candidate_name
+
+    index = 1
+    while True:
+        candidate_name = f"{base_name}-{date_suffix}-{index}"
+        candidate_dir = os.path.join(checkpoint_dir, candidate_name)
+        if not os.path.exists(candidate_dir):
+            return candidate_name
+        index += 1
+
+
 class Model(nn.Module):
     def __init__(self, opt):
         super(Model, self).__init__()
@@ -23,8 +41,15 @@ class Model(nn.Module):
         )
         self.opt = opt
         self.base_lr = opt.lr
-        self.save_dir = os.path.join(opt.checkpoint_dir, opt.name)
+
+        # 仅训练阶段自动创建新实验目录，测试/推理保持用户传入的目录名不变。
+        resolved_name = opt.name
+        if getattr(opt, "phase", "train") == "train":
+            resolved_name = resolve_unique_run_name(opt.checkpoint_dir, opt.name)
+        self.opt.name = resolved_name
+        self.save_dir = os.path.join(opt.checkpoint_dir, resolved_name)
         os.makedirs(self.save_dir, exist_ok=True)
+        print(f"save_dir resolved to: {self.save_dir}")
 
         self.model = get_model(
             backbone_name=opt.backbone,
@@ -35,6 +60,13 @@ class Model(nn.Module):
             gamma_mode=opt.gamma_mode,
             beta_mode=opt.beta_mode,
             n_layers=opt.n_layers,
+            align_window=opt.align_window,
+            align_points=opt.align_points,
+            align_heads=opt.align_heads,
+            align_on_levels=opt.align_on_levels,
+            align_qkv_bias=opt.align_qkv_bias,
+            align_offset_groups=opt.align_offset_groups,
+            directional_diff_expand=opt.directional_diff_expand,
             dino_arch=opt.dino_arch,
             extract_ids=opt.extract_ids,
             dino_weight=opt.dino_weight,
@@ -96,6 +128,13 @@ class Model(nn.Module):
                 "gamma_mode": self.opt.gamma_mode,
                 "beta_mode": self.opt.beta_mode,
                 "n_layers": [int(v) for v in self.opt.n_layers],
+                "align_window": int(self.opt.align_window),
+                "align_points": int(self.opt.align_points),
+                "align_heads": int(self.opt.align_heads),
+                "align_on_levels": [int(v) for v in self.opt.align_on_levels],
+                "align_qkv_bias": bool(self.opt.align_qkv_bias),
+                "align_offset_groups": int(self.opt.align_offset_groups),
+                "directional_diff_expand": float(self.opt.directional_diff_expand),
                 "dino_arch": self.opt.dino_arch,
                 "dino_weight": self.opt.dino_weight,
                 "extract_ids": [int(v) for v in self.opt.extract_ids],

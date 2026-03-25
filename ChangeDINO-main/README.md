@@ -115,7 +115,7 @@ python trainval.py \
   --num_epochs 100 \
   --lr 5e-4
 ```
-Important flags live in `option.py` (datasets, GPUs, checkpoints, backbone/FPN choices, learning rate, etc.). Results are saved to `checkpoints/<name>`; the best checkpoint is `<name>_<backbone>_best.pth`.
+Important flags live in `option.py` (datasets, GPUs, checkpoints, backbone/FPN choices, learning rate, etc.). Training runs are saved under `checkpoints/<name>-YYYYMMDD` and, if needed, `checkpoints/<name>-YYYYMMDD-<index>`; the best checkpoint is `<resolved_name>_<backbone>_best.pth`.
 
 ### Train / Validate on S1GFloods
 ```bash
@@ -153,6 +153,8 @@ python trainval.py \
 ```
 
 Notes for S1GFloods:
+- SAR branch now replaces plain `|F_pre - F_post|` with directional difference features plus deformable cross-attention alignment on high-resolution pyramid levels (`p2/p3`).
+- New SAR alignment/difference hyper-parameters are exposed in `option.py`, including `--align_window`, `--align_points`, `--align_heads`, `--align_on_levels`, `--align_offset_groups`, and `--directional_diff_expand`.
 - Input PNGs can be true grayscale or RGB-converted grayscale; loader normalizes both to 3-channel RGB tensors.
 - The fused builder writes training PNGs under `train/` and `val/`, and preserves VarFloods tiles as GeoTIFF sidecars under `train_tif/` and `val_tif/`.
 - SAR mode disables saturation jitter and uses milder brightness/contrast perturbation.
@@ -163,6 +165,8 @@ Notes for S1GFloods:
 - `--extract_ids` defaults follow the chosen DINO architecture automatically, so `vits16` no longer reuses the old ViT-L layer ids.
 - If you rename the prepared dataset directory, keep `--dataset` and `--stats_file` consistent with that exact folder name.
 - The fused dataset no longer creates a `test/` split; `trainval.py` still works unchanged because it only consumes `train` and `val`.
+- Training run directories are now auto-resolved to `checkpoints/<name>-YYYYMMDD` and, if needed, `checkpoints/<name>-YYYYMMDD-<index>` to avoid overwriting old experiments.
+- The final checkpoint filename also uses that resolved run name, so test/inference commands must point to the actual generated directory name instead of the unsuffixed base `RUN_NAME`.
 
 ### GF3 Henan Whole-Scene Inference
 Use the S1GFloods-trained checkpoint to run tiled inference on the GF3 Henan pre/post pair.
@@ -183,7 +187,7 @@ python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
 ```bash
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/S1GFloods-ChangeDINO-vitl16_convnextv2_nano_best.pth \
+  --checkpoint ChangeDINO-main/checkpoints/<resolved_run_name>/<resolved_run_name>_convnextv2_nano_best.pth \
   --stats_file <path_to_s1gfloods_stats.json> \
   --gpu_ids 0 \
   --batch_size 8 \
@@ -216,7 +220,7 @@ python ChangeDINO-main/scripts/prepare_s1_henan_infer.py \
 ```bash
 python ChangeDINO-main/scripts/infer_s1_henan_tiles.py \
   --tiles-root datasets/S1_Henan_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/S1GFloods-ChangeDINO-vitl16_convnextv2_nano_best.pth \
+  --checkpoint ChangeDINO-main/checkpoints/<resolved_run_name>/<resolved_run_name>_convnextv2_nano_best.pth \
   --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
   --gpu_ids 0 \
   --batch_size 8 \
@@ -237,12 +241,12 @@ python test.py \
   --gpu_ids 0 \
   --save_test
 ```
-This loads the best checkpoint, runs on the `test` split, prints metrics, and saves predictions (if `--save_test`) under `checkpoints/<name>/pred/`.
+This loads the best checkpoint, runs on the `test` split, prints metrics, and saves predictions (if `--save_test`) under `checkpoints/<name>/pred/`. When the model was trained by `trainval.py`, use the actual resolved training run name such as `<base_name>-YYYYMMDD` or `<base_name>-YYYYMMDD-<index>`.
 
 S1GFloods example:
 ```bash
 python test.py \
-  --name S1GFloods-ChangeDINO-vitl16 \
+  --name <resolved_run_name> \
   --dataset S1GFloods_CD_DINO \
   --dataroot ../datasets \
   --dataset_mode sar \

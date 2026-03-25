@@ -134,6 +134,48 @@ class Options:
         self.parser.add_argument("--deform_groups", type=int, default=4)
         self.parser.add_argument("--gamma_mode", type=str, default="SE")
         self.parser.add_argument("--beta_mode", type=str, default="contextgatedconv")
+        self.parser.add_argument(
+            "--align_window",
+            type=int,
+            default=5,
+            help="Deformable cross-attention 的局部对齐窗口大小，需为奇数。",
+        )
+        self.parser.add_argument(
+            "--align_points",
+            type=int,
+            default=9,
+            help="每个 query 在局部邻域内采样的 deformable points 数量。",
+        )
+        self.parser.add_argument(
+            "--align_heads",
+            type=int,
+            default=4,
+            help="deformable cross-attention 的 head 数。",
+        )
+        self.parser.add_argument(
+            "--align_on_levels",
+            nargs="+",
+            type=int,
+            default=[2, 3],
+            help="在哪些金字塔层上启用 deformable soft-alignment，默认 p2/p3。",
+        )
+        self.parser.add_argument(
+            "--align_qkv_bias",
+            action="store_true",
+            help="是否为 deformable cross-attention 的 q/k/v 投影启用 bias。",
+        )
+        self.parser.add_argument(
+            "--align_offset_groups",
+            type=int,
+            default=4,
+            help="偏移预测卷积的 group 数，用于控制对齐模块开销。",
+        )
+        self.parser.add_argument(
+            "--directional_diff_expand",
+            type=float,
+            default=4.0,
+            help="定向差分混合器的通道扩张比例。",
+        )
         self.parser.add_argument('--n_layers', nargs='+', type=int, default=[1, 1, 1, 1])
         self.parser.add_argument(
             '--extract_ids',

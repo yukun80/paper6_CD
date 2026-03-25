@@ -9,6 +9,7 @@ from .blocks.fpn import FPN, DsBnRelu
 from .blocks.cbam import CBAM
 from .blocks.adapter import DINOV3Wrapper, DenseAdapterLite
 from .blocks.diffatts import TransformerBlock
+from .blocks.deform_cross_attn import DeformableCrossAttentionAlign
 from .blocks.refine import LearnableSoftMorph
 from .backbone.mobilenetv2 import mobilenet_v2
 
@@ -214,14 +215,78 @@ class FuseGated(nn.Module):
         return self.mix(fused)
 
 
+class DirectionalDiffMixer(nn.Module):
+    """将对齐特征与方向差分压回单尺度差分表征。"""
+
+    def __init__(self, dim, expand_ratio=4.0):
+        super().__init__()
+        hidden_dim = max(dim, int(dim * expand_ratio))
+        self.body = nn.Sequential(
+            nn.Conv2d(dim * 4, hidden_dim, kernel_size=1, bias=False),
+            nn.BatchNorm2d(hidden_dim),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(hidden_dim, hidden_dim, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(hidden_dim),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(hidden_dim, dim, kernel_size=1, bias=False),
+            nn.BatchNorm2d(dim),
+            nn.SiLU(inplace=True),
+        )
+
+    def forward(self, aligned_pre, post):
+        drop = F.relu(aligned_pre - post, inplace=False)
+        surge = F.relu(post - aligned_pre, inplace=False)
+        fused = torch.cat([aligned_pre, post, drop, surge], dim=1)
+        return self.body(fused)
+
+
 class Detector(nn.Module):
     def __init__(
         self,
         fpn_channels=128,
         n_layers=[1, 1, 1, 1],
+        align_window=5,
+        align_points=9,
+        align_heads=4,
+        align_on_levels=None,
+        align_qkv_bias=False,
+        align_offset_groups=4,
+        directional_diff_expand=4.0,
         **kwargs,
     ):
         super().__init__()
+        if align_on_levels is None:
+            align_on_levels = [2, 3]
+        self.align_on_levels = {int(level) for level in align_on_levels}
+
+        self.soft_align_p2 = DeformableCrossAttentionAlign(
+            dim=fpn_channels,
+            num_heads=align_heads,
+            num_points=align_points,
+            window_size=align_window,
+            offset_groups=align_offset_groups,
+            qkv_bias=align_qkv_bias,
+        )
+        self.soft_align_p3 = DeformableCrossAttentionAlign(
+            dim=fpn_channels,
+            num_heads=align_heads,
+            num_points=align_points,
+            window_size=align_window,
+            offset_groups=align_offset_groups,
+            qkv_bias=align_qkv_bias,
+        )
+        self.diff_mixer_p2 = DirectionalDiffMixer(
+            dim=fpn_channels, expand_ratio=directional_diff_expand
+        )
+        self.diff_mixer_p3 = DirectionalDiffMixer(
+            dim=fpn_channels, expand_ratio=directional_diff_expand
+        )
+        self.diff_mixer_p4 = DirectionalDiffMixer(
+            dim=fpn_channels, expand_ratio=directional_diff_expand
+        )
+        self.diff_mixer_p5 = DirectionalDiffMixer(
+            dim=fpn_channels, expand_ratio=directional_diff_expand
+        )
         self.p5_to_p4 = FuseGated(fpn_channels)
         self.p4_to_p3 = FuseGated(fpn_channels)
         self.p3_to_p2 = FuseGated(fpn_channels)
@@ -300,10 +365,19 @@ class Detector(nn.Module):
         t1_p2, t1_p3, t1_p4, t1_p5 = x1s
         t2_p2, t2_p3, t2_p4, t2_p5 = x2s
 
-        diff_p2 = torch.abs(t1_p2 - t2_p2)
-        diff_p3 = torch.abs(t1_p3 - t2_p3)
-        diff_p4 = torch.abs(t1_p4 - t2_p4)
-        diff_p5 = torch.abs(t1_p5 - t2_p5)
+        aligned_pre_p2 = (
+            self.soft_align_p2(t1_p2, t2_p2) if 2 in self.align_on_levels else t1_p2
+        )
+        aligned_pre_p3 = (
+            self.soft_align_p3(t1_p3, t2_p3) if 3 in self.align_on_levels else t1_p3
+        )
+        aligned_pre_p4 = t1_p4
+        aligned_pre_p5 = t1_p5
+
+        diff_p2 = self.diff_mixer_p2(aligned_pre_p2, t2_p2)
+        diff_p3 = self.diff_mixer_p3(aligned_pre_p3, t2_p3)
+        diff_p4 = self.diff_mixer_p4(aligned_pre_p4, t2_p4)
+        diff_p5 = self.diff_mixer_p5(aligned_pre_p5, t2_p5)
 
         fea_p5 = self.tb5(diff_p5)
         pred_p5 = self.p5_head(fea_p5)
@@ -335,11 +409,33 @@ class Detector(nn.Module):
 
 class ChangeModel(nn.Module):
     def __init__(
-        self, backbone="convnextv2_nano", fpn_channels=128, n_layers=[1, 1, 1, 1], **kwargs
+        self,
+        backbone="convnextv2_nano",
+        fpn_channels=128,
+        n_layers=[1, 1, 1, 1],
+        align_window=5,
+        align_points=9,
+        align_heads=4,
+        align_on_levels=None,
+        align_qkv_bias=False,
+        align_offset_groups=4,
+        directional_diff_expand=4.0,
+        **kwargs,
     ):
         super().__init__()
         self.encoder = Encoder(backbone=backbone, fpn_channels=fpn_channels, **kwargs)
-        self.detector = Detector(fpn_channels=fpn_channels, n_layers=n_layers, **kwargs)
+        self.detector = Detector(
+            fpn_channels=fpn_channels,
+            n_layers=n_layers,
+            align_window=align_window,
+            align_points=align_points,
+            align_heads=align_heads,
+            align_on_levels=align_on_levels,
+            align_qkv_bias=align_qkv_bias,
+            align_offset_groups=align_offset_groups,
+            directional_diff_expand=directional_diff_expand,
+            **kwargs,
+        )
         self.refiner = LearnableSoftMorph(3, 5)
 
     @torch.inference_mode()
