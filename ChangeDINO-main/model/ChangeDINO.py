@@ -10,7 +10,7 @@ from .blocks.cbam import CBAM
 from .blocks.adapter import DINOV3Wrapper, DenseAdapterLite
 from .blocks.diffatts import TransformerBlock
 from .blocks.deform_cross_attn import DeformableCrossAttentionAlign
-from .blocks.refine import LearnableSoftMorph
+from .blocks.refine import SpatioTemporalContrastGate
 from .backbone.mobilenetv2 import mobilenet_v2
 
 DEFAULT_CONVNEXTV2_NANO_WEIGHT = "pretrained/convnextv2_nano_22k_224_ema.pt"
@@ -420,6 +420,8 @@ class ChangeModel(nn.Module):
         align_qkv_bias=False,
         align_offset_groups=4,
         directional_diff_expand=4.0,
+        stcg_dilation_k=5,
+        stcg_pool_k=11,
         **kwargs,
     ):
         super().__init__()
@@ -436,23 +438,24 @@ class ChangeModel(nn.Module):
             directional_diff_expand=directional_diff_expand,
             **kwargs,
         )
-        self.refiner = LearnableSoftMorph(3, 5)
+        self.refiner = SpatioTemporalContrastGate(
+            feat_dim=fpn_channels,
+            dilation_k=stcg_dilation_k,
+            pool_k=stcg_pool_k,
+        )
 
     @torch.inference_mode()
     def _forward(self, x1, x2):
-        # for inference
         fea1 = self.encoder(x1)
         fea2 = self.encoder(x2)
         pred, _, _, _ = self.detector(fea1, fea2, x1.shape[-2:])
-        pred = self.refiner(pred)
+        pred = self.refiner(pred, fea1[0], fea2[0])
         return pred
 
     def forward(self, x1, x2):
-        # for training
-        ## change detection
         fea1 = self.encoder(x1)
         fea2 = self.encoder(x2)
 
         preds = self.detector(fea1, fea2)
-        final_pred = self.refiner(preds[0])
-        return final_pred, preds  # pred, pred_p2, pred_p3, pred_p4, pred_p5
+        final_pred = self.refiner(preds[0], fea1[0], fea2[0])
+        return final_pred, preds

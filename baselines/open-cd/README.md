@@ -113,6 +113,51 @@ python tools/test.py configs/changer/changer_ex_r18_512x512_40k_levircd.py chang
 #### Infer
 Please refer [inference](https://github.com/likyoo/open-cd/blob/main/docs/inference.md) doc.
 
+#### Local S1GFloods Setup In This Repository
+This repository additionally wires `open-cd` to the local binary change detection dataset `datasets/S1GFloods_CD_DINO` (PNG `train/val` layout, with `val` reused as `test`).
+
+Supported S1GFloods configs in the current tree:
+- `configs/fcsn/fc_siam_diff_256x256_40k_s1gfloods.py`
+- `configs/ifn/ifn_256x256_40k_s1gfloods.py`
+- `configs/bit/bit_r18_256x256_40k_s1gfloods.py`
+- `configs/changer/changer_ex_r18_256x256_40k_s1gfloods.py`
+- `configs/changestar/changestar_farseg_1x96_256x256_40k_s1gfloods.py`
+- `configs/lightcdnet/lightcdnet_s_256x256_40k_s1gfloods.py`
+
+Single-model training example:
+
+```bash
+cd baselines/open-cd
+python tools/train.py configs/changer/changer_ex_r18_256x256_40k_s1gfloods.py
+```
+
+Serial batch training for all six S1GFloods configs:
+
+```bash
+cd baselines/open-cd
+bash scripts/s1gfloods/run_all_s1gfloods.sh check-env
+bash scripts/s1gfloods/run_all_s1gfloods.sh smoke-train --gpus 1
+bash scripts/s1gfloods/run_all_s1gfloods.sh full-train --gpus 1
+```
+
+Batch script behavior:
+- runs the six configs sequentially to avoid resource conflicts;
+- creates a unique batch directory under `work_dirs/` for each launch;
+- keeps per-model logs/checkpoints separate and writes `summary.tsv`, `succeeded_models.txt`, and `failed_models.txt`;
+- continues to the next model even if one model fails, and returns a non-zero exit code if any model failed.
+
+If you want Open-CD batch training to start after a running `ChangeDINO-main/trainval_s1gfloods.sh` job finishes, use the repository-level monitor script:
+
+```bash
+cd /path/to/paper6_waterlogging
+bash scripts/monitor/run_opencd_after_pid.sh \
+  --pid <trainval_s1gfloods_pid> \
+  --opencd-mode full-train \
+  --opencd-gpus 1
+```
+
+Make sure this monitor command is started from the conda environment that already contains `mmengine`, `mmsegmentation`, and `opencd`.
+
 
 ## Citation
 

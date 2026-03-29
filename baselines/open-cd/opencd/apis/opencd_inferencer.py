@@ -40,8 +40,17 @@ class OpenCDInferencer(MMSegInferencer):
                  **kwargs) -> None:
         super().__init__(scope=scope, **kwargs)
 
-        classes = classes if classes else self.model.dataset_meta.classes
-        palette = palette if palette else self.model.dataset_meta.palette
+        # 兼容 checkpoint 恢复后 dataset_meta 可能是 dict 或对象两种形式。
+        dataset_meta = self.model.dataset_meta
+        if isinstance(dataset_meta, dict):
+            default_classes = dataset_meta.get('classes')
+            default_palette = dataset_meta.get('palette')
+        else:
+            default_classes = dataset_meta.classes
+            default_palette = dataset_meta.palette
+
+        classes = classes if classes else default_classes
+        palette = palette if palette else default_palette
         self.visualizer.set_dataset_meta(classes, palette, dataset_name)
 
     def _inputs_to_list(self, inputs: Union[str, np.ndarray]) -> list:

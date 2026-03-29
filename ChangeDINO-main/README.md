@@ -168,6 +168,25 @@ Notes for S1GFloods:
 - Training run directories are now auto-resolved to `checkpoints/<name>-YYYYMMDD` and, if needed, `checkpoints/<name>-YYYYMMDD-<index>` to avoid overwriting old experiments.
 - The final checkpoint filename also uses that resolved run name, so test/inference commands must point to the actual generated directory name instead of the unsuffixed base `RUN_NAME`.
 
+### Auto Handoff to Open-CD Batch Training
+If you want `baselines/open-cd` to start automatically after the current `trainval_s1gfloods.sh` process exits, launch the monitor script from the repository root in the same conda environment:
+
+```bash
+cd /path/to/paper6_waterlogging
+bash scripts/monitor/run_opencd_after_pid.sh \
+  --pid <trainval_s1gfloods_pid> \
+  --poll-seconds 30 \
+  --opencd-mode full-train \
+  --opencd-gpus 1
+```
+
+Useful notes:
+- Find the current training PID with `pgrep -af trainval_s1gfloods.sh` or `ps -ef | grep trainval_s1gfloods.sh | grep -v grep`.
+- The monitor script only watches the specified PID and does not modify the running ChangeDINO job.
+- Once that PID exits, it triggers `baselines/open-cd/scripts/s1gfloods/run_all_s1gfloods.sh`.
+- Start the monitor from the same environment used for Open-CD training, otherwise the follow-up job may fail because `mmengine/mmseg/opencd` are unavailable.
+- Logs are written under `logs/handoffs/` by default.
+
 ### GF3 Henan Whole-Scene Inference
 Use the S1GFloods-trained checkpoint to run tiled inference on the GF3 Henan pre/post pair.
 

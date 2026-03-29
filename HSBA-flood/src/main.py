@@ -33,9 +33,11 @@ from .visualization import (
 )
 
 """
+python -m src.main --config configs/s1_Seoul.yaml
 python -m src.main --config configs/s1_henan.yaml
 python -m src.main --config configs/gf3_henan.yaml
 python -m src.main --config configs/gf3_henan.yaml --config configs/s1_henan.yaml
+python -m src.main --config configs/gf3_henan.yaml --config configs/s1_Seoul.yaml
 """
 
 def parse_args() -> argparse.Namespace:

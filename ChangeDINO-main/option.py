@@ -106,7 +106,18 @@ class Options:
             "--vis_path", type=str, default="vis", help="results are saved here"
         )
         self.parser.add_argument("--load_pretrain", action='store_true')
-        self.parser.add_argument("--use_morph", action='store_true')
+        self.parser.add_argument(
+            "--stcg_dilation_k",
+            type=int,
+            default=5,
+            help="STCG 软膨胀核大小（奇数），控制外部护城河宽度。",
+        )
+        self.parser.add_argument(
+            "--stcg_pool_k",
+            type=int,
+            default=11,
+            help="STCG 局部掩膜池化窗口大小（特征尺度，奇数）。",
+        )
 
         self.parser.add_argument("--phase", type=str, default="train")
         self.parser.add_argument("--backbone", type=str, default="convnextv2_nano")
