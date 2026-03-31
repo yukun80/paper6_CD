@@ -100,8 +100,7 @@ class Model(nn.Module):
             }
         }
 
-    def save_ckpt(self, network, optimizer, model_name, backbone):
-        save_filename = "%s_%s_best.pth" % (model_name, backbone)
+    def save_ckpt(self, network, optimizer, save_filename):
         save_path = os.path.join(self.save_dir, save_filename)
         if os.path.exists(save_path):
             os.remove(save_path)
@@ -117,7 +116,13 @@ class Model(nn.Module):
             network.cuda()
 
     def save(self, model_name, backbone):
-        self.save_ckpt(self.model, self.optimizer, model_name, backbone)
+        save_filename = "%s_%s_best.pth" % (model_name, backbone)
+        self.save_ckpt(self.model, self.optimizer, save_filename)
+
+    def save_epoch(self, model_name, backbone, epoch):
+        # 训练过程中保留阶段性快照，便于中断恢复和后验分析。
+        save_filename = "%s_%s_epoch_%03d.pth" % (model_name, backbone, epoch)
+        self.save_ckpt(self.model, self.optimizer, save_filename)
 
     def name(self):
         return self.opt.name

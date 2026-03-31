@@ -208,5 +208,7 @@ if __name__ == "__main__":
         val_scores = trainval.val(epoch)
 
         trainval._append_log_line(epoch, train_stats, val_scores)
+        if opt.save_epoch_freq > 0 and epoch % opt.save_epoch_freq == 0:
+            trainval.model.save_epoch(opt.name, opt.backbone, epoch)
 
     print("Done!")

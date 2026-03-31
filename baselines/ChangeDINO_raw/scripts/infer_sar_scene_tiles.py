@@ -106,17 +106,22 @@ def build_parser(
         "--checkpoint",
         type=Path,
         default=Path(
-            "ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/"
-            "S1GFloods-ChangeDINO-vitl16_mobilenetv2_best.pth"
+            "baselines/ChangeDINO_raw/checkpoints/S1GFloods-ChangeDINO-vits16/"
+            "S1GFloods-ChangeDINO-vits16_mobilenetv2_best.pth"
         ),
         help="trainval_s1gfloods.sh 训练得到的 checkpoint 路径。",
     )
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("ChangeDINO-main/outputs/sar_scene"),
+        default=Path("baselines/ChangeDINO_raw/outputs/sar_scene"),
     )
     parser.add_argument("--threshold", type=float, default=0.5)
+    parser.add_argument(
+        "--skip-tiles",
+        action="store_true",
+        help="跳过切片级 PNG/TIF 保存，仅做整景拼接。",
+    )
     if defaults:
         parser.set_defaults(**defaults)
     return parser
@@ -338,6 +343,18 @@ def parse_and_prepare(
     opt.mean, opt.std = resolve_norm_stats(opt)
     opt.output_dir.mkdir(parents=True, exist_ok=True)
 
+    opt.mosaic_dir = opt.output_dir / "mosaic"
+    opt.mosaic_dir.mkdir(parents=True, exist_ok=True)
+
+    if opt.skip_tiles:
+        opt.tile_png_dir = None
+        opt.tile_tif_dir = None
+    else:
+        opt.tile_png_dir = opt.output_dir / "tile_png"
+        opt.tile_tif_dir = opt.output_dir / "tile_tif"
+        opt.tile_png_dir.mkdir(parents=True, exist_ok=True)
+        opt.tile_tif_dir.mkdir(parents=True, exist_ok=True)
+
     print("------------ Options -------------")
     for key, value in sorted(vars(opt).items()):
         print(f"{key}: {value}")
@@ -429,6 +446,43 @@ def write_preview_png(binary_map: np.ndarray, out_path: Path) -> None:
     Image.fromarray(rgb, mode="RGB").save(out_path)
 
 
+def save_tile_png(
+    prob: np.ndarray,
+    valid_mask: np.ndarray,
+    threshold: float,
+    save_path: Path,
+) -> None:
+    """将切片概率图二值化后保存为灰度 PNG（L 模式，0/255）。"""
+    binary = (prob >= threshold).astype(np.uint8)
+    binary[valid_mask == 0] = 0
+    pred_img = binary * 255
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(pred_img, mode="L").save(save_path)
+
+
+def save_tile_tif(
+    prob: np.ndarray,
+    valid_mask: np.ndarray,
+    threshold: float,
+    save_path: Path,
+) -> None:
+    """将切片二值预测保存为 uint8 TIF（0/1，nodata=255）。"""
+    binary = (prob >= threshold).astype(np.uint8)
+    binary[valid_mask == 0] = BINARY_NODATA
+    save_path.parent.mkdir(parents=True, exist_ok=True)
+    profile = {
+        "driver": "GTiff",
+        "height": prob.shape[0],
+        "width": prob.shape[1],
+        "count": 1,
+        "dtype": "uint8",
+        "compress": "LZW",
+        "nodata": BINARY_NODATA,
+    }
+    with rasterio.open(save_path, "w", **profile) as dst:
+        dst.write(binary, 1)
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -458,6 +512,7 @@ def main(
 
     model = load_model(opt)
 
+    total_tiles_saved = 0
     with torch.no_grad():
         pbar = tqdm(dataloader, total=len(dataloader), ncols=100, desc="Infer tiles")
         for batch_idx, batch in enumerate(pbar, start=1):
@@ -466,6 +521,7 @@ def main(
             logits = model.inference(img1, img2)
             probs = torch.softmax(logits, dim=1)[:, 1].detach().cpu().numpy().astype(np.float32, copy=False)
             valid_masks = batch["valid_mask"].numpy().astype(np.float32, copy=False)
+            tile_ids = batch["tile_id"]
             tops = batch["top"].tolist()
             lefts = batch["left"].tolist()
             heights = batch["height"].tolist()
@@ -482,6 +538,22 @@ def main(
                     continue
                 accum_prob[top : top + height, left : left + width] += probs[idx, :height, :width] * weight
                 accum_weight[top : top + height, left : left + width] += weight
+
+                if opt.tile_png_dir is not None:
+                    tile_id = tile_ids[idx]
+                    save_tile_png(
+                        probs[idx, :height, :width],
+                        valid[:height, :width],
+                        opt.threshold,
+                        opt.tile_png_dir / f"{tile_id}.png",
+                    )
+                    save_tile_tif(
+                        probs[idx, :height, :width],
+                        valid[:height, :width],
+                        opt.threshold,
+                        opt.tile_tif_dir / f"{tile_id}.tif",
+                    )
+                    total_tiles_saved += 1
             pbar.set_postfix({"batch": batch_idx, "tiles": min(batch_idx * opt.batch_size, len(dataset))})
 
     valid_output = accum_weight > 0
@@ -491,9 +563,10 @@ def main(
     binary_map = np.full((full_height, full_width), BINARY_NODATA, dtype=np.uint8)
     binary_map[valid_output] = (prob_map[valid_output] >= float(opt.threshold)).astype(np.uint8)
 
-    prob_path = opt.output_dir / "change_prob.tif"
-    binary_tif_path = opt.output_dir / "change_binary.tif"
-    binary_png_path = opt.output_dir / "change_binary.png"
+    mosaic_dir = opt.mosaic_dir
+    prob_path = mosaic_dir / "change_prob.tif"
+    binary_tif_path = mosaic_dir / "change_binary.tif"
+    binary_png_path = mosaic_dir / "change_binary.png"
     print("[INFO] Writing stitched outputs ...")
     write_geotiff(source_pre, prob_path, prob_map, "float32", PROB_NODATA)
     write_geotiff(source_pre, binary_tif_path, binary_map, "uint8", BINARY_NODATA)
@@ -507,6 +580,11 @@ def main(
         "batch_size": int(opt.batch_size),
         "num_workers": int(opt.num_workers),
         "total_tiles": len(dataset),
+        "tile_output": {
+            "tile_png_dir": str(opt.tile_png_dir) if opt.tile_png_dir else "",
+            "tile_tif_dir": str(opt.tile_tif_dir) if opt.tile_tif_dir else "",
+            "total_saved": total_tiles_saved,
+        },
         "output_files": {
             "change_prob_tif": str(prob_path),
             "change_binary_tif": str(binary_tif_path),
@@ -531,6 +609,8 @@ def main(
         encoding="utf-8",
     )
 
+    if total_tiles_saved > 0:
+        print(f"[INFO] Saved tile predictions: {total_tiles_saved} (png={opt.tile_png_dir}, tif={opt.tile_tif_dir})")
     print(f"[DONE] tiles={len(dataset)} outputs={opt.output_dir}")
 
 

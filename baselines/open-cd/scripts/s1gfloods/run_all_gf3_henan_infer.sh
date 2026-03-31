@@ -19,6 +19,7 @@ Options:
   --batch-dir <path>      batch directory containing trained model work_dirs
   --workdir-root <path>   parent directory of s1gfloods batches, default: ./work_dirs
   --data-root <path>      GF3 infer dataset root, default: ../../datasets/GF3_Henan_CD_infer
+                         output dirs/logs/summary will append a suffix derived from this path
   --device <device>       inference device, default: cuda:0
   --batch-size <n>        inference batch size for one model, default: 4
   --threshold <x>         threshold on stitched probability map, default: 0.5
@@ -86,6 +87,19 @@ resolve_config() {
     return 1
   fi
   printf '%s\n' "${config_path}"
+}
+
+derive_dataset_suffix() {
+  local data_root="$1"
+  python - "${data_root}" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+name = Path(sys.argv[1]).name or "dataset"
+suffix = re.sub(r"[^0-9A-Za-z]+", "_", name).strip("_").lower()
+print(suffix or "dataset")
+PY
 }
 
 BATCH_DIR=""
@@ -163,8 +177,9 @@ fi
 cd "${OPENCD_DIR}"
 export NO_ALBUMENTATIONS_UPDATE=1
 
-LOG_DIR="${BATCH_DIR}/infer_logs"
-SUMMARY_FILE="${BATCH_DIR}/infer_gf3_henan_summary.tsv"
+DATASET_SUFFIX="$(derive_dataset_suffix "${DATA_ROOT}")"
+LOG_DIR="${BATCH_DIR}/infer_logs_${DATASET_SUFFIX}"
+SUMMARY_FILE="${BATCH_DIR}/infer_gf3_henan_summary_${DATASET_SUFFIX}.tsv"
 SUCCESS_FILE="${BATCH_DIR}/succeeded_models.txt"
 mkdir -p "${LOG_DIR}"
 printf 'model_tag\tstatus\tconfig\tcheckpoint\ttile_output_dir\tmosaic_dir\treport_file\tlog_file\n' > "${SUMMARY_FILE}"
@@ -179,8 +194,11 @@ fi
 
 echo "Batch dir: ${BATCH_DIR}"
 echo "Data root: ${DATA_ROOT}"
+echo "Dataset suffix: ${DATASET_SUFFIX}"
 echo "Device: ${DEVICE}"
 echo "Model count: ${#MODEL_TAGS[@]}"
+echo "Log dir: ${LOG_DIR}"
+echo "Summary: ${SUMMARY_FILE}"
 
 success_count=0
 failed_count=0
@@ -195,8 +213,8 @@ for model_tag in "${MODEL_TAGS[@]}"; do
   fi
 
   log_file="${LOG_DIR}/${model_tag}.log"
-  out_dir="${work_dir}/infer_gf3_henan_png"
-  mosaic_dir="${work_dir}/infer_gf3_henan_full"
+  out_dir="${work_dir}/infer_gf3_henan_png_${DATASET_SUFFIX}"
+  mosaic_dir="${work_dir}/infer_gf3_henan_full_${DATASET_SUFFIX}"
   report_file="${mosaic_dir}/infer_report.json"
 
   echo

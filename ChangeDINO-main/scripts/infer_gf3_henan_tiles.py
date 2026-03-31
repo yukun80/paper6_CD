@@ -23,11 +23,19 @@ python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
 
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
 --tiles-root datasets/GF3_Henan_CD_infer \
---checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vits16/S1GFloods-ChangeDINO-vits16_convnextv2_nano_best.pth \
+--checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vits16-20260327/S1GFloods-ChangeDINO-vits16-20260327_convnextv2_nano_best.pth \
 --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
 --gpu_ids 0 \
 --batch_size 8 \
---output-dir ChangeDINO-main/outputs/gf3_henan_vits16
+--output-dir ChangeDINO-main/outputs/gf3_henan_vits16_20260327
+
+python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
+--tiles-root datasets/GF3_Zhuozhou_CD_infer \
+--checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vits16-20260327/S1GFloods-ChangeDINO-vits16-20260327_convnextv2_nano_best.pth \
+--stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+--gpu_ids 0 \
+--batch_size 8 \
+--output-dir ChangeDINO-main/outputs/gf3_zhuozhou_vits16_20260327
 """
 
 

@@ -127,6 +127,12 @@ class Options:
 
         self.parser.add_argument("--batch_size", type=int, default=16)
         self.parser.add_argument("--num_epochs", type=int, default=100)
+        self.parser.add_argument(
+            "--save_epoch_freq",
+            type=int,
+            default=10,
+            help="每隔多少个 epoch 额外保存一次 checkpoint；<=0 表示关闭。",
+        )
         self.parser.add_argument("--input_size", type=int, default=256, help="训练/推理默认输入尺寸")
         self.parser.add_argument("--num_workers", type=int, default=4, help="#threads for loading data")
         self.parser.add_argument("--lr", type=float, default=5e-4)

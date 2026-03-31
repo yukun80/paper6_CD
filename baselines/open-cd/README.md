@@ -158,6 +158,67 @@ bash scripts/monitor/run_opencd_after_pid.sh \
 
 Make sure this monitor command is started from the conda environment that already contains `mmengine`, `mmsegmentation`, and `opencd`.
 
+#### GF3 Henan Inference And Whole-Scene Stitching
+
+This repository additionally supports Open-CD inference on the tiled GF3 Henan scene prepared by:
+
+```bash
+python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
+  --src-root datasets/GF3_Henan \
+  --pre-image Pre_Zhengzhou_descending_clip.tif \
+  --post-image Post_Zhengzhou_descending_clip.tif \
+  --out-root datasets/GF3_Henan_CD_infer \
+  --tile-size 256 \
+  --stride 128 \
+  --overwrite
+```
+
+The prepared inference root contains:
+- `test/A` and `test/B`: PNG tile pairs used as Open-CD inputs;
+- `tile_manifest.csv`: tile index, `top/left`, and valid-mask references;
+- `prepare_report.json`: source scene shape and tiling parameters;
+- `test/valid_mask`: nodata masks used during full-scene stitching.
+
+Single-model inference plus whole-scene stitching:
+
+```bash
+cd baselines/open-cd
+python tools/infer_gf3_henan.py \
+  work_dirs/s1gfloods-batch-20260326-004236/bit_r18_256x256_40k_s1gfloods/bit_r18_256x256_40k_s1gfloods.py \
+  work_dirs/s1gfloods-batch-20260326-004236/bit_r18_256x256_40k_s1gfloods/best_mIoU_iter_40000.pth \
+  --data-root ../../datasets/GF3_Henan_CD_infer \
+  --work-dir work_dirs/s1gfloods-batch-20260326-004236/bit_r18_256x256_40k_s1gfloods \
+  --device cuda:0 \
+  --batch-size 4 \
+  --threshold 0.5
+```
+
+Batch inference for all trained S1GFloods models:
+
+```bash
+cd baselines/open-cd
+bash scripts/s1gfloods/run_all_gf3_henan_infer.sh \
+  --batch-dir work_dirs/s1gfloods-batch-20260326-004236 \
+  --device cuda:0 \
+  --batch-size 4 \
+  --threshold 0.5
+```
+
+Output layout for each model:
+- The batch script derives a dataset suffix from `--data-root`, e.g. `GF3_Zhuozhou_CD_infer` -> `gf3_zhuozhou_cd_infer`;
+- `infer_gf3_henan_png_<suffix>/`: tile-level binary PNG predictions;
+- `infer_gf3_henan_full_<suffix>/change_prob.tif`: stitched float32 probability map;
+- `infer_gf3_henan_full_<suffix>/change_binary.tif`: stitched binary GeoTIFF;
+- `infer_gf3_henan_full_<suffix>/change_binary.png`: stitched preview image;
+- `infer_gf3_henan_full_<suffix>/infer_report.json`: source scene and output metadata;
+- `infer_logs_<suffix>/` and `infer_gf3_henan_summary_<suffix>.tsv`: batch logs and summary for that dataset.
+
+Implementation notes:
+- Stitching follows the same tiling metadata as ChangeDINO, using `tile_manifest.csv` and `prepare_report.json`.
+- Overlap regions are fused with `valid_mask` and a Hanning blending window instead of simple overwrite.
+- For final analysis, prefer the stitched outputs under `infer_gf3_henan_full_<suffix>/`; tile PNGs are mainly for tile-level inspection.
+- Current registry / visualizer warnings printed by MMEngine during inference do not block prediction or stitched output generation.
+
 
 ## Citation
 

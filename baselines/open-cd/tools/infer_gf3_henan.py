@@ -35,6 +35,10 @@ BINARY_NODATA = 255
 # 兼容 PyTorch 2.6+ 对 torch.load 默认开启 weights_only 的行为变化。
 _ORIGINAL_TORCH_LOAD = torch.load
 
+"""
+cd /home/yukun/codes/paper6_waterlogging/baselines/open-cd
+"""
+
 
 def _torch_load_compat(*args, **kwargs):
     kwargs.setdefault("weights_only", False)
@@ -45,8 +49,7 @@ torch.load = _torch_load_compat
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Infer GF3 Henan tiles with an Open-CD checkpoint")
+    parser = argparse.ArgumentParser(description="Infer GF3 Henan tiles with an Open-CD checkpoint")
     parser.add_argument("config", help="config file used to build the model")
     parser.add_argument("checkpoint", help="checkpoint path")
     parser.add_argument(
@@ -167,10 +170,12 @@ def build_tile_inputs(
     return records
 
 
-def batched(items: list[tuple[str, str, Path, dict[str, str]]], batch_size: int) -> Iterable[list[tuple[str, str, Path, dict[str, str]]]]:
+def batched(
+    items: list[tuple[str, str, Path, dict[str, str]]], batch_size: int
+) -> Iterable[list[tuple[str, str, Path, dict[str, str]]]]:
     """按固定批大小切分输入切片。"""
     for start in range(0, len(items), batch_size):
-        yield items[start:start + batch_size]
+        yield items[start : start + batch_size]
 
 
 def load_prepare_report(data_root: Path) -> dict[str, object]:
@@ -258,7 +263,9 @@ def extract_change_probability(prediction) -> np.ndarray:
         raise ValueError(f"Unexpected seg_logits shape: {tuple(seg_logits.shape)}")
 
     if seg_logits.shape[0] == 1:
-        prob = torch.sigmoid(seg_logits[0])
+        # Open-CD 的单通道推理结果在 postprocess_result 中已做过 sigmoid，
+        # 这里直接取概率图，避免重复激活后整图阈值化全白。
+        prob = seg_logits[0]
     else:
         prob = torch.softmax(seg_logits, dim=0)[1]
     return prob.numpy().astype(np.float32, copy=False)
@@ -374,7 +381,7 @@ def main() -> None:
     prepare_report = load_prepare_report(data_root)
     total_tiles = len(all_rows)
     if args.limit > 0:
-        all_rows = all_rows[:args.limit]
+        all_rows = all_rows[: args.limit]
 
     tile_records = build_tile_inputs(data_root, all_rows)
     print(f"Config: {config_path}")

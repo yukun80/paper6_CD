@@ -21,6 +21,15 @@ python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
 --tile-size 256 \
 --stride 128 \
 --overwrite
+
+python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
+--src-root datasets/GF3_Zhuozhou \
+--pre-image Pre_Zhuozhou_clip.tif \
+--post-image Post_Zhuozhou_clip.tif \
+--out-root datasets/GF3_Zhuozhou_CD_infer \
+--tile-size 256 \
+--stride 128 \
+--overwrite
 """
 
 
