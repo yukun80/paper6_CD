@@ -1,18 +1,306 @@
 # Copyright (c) Open-CD. All rights reserved.
+import collections.abc
 from typing import Optional, Sequence, Tuple
+from itertools import repeat
 
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from mmcv.cnn.bricks.transformer import PatchEmbed
-from mmengine.model import ModuleList
+from mmcv.cnn.bricks.transformer import FFN, PatchEmbed
+from mmengine.model import BaseModule, ModuleList
 from mmengine.model.weight_init import trunc_normal_
-from mmpretrain.models.utils import LayerNorm2d, resize_pos_embed, to_2tuple
-from mmpretrain.models.backbones.vit_sam import TransformerEncoderLayer
-from mmpretrain.models.backbones.base_backbone import BaseBackbone
 
 from opencd.registry import MODELS
+
+
+def to_2tuple(x):
+    if isinstance(x, collections.abc.Iterable):
+        return x
+    return tuple(repeat(x, 2))
+
+
+def resize_pos_embed(pos_embed,
+                     src_shape,
+                     dst_shape,
+                     mode='bicubic',
+                     num_extra_tokens=1):
+    """Resize pos_embed 权重。"""
+
+    if src_shape[0] == dst_shape[0] and src_shape[1] == dst_shape[1]:
+        return pos_embed
+    assert pos_embed.ndim == 3, 'shape of pos_embed must be [1, L, C]'
+    _, l, c = pos_embed.shape
+    src_h, src_w = src_shape
+    assert l == src_h * src_w + num_extra_tokens, (
+        f"The length of `pos_embed` ({l}) doesn't match the expected "
+        f'shape ({src_h}*{src_w}+{num_extra_tokens}). Please check the'
+        '`img_size` argument.')
+    extra_tokens = pos_embed[:, :num_extra_tokens]
+
+    src_weight = pos_embed[:, num_extra_tokens:]
+    src_weight = src_weight.reshape(1, src_h, src_w, c).permute(0, 3, 1, 2)
+
+    dst_weight = F.interpolate(
+        src_weight.float(), size=dst_shape, align_corners=False, mode=mode)
+    dst_weight = torch.flatten(dst_weight, 2).transpose(1, 2)
+    dst_weight = dst_weight.to(src_weight.dtype)
+
+    return torch.cat((extra_tokens, dst_weight), dim=1)
+
+
+@MODELS.register_module(name='LN2d')
+class LayerNorm2d(nn.LayerNorm):
+    """2D feature map 上按通道做 LayerNorm。"""
+
+    def __init__(self, num_channels: int, **kwargs) -> None:
+        super().__init__(num_channels, **kwargs)
+        self.num_channels = self.normalized_shape[0]
+
+    def forward(self, x, data_format='channel_first'):
+        assert x.dim() == 4, 'LayerNorm2d only supports inputs with shape ' \
+            f'(N, C, H, W), but got tensor with shape {x.shape}'
+        if data_format == 'channel_last':
+            x = F.layer_norm(x, self.normalized_shape, self.weight, self.bias,
+                             self.eps)
+        elif data_format == 'channel_first':
+            x = x.permute(0, 2, 3, 1)
+            x = F.layer_norm(x, self.normalized_shape, self.weight, self.bias,
+                             self.eps)
+            x = x.permute(0, 3, 1, 2).contiguous()
+        return x
+
+
+def build_norm_layer(cfg: dict, num_features: int) -> nn.Module:
+    """为 TTP 本地化最小 norm 构造逻辑，避免依赖 mmpretrain registry。"""
+
+    if not isinstance(cfg, dict):
+        raise TypeError('cfg must be a dict')
+    if 'type' not in cfg:
+        raise KeyError('the cfg dict must contain the key "type"')
+    cfg_ = cfg.copy()
+
+    layer_type = cfg_.pop('type')
+    requires_grad = cfg_.pop('requires_grad', True)
+    cfg_.setdefault('eps', 1e-5)
+
+    if layer_type == 'LN':
+        layer = nn.LayerNorm(num_features, **cfg_)
+    elif layer_type in {'LN2d', 'LayerNorm2d'}:
+        layer = LayerNorm2d(num_features, **cfg_)
+    elif layer_type == 'SyncBN':
+        layer = nn.SyncBatchNorm(num_features, **cfg_)
+        if hasattr(layer, '_specify_ddp_gpu_num'):
+            layer._specify_ddp_gpu_num(1)
+    elif layer_type in {'BN', 'BN2d', 'BatchNorm2d'}:
+        layer = nn.BatchNorm2d(num_features, **cfg_)
+    else:
+        raise KeyError(f'Unsupported norm layer type: {layer_type}')
+
+    for param in layer.parameters():
+        param.requires_grad = requires_grad
+
+    return layer
+
+
+def window_partition(x: torch.Tensor,
+                     window_size: int) -> Tuple[torch.Tensor, Tuple[int, int]]:
+    """将特征划分为窗口并在必要时做 padding。"""
+
+    b, h, w, c = x.shape
+
+    pad_h = (window_size - h % window_size) % window_size
+    pad_w = (window_size - w % window_size) % window_size
+    if pad_h > 0 or pad_w > 0:
+        x = F.pad(x, (0, 0, 0, pad_w, 0, pad_h))
+    hp, wp = h + pad_h, w + pad_w
+
+    x = x.view(b, hp // window_size, window_size, wp // window_size,
+               window_size, c)
+    windows = x.permute(0, 1, 3, 2, 4,
+                        5).contiguous().view(-1, window_size, window_size, c)
+    return windows, (hp, wp)
+
+
+def window_unpartition(windows: torch.Tensor, window_size: int,
+                       pad_hw: Tuple[int, int],
+                       hw: Tuple[int, int]) -> torch.Tensor:
+    """把窗口特征还原回原始特征图。"""
+
+    hp, wp = pad_hw
+    h, w = hw
+    b = windows.shape[0] // (hp * wp // window_size // window_size)
+    x = windows.view(b, hp // window_size, wp // window_size, window_size,
+                     window_size, -1)
+    x = x.permute(0, 1, 3, 2, 4, 5).contiguous().view(b, hp, wp, -1)
+
+    if hp > h or wp > w:
+        x = x[:, :h, :w, :].contiguous()
+    return x
+
+
+def get_rel_pos(q_size: int, k_size: int,
+                rel_pos: torch.Tensor) -> torch.Tensor:
+    """根据 query/key 大小获取相对位置编码。"""
+
+    max_rel_dist = int(2 * max(q_size, k_size) - 1)
+    if rel_pos.shape[0] != max_rel_dist:
+        rel_pos_resized = F.interpolate(
+            rel_pos.reshape(1, rel_pos.shape[0], -1).permute(0, 2, 1),
+            size=max_rel_dist,
+            mode='linear',
+        )
+        rel_pos_resized = rel_pos_resized.reshape(-1,
+                                                  max_rel_dist).permute(1, 0)
+    else:
+        rel_pos_resized = rel_pos
+
+    q_coords = torch.arange(q_size)[:, None] * max(k_size / q_size, 1.0)
+    k_coords = torch.arange(k_size)[None, :] * max(q_size / k_size, 1.0)
+    relative_coords = (q_coords -
+                       k_coords) + (k_size - 1) * max(q_size / k_size, 1.0)
+
+    return rel_pos_resized[relative_coords.long()]
+
+
+def add_decomposed_rel_pos(attn: torch.Tensor, q: torch.Tensor,
+                           rel_pos_h: torch.Tensor, rel_pos_w: torch.Tensor,
+                           q_size: Tuple[int, int],
+                           k_size: Tuple[int, int]) -> torch.Tensor:
+    """给注意力图加入分解式相对位置编码。"""
+
+    q_h, q_w = q_size
+    k_h, k_w = k_size
+    rh = get_rel_pos(q_h, k_h, rel_pos_h)
+    rw = get_rel_pos(q_w, k_w, rel_pos_w)
+
+    b, _, dim = q.shape
+    r_q = q.reshape(b, q_h, q_w, dim)
+    rel_h = torch.einsum('bhwc,hkc->bhwk', r_q, rh)
+    rel_w = torch.einsum('bhwc,wkc->bhwk', r_q, rw)
+
+    attn = (attn.view(b, q_h, q_w, k_h, k_w) + rel_h[:, :, :, :, None] +
+            rel_w[:, :, :, None, :]).view(b, q_h * q_w, k_h * k_w)
+
+    return attn
+
+
+class Attention(nn.Module):
+    """SAM 风格的多头注意力。"""
+
+    def __init__(self,
+                 embed_dims: int,
+                 num_heads: int = 8,
+                 qkv_bias: bool = True,
+                 use_rel_pos: bool = False,
+                 input_size: Optional[Tuple[int, int]] = None) -> None:
+        super().__init__()
+        self.num_heads = num_heads
+        head_embed_dims = embed_dims // num_heads
+        self.scale = head_embed_dims**-0.5
+
+        self.qkv = nn.Linear(embed_dims, embed_dims * 3, bias=qkv_bias)
+        self.proj = nn.Linear(embed_dims, embed_dims)
+
+        self.use_rel_pos = use_rel_pos
+        if self.use_rel_pos:
+            assert input_size is not None, (
+                'Input size must be provided if using relative position embed.')
+            self.rel_pos_h = nn.Parameter(
+                torch.zeros(2 * input_size[0] - 1, head_embed_dims))
+            self.rel_pos_w = nn.Parameter(
+                torch.zeros(2 * input_size[1] - 1, head_embed_dims))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        b, h, w, _ = x.shape
+        qkv = self.qkv(x).reshape(b, h * w, 3, self.num_heads,
+                                  -1).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv.reshape(3, b * self.num_heads, h * w, -1).unbind(0)
+
+        attn = (q * self.scale) @ k.transpose(-2, -1)
+        if self.use_rel_pos:
+            attn = add_decomposed_rel_pos(attn, q, self.rel_pos_h,
+                                          self.rel_pos_w, (h, w), (h, w))
+
+        attn = attn.softmax(dim=-1)
+        x = (attn @ v).view(b, self.num_heads, h, w,
+                            -1).permute(0, 2, 3, 1, 4).reshape(b, h, w, -1)
+        x = self.proj(x)
+        return x
+
+
+class BaseBackbone(BaseModule):
+    """最小骨干基类，避免再依赖 mmpretrain 的 backbone 抽象。"""
+
+    def __init__(self, init_cfg=None):
+        super().__init__(init_cfg)
+
+
+class TransformerEncoderLayer(BaseModule):
+    """本地化的 SAM 编码层实现。"""
+
+    def __init__(self,
+                 embed_dims: int,
+                 num_heads: int,
+                 feedforward_channels: int,
+                 drop_rate: float = 0.,
+                 drop_path_rate: float = 0.,
+                 num_fcs: int = 2,
+                 qkv_bias: bool = True,
+                 act_cfg: dict = dict(type='GELU'),
+                 norm_cfg: dict = dict(type='LN'),
+                 use_rel_pos: bool = False,
+                 window_size: int = 0,
+                 input_size: Optional[Tuple[int, int]] = None,
+                 init_cfg=None):
+        super().__init__(init_cfg=init_cfg)
+
+        self.embed_dims = embed_dims
+        self.window_size = window_size
+
+        self.ln1 = build_norm_layer(norm_cfg, self.embed_dims)
+
+        self.attn = Attention(
+            embed_dims=embed_dims,
+            num_heads=num_heads,
+            qkv_bias=qkv_bias,
+            use_rel_pos=use_rel_pos,
+            input_size=input_size if window_size == 0 else
+            (window_size, window_size),
+        )
+
+        self.ln2 = build_norm_layer(norm_cfg, self.embed_dims)
+
+        self.ffn = FFN(
+            embed_dims=embed_dims,
+            feedforward_channels=feedforward_channels,
+            num_fcs=num_fcs,
+            ffn_drop=drop_rate,
+            dropout_layer=dict(type='DropPath', drop_prob=drop_path_rate),
+            act_cfg=act_cfg)
+
+    @property
+    def norm1(self):
+        return self.ln1
+
+    @property
+    def norm2(self):
+        return self.ln2
+
+    def forward(self, x):
+        shortcut = x
+        x = self.ln1(x)
+        if self.window_size > 0:
+            h, w = x.shape[1], x.shape[2]
+            x, pad_hw = window_partition(x, self.window_size)
+
+        x = self.attn(x)
+        if self.window_size > 0:
+            x = window_unpartition(x, self.window_size, pad_hw, (h, w))
+        x = shortcut + x
+
+        x = self.ffn(self.ln2(x), identity=x)
+        return x
 
 
 @MODELS.register_module()

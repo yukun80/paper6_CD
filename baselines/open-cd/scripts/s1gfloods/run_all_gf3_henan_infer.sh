@@ -17,6 +17,7 @@ Usage: run_all_gf3_henan_infer.sh [options]
 
 Options:
   --batch-dir <path>      batch directory containing trained model work_dirs
+                         compatible with both the default and extra S1GFloods batch scripts
   --workdir-root <path>   parent directory of s1gfloods batches, default: ./work_dirs
   --data-root <path>      GF3 infer dataset root, default: ../../datasets/GF3_Henan_CD_infer
                          output dirs/logs/summary will append a suffix derived from this path
