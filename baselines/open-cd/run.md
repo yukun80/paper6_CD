@@ -14,19 +14,12 @@ bash scripts/s1gfloods/run_all_s1gfloods.sh check-env
 bash scripts/s1gfloods/run_all_s1gfloods.sh smoke-train --gpus 1
 bash scripts/s1gfloods/run_all_s1gfloods.sh full-train --gpus 1
 
-# Start Open-CD batch training automatically after a running ChangeDINO job exits
-cd /home/yukun/codes/paper6_waterlogging
-bash scripts/monitor/run_opencd_after_pid.sh \
-  --pid <trainval_s1gfloods_pid> \
-  --poll-seconds 30 \
-  --opencd-mode full-train \
-  --opencd-gpus 1
-
-cd baselines/CMCDNet
-python tools/train.py my_scripts/urban_sar_floods/cmcd_urban_sar_floods_3c_r50_effb2_30e.py
-
-PYTHONPATH=panopticon python panopticon/urban_floods/train.py --config-file panopticon/configs/urban_floods_seg.yaml
-
+<!-- 模型训练 -->
+bash baselines/open-cd/scripts/s1gfloods/run_all_s1gfloods_extra.sh full-train \
+  --data-root datasets/S1GFloods_CD_DINO \
+  --batch-root baselines/open-cd/work_dirs \
+  --gpus 1 \
+  --save-best mIoU
 
 <!-- 模型预测推理 -->
 cd /home/yukun/codes/paper6_waterlogging/baselines/open-cd
@@ -41,6 +34,15 @@ cd /home/yukun/codes/paper6_waterlogging/baselines/open-cd
 bash scripts/s1gfloods/run_all_gf3_henan_infer.sh \
   --batch-dir work_dirs/s1gfloods-batch-20260326-004236 \
   --data-root ../../datasets/GF3_Zhuozhou_CD_infer \
+  --device cuda:0 \
+  --batch-size 1 \
+  --threshold 0.5
+
+<!-- 新模型推理命令 -->
+cd /home/yukun/codes/paper6_waterlogging/baselines/open-cd
+bash scripts/s1gfloods/run_all_gf3_henan_infer.sh \
+  --batch-dir work_dirs/s1gfloods-batch-20260331-165142 \
+  --data-root ../../datasets/GF3_Henan_CD_infer \
   --device cuda:0 \
   --batch-size 1 \
   --threshold 0.5
