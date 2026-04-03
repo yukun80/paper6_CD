@@ -16,11 +16,6 @@ class Transforms(object):
         img1, img2, cd_label = _data["img1"], _data["img2"], _data["cd_label"]
 
         if random.random() < 0.5:
-            img1_ = img1
-            img1 = img2
-            img2 = img1_
-
-        if random.random() < 0.5:
             img1 = TF.hflip(img1)
             img2 = TF.hflip(img2)
             cd_label = TF.hflip(cd_label)

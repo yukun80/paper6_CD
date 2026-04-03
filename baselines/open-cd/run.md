@@ -47,6 +47,13 @@ bash scripts/s1gfloods/run_all_gf3_henan_infer.sh \
   --batch-size 1 \
   --threshold 0.5
 
+bash scripts/s1gfloods/run_all_gf3_henan_infer.sh \
+  --batch-dir work_dirs/s1gfloods-batch-20260331-165142 \
+  --data-root ../../datasets/GF3_Zhuozhou_CD_infer \
+  --device cuda:0 \
+  --batch-size 1 \
+  --threshold 0.5
+
 # 单模型调试推理
 python tools/infer_gf3_henan.py \
   work_dirs/s1gfloods-batch-20260326-004236/bit_r18_256x256_40k_s1gfloods/bit_r18_256x256_40k_s1gfloods.py \

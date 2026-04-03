@@ -10,7 +10,7 @@ from .blocks.cbam import CBAM
 from .blocks.adapter import DINOV3Wrapper, DenseAdapterLite
 from .blocks.diffatts import TransformerBlock
 from .blocks.deform_cross_attn import DeformableCrossAttentionAlign
-from .blocks.refine import SpatioTemporalContrastGate
+from .blocks.topo_router import FloodTopoRouter
 from .backbone.mobilenetv2 import mobilenet_v2
 
 DEFAULT_CONVNEXTV2_NANO_WEIGHT = "pretrained/convnextv2_nano_22k_224_ema.pt"
@@ -420,8 +420,10 @@ class ChangeModel(nn.Module):
         align_qkv_bias=False,
         align_offset_groups=4,
         directional_diff_expand=4.0,
-        stcg_dilation_k=5,
-        stcg_pool_k=11,
+        topo_grid_size=8,
+        topo_hidden_dim=128,
+        topo_neighbor_k=12,
+        topo_n_hops=2,
         **kwargs,
     ):
         super().__init__()
@@ -438,10 +440,12 @@ class ChangeModel(nn.Module):
             directional_diff_expand=directional_diff_expand,
             **kwargs,
         )
-        self.refiner = SpatioTemporalContrastGate(
+        self.refiner = FloodTopoRouter(
             feat_dim=fpn_channels,
-            dilation_k=stcg_dilation_k,
-            pool_k=stcg_pool_k,
+            grid_size=topo_grid_size,
+            hidden_dim=topo_hidden_dim,
+            neighbor_k=topo_neighbor_k,
+            n_hops=topo_n_hops,
         )
 
     @torch.inference_mode()
@@ -449,13 +453,15 @@ class ChangeModel(nn.Module):
         fea1 = self.encoder(x1)
         fea2 = self.encoder(x2)
         pred, _, _, _ = self.detector(fea1, fea2, x1.shape[-2:])
-        pred = self.refiner(pred, fea1[0], fea2[0])
+        pred, _ = self.refiner(pred, fea1[0], fea2[0])
         return pred
 
-    def forward(self, x1, x2):
+    def forward(self, x1, x2, gt_mask=None):
         fea1 = self.encoder(x1)
         fea2 = self.encoder(x2)
 
         preds = self.detector(fea1, fea2)
-        final_pred = self.refiner(preds[0], fea1[0], fea2[0])
-        return final_pred, preds
+        final_pred, topo_loss = self.refiner(
+            preds[0], fea1[0], fea2[0], gt_mask=gt_mask
+        )
+        return final_pred, preds, topo_loss

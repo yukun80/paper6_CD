@@ -124,6 +124,8 @@ BACKBONE_WEIGHT=pretrained/convnextv2_nano_22k_224_ema.pt \
 bash trainval_s1gfloods.sh
 ```
 
+bash ChangeDINO-main/trainval_s1gfloods.sh
+
 Switch to a different local DINOv3 checkpoint by overriding env vars:
 ```bash
 cd ChangeDINO-main
@@ -202,7 +204,25 @@ python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
   --overwrite
 ```
 
-2. Run tiled inference and stitch back to whole-scene outputs:
+2. Optionally back-fill label tiles for evaluation and visualization:
+```bash
+python ChangeDINO-main/scripts/prepare_sar_scene_label_infer.py \
+  --src-root datasets/GF3_Henan \
+  --label-image GF3_Zhengzhou_label.tif \
+  --tiles-root datasets/GF3_Henan_CD_infer \
+  --overwrite
+```
+
+Zhuozhou uses the same script with its own source/target paths:
+```bash
+python ChangeDINO-main/scripts/prepare_sar_scene_label_infer.py \
+  --src-root datasets/GF3_Zhuozhou \
+  --label-image GF3_Zhuozhou_label.tif \
+  --tiles-root datasets/GF3_Zhuozhou_CD_infer \
+  --overwrite
+```
+
+3. Run tiled inference and stitch back to whole-scene outputs:
 ```bash
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
@@ -215,6 +235,7 @@ python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
 
 Notes for GF3 Henan:
 - Tiles are saved as both `PNG` and `tif`: `PNG` is the actual model input to stay closer to S1GFloods training data, while `tif` preserves original float32 values and georeferencing.
+- Label back-fill also writes both `test/label/*.png` and `test/label_tif/*.tif`, and appends `label_png` / `label_tif` to `tile_manifest.csv`.
 - `valid_mask` is generated for every tile and is used during stitching so `nodata` pixels do not contribute to predictions.
 - Final outputs include `change_prob.tif`, `change_binary.tif`, and `change_binary.png`.
 - New checkpoints written by `trainval.py` carry `model_config` metadata, so the tiled inference script can auto-restore the trained DINO architecture and layer ids.

@@ -2,7 +2,6 @@ import torch
 from option import Options
 from data.cd_dataset import DataLoader
 from model.create_ChangeDINO import create_model
-import torch.optim as optim
 from tqdm import tqdm
 import math
 from util.metric_tool import ConfuseMatrixMeter
@@ -52,6 +51,9 @@ class Trainval(object):
         self.previous_best = 0.0
         self.running_metric = ConfuseMatrixMeter(n_class=2)
         self.alpha = 0.5
+        self.topo_loss_weight = getattr(opt, "topo_loss_weight", 0.5)
+        self.topo_warmup_epochs = 20
+        self.num_epochs = opt.num_epochs
 
         self.log_path = os.path.join(self.model.save_dir, "record.txt")
         self.vis_path = os.path.join(self.model.save_dir, opt.vis_path)
@@ -64,20 +66,9 @@ class Trainval(object):
                     "# name: %s | backbone: %s\n"
                     % (opt.name, getattr(opt, "backbone", "NA"))
                 )
-                f.write("# time,epoch,train_loss,train_focal,train_dice,lr,")
+                f.write("# time,epoch,train_loss,train_focal,train_dice,train_topo,lr,")
                 f.write("val_metrics(json)\n")
     
-    def _rescheduler(self, opt):
-        self.model.optimizer = optim.AdamW(
-            self.model.model.parameters(), lr=opt.lr*0.2, weight_decay=opt.weight_decay
-        )
-        self.model.schedular = optim.lr_scheduler.CosineAnnealingLR(
-            self.model.optimizer, int(opt.num_epochs*0.1), eta_min=1e-7
-        )
-        self.optimizer = self.model.optimizer
-        self.schedular = self.model.schedular
-        
-
     def _append_log_line(self, epoch: int, train_stats: dict, val_scores: dict):
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
@@ -86,6 +77,7 @@ class Trainval(object):
             f"{train_stats.get('loss', float('nan')):.6f},"
             f"{train_stats.get('focal', float('nan')):.6f},"
             f"{train_stats.get('dice', float('nan')):.6f},"
+            f"{train_stats.get('topo', float('nan')):.6f},"
             f"{train_stats.get('lr', float('nan')):.8f},"
             + json.dumps(val_scores, ensure_ascii=False)
             + "\n"
@@ -111,15 +103,19 @@ class Trainval(object):
         _loss = 0.0
         _focal_loss = 0.0
         _dice_loss = 0.0
+        _topo_loss = 0.0
         last_lr = self.optimizer.param_groups[0]["lr"]
+
+        # F6: topo_loss 线性预热 —— 前 topo_warmup_epochs 从 0 增至 topo_loss_weight
+        topo_w = self.topo_loss_weight * min(1.0, epoch / max(1, self.topo_warmup_epochs))
 
         for i, data in enumerate(tbar):
             self.model.model.train()
-            pred, focal, dice = self.model(
+            pred, focal, dice, topo_loss = self.model(
                 data["img1"].cuda(), data["img2"].cuda(), data["cd_label"].cuda()
             )
-            
-            loss = focal * self.alpha + dice
+
+            loss = focal * self.alpha + dice + topo_w * topo_loss
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -127,15 +123,17 @@ class Trainval(object):
             _loss += loss.item()
             _focal_loss += focal.item()
             _dice_loss += dice.item()
+            _topo_loss += topo_loss.item()
             last_lr = self.optimizer.param_groups[0]["lr"]
             del loss
 
             tbar.set_description(
-                "Loss: %.3f, Focal: %.3f, Dice: %.3f, LR: %.6f"
+                "L:%.3f F:%.3f D:%.3f T:%.3f LR:%.6f"
                 % (
                     _loss / (i + 1),
                     _focal_loss / (i + 1),
                     _dice_loss / (i + 1),
+                    _topo_loss / (i + 1),
                     last_lr,
                 )
             )
@@ -151,6 +149,7 @@ class Trainval(object):
             "loss": _loss / n,
             "focal": _focal_loss / n,
             "dice": _dice_loss / n,
+            "topo": _topo_loss / n,
             "lr": last_lr,
         }
 
@@ -202,8 +201,6 @@ if __name__ == "__main__":
             "\n==> Name %s, Epoch %i, previous best = %.3f"
             % (opt.name, epoch, trainval.previous_best * 100)
         )
-        if epoch == int(opt.num_epochs*0.9):
-            trainval._rescheduler(opt)
         train_stats = trainval.train(epoch)
         val_scores = trainval.val(epoch)
 

@@ -67,22 +67,50 @@ class Model(nn.Module):
             align_qkv_bias=opt.align_qkv_bias,
             align_offset_groups=opt.align_offset_groups,
             directional_diff_expand=opt.directional_diff_expand,
-            stcg_dilation_k=getattr(opt, "stcg_dilation_k", 5),
-            stcg_pool_k=getattr(opt, "stcg_pool_k", 11),
+            topo_grid_size=getattr(opt, "topo_grid_size", 16),
+            topo_hidden_dim=getattr(opt, "topo_hidden_dim", 128),
+            topo_neighbor_k=getattr(opt, "topo_neighbor_k", 12),
+            topo_n_hops=getattr(opt, "topo_n_hops", 2),
             dino_arch=opt.dino_arch,
             extract_ids=opt.extract_ids,
             dino_weight=opt.dino_weight,
             device=self.device,
         )
+        self.topo_loss_weight = getattr(opt, "topo_loss_weight", 0.5)
         self.focal = FocalLoss(alpha=opt.alpha, gamma=opt.gamma)
         self.dice = DICELoss()
         
 
-        self.optimizer = optim.AdamW(
-            self.model.parameters(), lr=opt.lr, weight_decay=opt.weight_decay
+        # T2: 分层学习率/weight_decay —— norm 层 wd=0，refiner/detector head lr×5
+        norm_params, head_params, base_params = [], [], []
+        for name, param in self.model.named_parameters():
+            if not param.requires_grad:
+                continue
+            if any(k in name for k in ("norm", "bn", ".bias")):
+                norm_params.append(param)
+            elif "refiner" in name or "detector" in name:
+                head_params.append(param)
+            else:
+                base_params.append(param)
+
+        self.optimizer = optim.AdamW([
+            {"params": base_params, "lr": opt.lr, "weight_decay": opt.weight_decay},
+            {"params": norm_params, "lr": opt.lr, "weight_decay": 0.0},
+            {"params": head_params, "lr": opt.lr * 5, "weight_decay": opt.weight_decay},
+        ])
+
+        # T1: 5 epoch 线性预热 + CosineAnnealing
+        warmup_epochs = 5
+        warmup_scheduler = optim.lr_scheduler.LinearLR(
+            self.optimizer, start_factor=0.01, total_iters=warmup_epochs
         )
-        self.schedular = optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, opt.num_epochs, eta_min=1e-7
+        cosine_scheduler = optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer, T_max=max(1, opt.num_epochs - warmup_epochs), eta_min=1e-7
+        )
+        self.schedular = optim.lr_scheduler.SequentialLR(
+            self.optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_epochs],
         )
         if opt.load_pretrain:
             self.load_ckpt(self.model, self.optimizer, opt.name, opt.backbone)
@@ -91,7 +119,8 @@ class Model(nn.Module):
         print("---------- Networks initialized -------------")
 
     def forward(self, x1, x2, label):
-        final_pred, preds = self.model(x1, x2)
+        gt_mask = label.float().unsqueeze(1)
+        final_pred, preds, topo_loss = self.model(x1, x2, gt_mask=gt_mask)
         label = label.long()
         focal = self.focal(final_pred, label)
         dice = self.dice(final_pred, label)
@@ -99,7 +128,10 @@ class Model(nn.Module):
             focal += self.focal(preds[i], label)
             dice += 0.5 * self.dice(preds[i], label)
 
-        return final_pred, focal, dice
+        if topo_loss is None:
+            topo_loss = torch.tensor(0.0, device=x1.device)
+
+        return final_pred, focal, dice, topo_loss
 
     @torch.inference_mode()
     def inference(self, x1, x2):
@@ -137,8 +169,10 @@ class Model(nn.Module):
                 "align_qkv_bias": bool(self.opt.align_qkv_bias),
                 "align_offset_groups": int(self.opt.align_offset_groups),
                 "directional_diff_expand": float(self.opt.directional_diff_expand),
-                "stcg_dilation_k": int(getattr(self.opt, "stcg_dilation_k", 5)),
-                "stcg_pool_k": int(getattr(self.opt, "stcg_pool_k", 11)),
+                "topo_grid_size": int(getattr(self.opt, "topo_grid_size", 16)),
+                "topo_hidden_dim": int(getattr(self.opt, "topo_hidden_dim", 128)),
+                "topo_neighbor_k": int(getattr(self.opt, "topo_neighbor_k", 12)),
+                "topo_n_hops": int(getattr(self.opt, "topo_n_hops", 2)),
                 "dino_arch": self.opt.dino_arch,
                 "dino_weight": self.opt.dino_weight,
                 "extract_ids": [int(v) for v in self.opt.extract_ids],

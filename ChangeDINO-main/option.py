@@ -107,16 +107,34 @@ class Options:
         )
         self.parser.add_argument("--load_pretrain", action='store_true')
         self.parser.add_argument(
-            "--stcg_dilation_k",
+            "--topo_grid_size",
             type=int,
-            default=5,
-            help="STCG 软膨胀核大小（奇数），控制外部护城河宽度。",
+            default=16,
+            help="FloodTopoRouter 节点网格大小 G，产生 G×G 个图节点。",
         )
         self.parser.add_argument(
-            "--stcg_pool_k",
+            "--topo_hidden_dim",
             type=int,
-            default=11,
-            help="STCG 局部掩膜池化窗口大小（特征尺度，奇数）。",
+            default=128,
+            help="TopoEdgeTransformer 隐藏维度。",
+        )
+        self.parser.add_argument(
+            "--topo_neighbor_k",
+            type=int,
+            default=12,
+            help="每个网格节点的 KNN 邻居数。",
+        )
+        self.parser.add_argument(
+            "--topo_n_hops",
+            type=int,
+            default=2,
+            help="图消息传递跳数，控制洪水证据传播范围。",
+        )
+        self.parser.add_argument(
+            "--topo_loss_weight",
+            type=float,
+            default=0.5,
+            help="拓扑连通性损失权重。",
         )
 
         self.parser.add_argument("--phase", type=str, default="train")
