@@ -50,6 +50,10 @@ INFER_MODEL_CONFIG_FIELDS = {
     "dino_arch",
     "dino_weight",
     "extract_ids",
+    "topo_grid_size",
+    "topo_hidden_dim",
+    "topo_neighbor_k",
+    "topo_n_hops",
 }
 SUPPORTED_BACKBONES = {"mobilenetv2", "convnextv2_nano"}
 

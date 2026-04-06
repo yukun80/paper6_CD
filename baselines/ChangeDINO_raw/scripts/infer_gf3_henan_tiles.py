@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """GF3 河南整景 SAR 变化检测推理包装脚本。"""
 
 from __future__ import annotations
@@ -20,6 +19,14 @@ python baselines/ChangeDINO_raw/scripts/infer_gf3_henan_tiles.py \
 --gpu_ids 0 \
 --batch_size 8 \
 --output-dir baselines/ChangeDINO_raw/outputs/gf3_henan_vits16
+
+python baselines/ChangeDINO_raw/scripts/infer_gf3_henan_tiles.py \
+--tiles-root datasets/GF3_Henan_CD_infer \
+--checkpoint baselines/ChangeDINO_raw/checkpoints/S1GFloods-ChangeDINO-vits16/S1GFloods-ChangeDINO-vits16_mobilenetv2_best.pth \
+--stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+--gpu_ids 0 \
+--batch_size 8 \
+--output-dir baselines/ChangeDINO_raw/outputs/gf3_henan_vits16_best
 
 python baselines/ChangeDINO_raw/scripts/infer_gf3_henan_tiles.py \
 --tiles-root datasets/GF3_Zhuozhou_CD_infer \
