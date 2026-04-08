@@ -5,9 +5,14 @@
 提取断裂路网的思想，用图网络去"连接"被遮挡切断的水网。
 
 三步核心机制:
-1. 网格节点提取 —— 将高置信度的洪水区域离散化为规则网格图节点
-2. 拓扑边 Transformer —— 利用双时相变化特征预测节点间物理连通性
-3. 图路由重连 —— 沿连通路径传播洪水证据，重连被遮挡切断的水网
+1. 网格节点提取 —— 从 Detector 的对比度感知 P2 特征中提取图节点
+2. 拓扑边 Transformer —— 利用对比度感知变化特征预测节点间物理连通性
+3. 图路由双向精修 —— 沿连通路径传播洪水证据（增强漏检 + 抑制误报）
+
+与前一版的关键改进:
+- 图节点特征来自 Detector 输出（已含 ContrastAwareDiff 信号 + Transformer
+  全局上下文），而非从 Encoder 原始特征重新计算，实现三模块协同
+- 消息传递和空间渲染均支持双向校正（tanh），可同时增强漏检和抑制误报
 """
 
 import torch
@@ -103,11 +108,14 @@ class TopoEdgeTransformer(nn.Module):
 
 
 class FloodTopoRouter(nn.Module):
-    """城市洪水拓扑重连图路由模块，替换 SpatioTemporalContrastGate。
+    """城市洪水拓扑重连图路由模块。
+
+    接收 Detector 的 P2 特征（已含 ContrastAwareDiff 对比度信号 +
+    Transformer 全局上下文）作为图节点特征来源，实现与上游模块的协同。
 
     Parameters
     ----------
-    feat_dim     : Encoder p2 特征通道数 (= fpn_channels)
+    feat_dim     : Detector P2 特征通道数 (= fpn_channels)
     grid_size    : 节点网格大小 G，产生 G*G 个图节点
     proj_dim     : 节点特征投影维度
     hidden_dim   : TopoEdgeTransformer 隐藏维度
@@ -137,14 +145,9 @@ class FloodTopoRouter(nn.Module):
         self.line_samples = line_samples
         N = grid_size * grid_size
 
-        # ── Step 1：特征投影 ──
-        self.feat_proj = nn.Sequential(
+        # ── Step 1：Detector P2 特征投影（已含对比度信号 + 全局上下文） ──
+        self.det_feat_proj = nn.Sequential(
             nn.Conv2d(feat_dim, proj_dim, 1, bias=False),
-            nn.BatchNorm2d(proj_dim),
-            nn.SiLU(inplace=True),
-        )
-        self.change_proj = nn.Sequential(
-            nn.Conv2d(2 * proj_dim, proj_dim, 1, bias=False),
             nn.BatchNorm2d(proj_dim),
             nn.SiLU(inplace=True),
         )
@@ -229,7 +232,7 @@ class FloodTopoRouter(nn.Module):
             feat = feat + alpha_h * msg
 
         act_delta = self.feat_to_act(feat).squeeze(-1)                # [B, N]
-        enhanced = node_act + torch.sigmoid(act_delta) * (1.0 - node_act)
+        enhanced = (node_act + torch.tanh(act_delta)).clamp(0, 1)
         return enhanced
 
     # ------------------------------------------------------------------ #
@@ -240,9 +243,12 @@ class FloodTopoRouter(nn.Module):
     def _compute_gt_connectivity(self, gt_mask: torch.Tensor):
         """从 GT mask 计算网格节点的连通性标签（纯标签，无需梯度）。
 
-        gt_mask : [B, 1, H, W]  float ∈ {0, 1}
+        gt_mask : [B, H, W] 或 [B, 1, H, W]，整型或浮点均可
         returns : gt_edge_labels [B, N, K]  float ∈ {0, 1}
         """
+        gt_mask = gt_mask.float()
+        if gt_mask.ndim == 3:
+            gt_mask = gt_mask.unsqueeze(1)   # [B, H, W] -> [B, 1, H, W]
         B = gt_mask.shape[0]
         G = self.grid_size
         N = G * G
@@ -296,17 +302,15 @@ class FloodTopoRouter(nn.Module):
     def forward(
         self,
         logit_2ch: torch.Tensor,
-        fea_t1: torch.Tensor,
-        fea_t2: torch.Tensor,
+        det_p2_feat: torch.Tensor,
         gt_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Parameters
         ----------
-        logit_2ch : [B, 2, H, W]  Detector 输出的初步 2 类 logits
-        fea_t1    : [B, C, h, w]  Encoder T1 p2 特征
-        fea_t2    : [B, C, h, w]  Encoder T2 p2 特征
-        gt_mask   : [B, 1, H, W]  训练时传入 GT 洪水 mask，推理时为 None
+        logit_2ch   : [B, 2, H, W]  Detector 输出的初步 2 类 logits
+        det_p2_feat : [B, C, h, w]  Detector P2 特征（已含对比度信号 + 全局上下文）
+        gt_mask     : [B, 1, H, W]  训练时传入 GT 洪水 mask，推理时为 None
 
         Returns
         -------
@@ -314,7 +318,7 @@ class FloodTopoRouter(nn.Module):
         topo_loss     : scalar tensor 或 None
         """
         B, _, H, W = logit_2ch.shape
-        h, w = fea_t1.shape[-2:]
+        h, w = det_p2_feat.shape[-2:]
         G = self.grid_size
 
         p_fg = F.softmax(logit_2ch, dim=1)[:, 1:2]                   # [B,1,H,W]
@@ -325,11 +329,7 @@ class FloodTopoRouter(nn.Module):
         node_act = F.adaptive_avg_pool2d(p_small, (G, G))            # [B,1,G,G]
         node_act_flat = node_act.view(B, -1)                         # [B, N]
 
-        ft1 = self.feat_proj(fea_t1)                                 # [B, D, h, w]
-        ft2 = self.feat_proj(fea_t2)
-        change_map = self.change_proj(
-            torch.cat([ft2 - ft1, ft2], dim=1)
-        )                                                            # [B, D, h, w]
+        change_map = self.det_feat_proj(det_p2_feat)                  # [B, D, h, w]
         node_feat = F.adaptive_avg_pool2d(change_map, (G, G))        # [B, D, G, G]
         node_feat = node_feat.flatten(2).permute(0, 2, 1)            # [B, N, D]
 
@@ -338,13 +338,12 @@ class FloodTopoRouter(nn.Module):
             node_feat, self.grid_pos, self.knn_idx
         )                                                            # [B, N, K]
 
-        # ============ Step 3: 图路由重连（稀疏 KNN，无稠密 [N,N] 矩阵） ============
+        # ============ Step 3: 图路由双向精修（稀疏 KNN） ============
         enhanced = self._sparse_message_passing(
             edge_scores, node_feat, node_act_flat
         )                                                            # [B, N]
 
-        # 连通性增量：来自邻居的洪水证据提升
-        connectivity = (enhanced - node_act_flat).clamp_min(0)        # [B, N]
+        connectivity = enhanced - node_act_flat                       # [B, N] 双向
 
         # 渲染回空间
         routing_grid = enhanced.view(B, 1, G, G)
@@ -355,19 +354,17 @@ class FloodTopoRouter(nn.Module):
         conn_map = F.interpolate(conn_grid, size=(H, W),
                                  mode="bilinear", align_corners=False)
 
-        # 门控：拓扑路由图 + 连通性增量 → 单通道门控
         gate_input = torch.cat([routing_map, conn_map], dim=1)        # [B, 2, H, W]
         gate = torch.sigmoid(self.gate_net(gate_input))               # [B, 1, H, W]
 
-        # 纯残差增强：只在拓扑路由高于原始预测时进行正向提升，不抑制原始预测
-        routing_boost = (routing_map.clamp(0, 1) - p_fg).clamp_min(0) # [B, 1, H, W]
+        routing_delta = routing_map.clamp(0, 1) - p_fg                # [B, 1, H, W] 双向
 
         alpha = torch.sigmoid(self.alpha_raw)
-        boosted_p = (p_fg + alpha * gate * routing_boost).clamp(1e-6, 1 - 1e-6)
-        gated_logit = torch.logit(boosted_p, eps=1e-6)
+        refined_p = (p_fg + alpha * gate * routing_delta).clamp(1e-6, 1 - 1e-6)
+        refined_logit = torch.logit(refined_p, eps=1e-6)
 
         out = logit_2ch.clone()
-        out[:, 1:2] = out[:, 1:2] + alpha * (gated_logit - out[:, 1:2])
+        out[:, 1:2] = out[:, 1:2] + alpha * (refined_logit - out[:, 1:2])
 
         # ============ 拓扑损失 ============
         topo_loss = None

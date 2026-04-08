@@ -181,21 +181,22 @@ class Encoder(nn.Module):
 
     def forward(self, x):
         """
-        x1: [B, 3, H, W]
-        x2: [B, 3, H, W]
-        return: [B, 1, H, W]
+        x : [B, 3, H, W]
+        returns : (fea_pyramid, dino_deep)
+            fea_pyramid : tuple of 4 FPN-DINO 融合特征
+            dino_deep   : [B, D, H/8, W/8] DINOv3 最深层原始特征，用于
+                          DinoContextBridge 的直达全局上下文注入，零额外计算开销
         """
         fea = self.backbone.forward(x)
-        fea = self.fpn(fea[-4:])  # t1_p1, t1_p2, t1_p3, t1_p4
+        fea = self.fpn(fea[-4:])
 
-        ds_fea = self.dino(x)
+        ds_fea_raw = self.dino(x)                # list of 4, each [B, D, H/8, W/8]
 
-        # process dense features
-        ds_fea = self.dense_adp(ds_fea)
+        ds_fea = self.dense_adp(ds_fea_raw)
 
         fea = self.pff(fea, ds_fea)
 
-        return fea
+        return fea, ds_fea_raw[-1]
 
 
 class FuseGated(nn.Module):
@@ -215,35 +216,130 @@ class FuseGated(nn.Module):
         return self.mix(fused)
 
 
-class DirectionalDiffMixer(nn.Module):
-    """将对齐特征与方向差分压回单尺度差分表征。"""
+class ContrastAwareDiff(nn.Module):
+    """对比度感知差分模块。
 
-    def __init__(self, dim, expand_ratio=4.0):
+    以 abs_diff 为基底（与 baseline 一致），通过轻量残差分支注入
+    SAR 洪水检测的关键信号——有符号局部对比度变化 (Signed Local
+    Contrast Delta)。对比度变化在洪水像素处为负（暗区被变亮邻域
+    包围），在变亮建筑处为正，天然区分洪水与变亮误报。
+    """
+
+    def __init__(self, dim: int, pool_size: int = 5):
         super().__init__()
-        hidden_dim = max(dim, int(dim * expand_ratio))
-        self.body = nn.Sequential(
-            nn.Conv2d(dim * 4, hidden_dim, kernel_size=1, bias=False),
-            nn.BatchNorm2d(hidden_dim),
-            nn.SiLU(inplace=True),
-            nn.Conv2d(hidden_dim, hidden_dim, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(hidden_dim),
-            nn.SiLU(inplace=True),
-            nn.Conv2d(hidden_dim, dim, kernel_size=1, bias=False),
+        self.local_pool = nn.AvgPool2d(
+            pool_size, stride=1, padding=pool_size // 2
+        )
+        self.contrast_branch = nn.Sequential(
+            nn.Conv2d(dim, dim, 3, padding=1, groups=dim, bias=False),
             nn.BatchNorm2d(dim),
             nn.SiLU(inplace=True),
+            nn.Conv2d(dim, dim, 1, bias=False),
+            nn.BatchNorm2d(dim),
+        )
+        self.gate = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(dim, dim // 4, 1),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(dim // 4, dim, 1),
+            nn.Sigmoid(),
         )
 
     def forward(self, aligned_pre, post):
-        drop = F.relu(aligned_pre - post, inplace=False)
-        surge = F.relu(post - aligned_pre, inplace=False)
-        fused = torch.cat([aligned_pre, post, drop, surge], dim=1)
-        return self.body(fused)
+        abs_diff = torch.abs(aligned_pre - post)
+
+        pre_local = self.local_pool(aligned_pre)
+        post_local = self.local_pool(post)
+        delta_contrast = (post - post_local) - (aligned_pre - pre_local)
+
+        contrast_feat = self.contrast_branch(delta_contrast)
+        g = self.gate(contrast_feat)
+
+        return abs_diff + g * contrast_feat
+
+
+class DinoContextBridge(nn.Module):
+    """DINOv3 全局上下文直注桥。
+
+    P2 特征（64x64）交叉注意力查询 DINOv3 双时相全局 token，
+    直接利用视觉基础模型已有的全局自注意力特征，
+    替代 StripContextModule 从零重建全局上下文。
+
+    复杂度 O(N x K)：N=4096 (P2 64x64), K=64 (DINO 8x8 池化)，
+    远低于全局自注意力 O(N^2)=O(16M)。
+    """
+
+    def __init__(self, fpn_dim: int, dino_dim: int,
+                 n_ctx_tokens: int = 64, num_heads: int = 4):
+        super().__init__()
+        G = int(n_ctx_tokens ** 0.5)     # 8x8 grid
+        self.G = G
+        self.num_heads = num_heads
+        self.head_dim = fpn_dim // num_heads
+        self.scale = self.head_dim ** -0.5
+
+        # DINOv3 双时相特征 → 全局变化语义投影
+        self.dino_proj = nn.Sequential(
+            nn.Conv2d(dino_dim * 2, fpn_dim, 1, bias=False),
+            nn.BatchNorm2d(fpn_dim),
+            nn.SiLU(inplace=True),
+        )
+        # P2 query 投影
+        self.q_proj = nn.Conv2d(fpn_dim, fpn_dim, 1, bias=False)
+        # DINO token → key/value
+        self.kv_proj = nn.Linear(fpn_dim, fpn_dim * 2, bias=False)
+        # 输出投影
+        self.out_proj = nn.Sequential(
+            nn.Conv2d(fpn_dim, fpn_dim, 1, bias=False),
+            nn.BatchNorm2d(fpn_dim),
+        )
+        # 可学习门控，初始化为 0（训练初期不干扰已有特征）
+        self.gate = nn.Parameter(torch.zeros(1))
+
+    def forward(self, p2_feat: torch.Tensor,
+                dino_t1: torch.Tensor, dino_t2: torch.Tensor) -> torch.Tensor:
+        """
+        p2_feat : [B, C, H, W]    Detector P2 特征
+        dino_t1 : [B, D, h, w]    Encoder 返回的 t1 DINOv3 最深层特征
+        dino_t2 : [B, D, h, w]    Encoder 返回的 t2 DINOv3 最深层特征
+        """
+        B, C, H, W = p2_feat.shape
+
+        # 拼接双时相 DINO 特征 → 投影为 FPN 维度
+        dino_bi = torch.cat([dino_t1, dino_t2], dim=1)      # [B, 2D, h, w]
+        dino_ctx = self.dino_proj(dino_bi)                   # [B, C, h, w]
+
+        # 池化为少量全局 token
+        tokens = F.adaptive_avg_pool2d(dino_ctx, (self.G, self.G))  # [B, C, G, G]
+        tokens = tokens.flatten(2).permute(0, 2, 1)                  # [B, K, C]
+
+        # P2 → query
+        q = self.q_proj(p2_feat)                              # [B, C, H, W]
+        q = q.flatten(2).permute(0, 2, 1)                    # [B, N, C]
+        q = q.view(B, -1, self.num_heads, self.head_dim)     # [B, N, h, d]
+        q = q.permute(0, 2, 1, 3)                            # [B, h, N, d]
+
+        # DINO tokens → key, value
+        kv = self.kv_proj(tokens)                             # [B, K, 2C]
+        k, v = kv.chunk(2, dim=-1)
+        k = k.view(B, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+        v = v.view(B, -1, self.num_heads, self.head_dim).permute(0, 2, 1, 3)
+
+        # Cross-attention: [B, h, N, d] x [B, h, K, d]^T → [B, h, N, K]
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn.softmax(dim=-1)
+        out = (attn @ v).permute(0, 2, 1, 3).contiguous()    # [B, N, h, d]
+        out = out.view(B, H * W, C).permute(0, 2, 1).view(B, C, H, W)
+
+        out = self.out_proj(out)
+        return p2_feat + torch.tanh(self.gate) * out
 
 
 class Detector(nn.Module):
     def __init__(
         self,
         fpn_channels=128,
+        dino_embed_dim=384,
         n_layers=[1, 1, 1, 1],
         align_window=5,
         align_points=9,
@@ -251,7 +347,7 @@ class Detector(nn.Module):
         align_on_levels=None,
         align_qkv_bias=False,
         align_offset_groups=4,
-        directional_diff_expand=4.0,
+        contrast_pool_size=5,
         **kwargs,
     ):
         super().__init__()
@@ -275,18 +371,10 @@ class Detector(nn.Module):
             offset_groups=align_offset_groups,
             qkv_bias=align_qkv_bias,
         )
-        self.diff_mixer_p2 = DirectionalDiffMixer(
-            dim=fpn_channels, expand_ratio=directional_diff_expand
-        )
-        self.diff_mixer_p3 = DirectionalDiffMixer(
-            dim=fpn_channels, expand_ratio=directional_diff_expand
-        )
-        self.diff_mixer_p4 = DirectionalDiffMixer(
-            dim=fpn_channels, expand_ratio=directional_diff_expand
-        )
-        self.diff_mixer_p5 = DirectionalDiffMixer(
-            dim=fpn_channels, expand_ratio=directional_diff_expand
-        )
+        self.diff_p2 = ContrastAwareDiff(fpn_channels, pool_size=contrast_pool_size)
+        self.diff_p3 = ContrastAwareDiff(fpn_channels, pool_size=contrast_pool_size)
+        self.diff_p4 = ContrastAwareDiff(fpn_channels, pool_size=contrast_pool_size)
+        self.diff_p5 = ContrastAwareDiff(fpn_channels, pool_size=contrast_pool_size)
         self.p5_to_p4 = FuseGated(fpn_channels)
         self.p4_to_p3 = FuseGated(fpn_channels)
         self.p3_to_p2 = FuseGated(fpn_channels)
@@ -355,13 +443,18 @@ class Detector(nn.Module):
                 for _ in range(n_layers[3])
             ]
         )
+        self.dino_ctx = DinoContextBridge(fpn_channels, dino_embed_dim)
         self.p5_head = nn.Conv2d(fpn_channels, 2, 1)
         self.p4_head = nn.Conv2d(fpn_channels, 2, 1)
         self.p3_head = nn.Conv2d(fpn_channels, 2, 1)
         self.p2_head = nn.Conv2d(fpn_channels, 2, 1)
 
-    def forward(self, x1s, x2s, size=(256, 256)):
-        ### Extract backbone features
+    def forward(self, x1s, x2s, dino_t1, dino_t2, size=(256, 256)):
+        """
+        x1s, x2s  : Encoder 返回的 FPN 金字塔特征 (各 4 级)
+        dino_t1   : [B, D, h, w] t1 DINOv3 最深层原始特征
+        dino_t2   : [B, D, h, w] t2 DINOv3 最深层原始特征
+        """
         t1_p2, t1_p3, t1_p4, t1_p5 = x1s
         t2_p2, t2_p3, t2_p4, t2_p5 = x2s
 
@@ -374,10 +467,10 @@ class Detector(nn.Module):
         aligned_pre_p4 = t1_p4
         aligned_pre_p5 = t1_p5
 
-        diff_p2 = self.diff_mixer_p2(aligned_pre_p2, t2_p2)
-        diff_p3 = self.diff_mixer_p3(aligned_pre_p3, t2_p3)
-        diff_p4 = self.diff_mixer_p4(aligned_pre_p4, t2_p4)
-        diff_p5 = self.diff_mixer_p5(aligned_pre_p5, t2_p5)
+        diff_p2 = self.diff_p2(aligned_pre_p2, t2_p2)
+        diff_p3 = self.diff_p3(aligned_pre_p3, t2_p3)
+        diff_p4 = self.diff_p4(aligned_pre_p4, t2_p4)
+        diff_p5 = self.diff_p5(aligned_pre_p5, t2_p5)
 
         fea_p5 = self.tb5(diff_p5)
         pred_p5 = self.p5_head(fea_p5)
@@ -389,6 +482,7 @@ class Detector(nn.Module):
         pred_p3 = self.p3_head(fea_p3)
         fea_p2 = self.p3_to_p2(fea_p3, diff_p2)
         fea_p2 = self.tb2(fea_p2)
+        fea_p2 = self.dino_ctx(fea_p2, dino_t1, dino_t2)   # DINOv3 全局上下文直注
         pred_p2 = self.p2_head(fea_p2)
 
         pred_p2 = F.interpolate(
@@ -404,7 +498,7 @@ class Detector(nn.Module):
             pred_p5, size=size, mode="bilinear", align_corners=False
         )
 
-        return pred_p2, pred_p3, pred_p4, pred_p5
+        return pred_p2, pred_p3, pred_p4, pred_p5, fea_p2
 
 
 class ChangeModel(nn.Module):
@@ -419,8 +513,8 @@ class ChangeModel(nn.Module):
         align_on_levels=None,
         align_qkv_bias=False,
         align_offset_groups=4,
-        directional_diff_expand=4.0,
-        topo_grid_size=8,
+        contrast_pool_size=5,
+        topo_grid_size=16,
         topo_hidden_dim=128,
         topo_neighbor_k=12,
         topo_n_hops=2,
@@ -430,6 +524,7 @@ class ChangeModel(nn.Module):
         self.encoder = Encoder(backbone=backbone, fpn_channels=fpn_channels, **kwargs)
         self.detector = Detector(
             fpn_channels=fpn_channels,
+            dino_embed_dim=self.encoder.dino.embed_dim,
             n_layers=n_layers,
             align_window=align_window,
             align_points=align_points,
@@ -437,7 +532,7 @@ class ChangeModel(nn.Module):
             align_on_levels=align_on_levels,
             align_qkv_bias=align_qkv_bias,
             align_offset_groups=align_offset_groups,
-            directional_diff_expand=directional_diff_expand,
+            contrast_pool_size=contrast_pool_size,
             **kwargs,
         )
         self.refiner = FloodTopoRouter(
@@ -450,18 +545,22 @@ class ChangeModel(nn.Module):
 
     @torch.inference_mode()
     def _forward(self, x1, x2):
-        fea1 = self.encoder(x1)
-        fea2 = self.encoder(x2)
-        pred, _, _, _ = self.detector(fea1, fea2, x1.shape[-2:])
-        pred, _ = self.refiner(pred, fea1[0], fea2[0])
+        fea1, dino_deep1 = self.encoder(x1)
+        fea2, dino_deep2 = self.encoder(x2)
+        pred, _, _, _, det_p2_feat = self.detector(
+            fea1, fea2, dino_deep1, dino_deep2, x1.shape[-2:]
+        )
+        pred, _ = self.refiner(pred, det_p2_feat)
         return pred
 
     def forward(self, x1, x2, gt_mask=None):
-        fea1 = self.encoder(x1)
-        fea2 = self.encoder(x2)
+        fea1, dino_deep1 = self.encoder(x1)
+        fea2, dino_deep2 = self.encoder(x2)
 
-        preds = self.detector(fea1, fea2)
-        final_pred, topo_loss = self.refiner(
-            preds[0], fea1[0], fea2[0], gt_mask=gt_mask
+        pred_p2, pred_p3, pred_p4, pred_p5, det_p2_feat = self.detector(
+            fea1, fea2, dino_deep1, dino_deep2
         )
-        return final_pred, preds, topo_loss
+        final_pred, topo_loss = self.refiner(
+            pred_p2, det_p2_feat, gt_mask=gt_mask
+        )
+        return final_pred, (pred_p2, pred_p3, pred_p4, pred_p5), topo_loss

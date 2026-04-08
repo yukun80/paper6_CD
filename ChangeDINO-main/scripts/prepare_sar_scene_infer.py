@@ -33,6 +33,17 @@ class SceneMeta:
     dtype_post: str
 
 
+@dataclass(frozen=True)
+class StretchConfig:
+    """记录单路 PNG 拉伸配置，便于 pre/post 分开处理。"""
+
+    mode: str
+    low: float
+    high: float
+    value_min: float | None
+    value_max: float | None
+
+
 def build_parser(
     description: str = "Prepare SAR scene tiles for ChangeDINO inference",
     defaults: dict[str, object] | None = None,
@@ -45,8 +56,39 @@ def build_parser(
     parser.add_argument("--scene-tag", type=str, default="sar_scene", help="切片 id 前缀。")
     parser.add_argument("--tile-size", type=int, default=256)
     parser.add_argument("--stride", type=int, default=128)
+    parser.add_argument(
+        "--stretch-mode",
+        type=str,
+        choices=["percentile", "value"],
+        default="percentile",
+        help="PNG 切片拉伸方式：按分位数或按固定数值窗口裁剪。",
+    )
     parser.add_argument("--stretch-low", type=float, default=2.0)
     parser.add_argument("--stretch-high", type=float, default=98.0)
+    parser.add_argument("--value-min", type=float, default=None, help="固定数值拉伸下限，仅 stretch-mode=value 时生效。")
+    parser.add_argument("--value-max", type=float, default=None, help="固定数值拉伸上限，仅 stretch-mode=value 时生效。")
+    parser.add_argument(
+        "--pre-stretch-mode",
+        type=str,
+        choices=["percentile", "value"],
+        default=None,
+        help="可选：覆盖 pre-image 的 PNG 拉伸方式。",
+    )
+    parser.add_argument("--pre-stretch-low", type=float, default=None, help="可选：覆盖 pre-image 的百分位拉伸下限。")
+    parser.add_argument("--pre-stretch-high", type=float, default=None, help="可选：覆盖 pre-image 的百分位拉伸上限。")
+    parser.add_argument("--pre-value-min", type=float, default=None, help="可选：覆盖 pre-image 的固定数值拉伸下限。")
+    parser.add_argument("--pre-value-max", type=float, default=None, help="可选：覆盖 pre-image 的固定数值拉伸上限。")
+    parser.add_argument(
+        "--post-stretch-mode",
+        type=str,
+        choices=["percentile", "value"],
+        default=None,
+        help="可选：覆盖 post-image 的 PNG 拉伸方式。",
+    )
+    parser.add_argument("--post-stretch-low", type=float, default=None, help="可选：覆盖 post-image 的百分位拉伸下限。")
+    parser.add_argument("--post-stretch-high", type=float, default=None, help="可选：覆盖 post-image 的百分位拉伸上限。")
+    parser.add_argument("--post-value-min", type=float, default=None, help="可选：覆盖 post-image 的固定数值拉伸下限。")
+    parser.add_argument("--post-value-max", type=float, default=None, help="可选：覆盖 post-image 的固定数值拉伸上限。")
     parser.add_argument("--min-valid-ratio", type=float, default=0.01)
     parser.add_argument("--overwrite", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
@@ -64,6 +106,40 @@ def parse_args(
     return build_parser(description=description, defaults=defaults).parse_args(argv)
 
 
+def validate_stretch_config(name: str, config: StretchConfig) -> None:
+    """校验单路拉伸配置，避免 pre/post 混合覆盖时产生歧义。"""
+    if config.mode == "percentile":
+        if not 0.0 <= config.low < config.high <= 100.0:
+            raise ValueError(f"{name}: percentile stretch requires 0 <= low < high <= 100")
+        return
+
+    if config.value_min is None or config.value_max is None:
+        raise ValueError(f"{name}: value stretch requires value_min/value_max")
+    if not np.isfinite(config.value_min) or not np.isfinite(config.value_max):
+        raise ValueError(f"{name}: value_min/value_max must be finite")
+    if config.value_min >= config.value_max:
+        raise ValueError(f"{name}: value_min must be smaller than value_max")
+
+
+def resolve_stretch_config(args: argparse.Namespace, target: str) -> StretchConfig:
+    """将全局参数与 pre/post 专属参数合并为实际生效配置。"""
+    if target not in {"pre", "post"}:
+        raise ValueError(f"Unsupported stretch target: {target}")
+
+    mode = getattr(args, f"{target}_stretch_mode")
+    low = getattr(args, f"{target}_stretch_low")
+    high = getattr(args, f"{target}_stretch_high")
+    value_min = getattr(args, f"{target}_value_min")
+    value_max = getattr(args, f"{target}_value_max")
+    return StretchConfig(
+        mode=args.stretch_mode if mode is None else mode,
+        low=float(args.stretch_low if low is None else low),
+        high=float(args.stretch_high if high is None else high),
+        value_min=args.value_min if value_min is None else float(value_min),
+        value_max=args.value_max if value_max is None else float(value_max),
+    )
+
+
 def ensure_args(args: argparse.Namespace) -> None:
     if not args.src_root.is_dir():
         raise FileNotFoundError(f"Source root not found: {args.src_root}")
@@ -71,8 +147,18 @@ def ensure_args(args: argparse.Namespace) -> None:
         raise ValueError("--tile-size and --stride must be positive")
     if not 0.0 <= args.min_valid_ratio <= 1.0:
         raise ValueError("--min-valid-ratio must be within [0, 1]")
-    if not 0.0 <= args.stretch_low < args.stretch_high <= 100.0:
-        raise ValueError("--stretch-low/--stretch-high must satisfy 0 <= low < high <= 100")
+    validate_stretch_config(
+        "default stretch",
+        StretchConfig(
+            mode=args.stretch_mode,
+            low=float(args.stretch_low),
+            high=float(args.stretch_high),
+            value_min=args.value_min,
+            value_max=args.value_max,
+        ),
+    )
+    validate_stretch_config("pre stretch", resolve_stretch_config(args, "pre"))
+    validate_stretch_config("post stretch", resolve_stretch_config(args, "post"))
     if not args.scene_tag:
         raise ValueError("--scene-tag must be non-empty")
 
@@ -151,22 +237,27 @@ def build_valid_mask(
 def stretch_to_uint8(
     arr: np.ndarray,
     valid_mask: np.ndarray,
-    low: float,
-    high: float,
+    config: StretchConfig,
 ) -> np.ndarray:
     """仅基于有效像素做拉伸，保证 nodata 不污染分位点统计。"""
     out = np.zeros(arr.shape, dtype=np.uint8)
     if not np.any(valid_mask):
         return out
 
-    values = arr[valid_mask].astype(np.float32, copy=False)
-    lo = float(np.percentile(values, low))
-    hi = float(np.percentile(values, high))
-    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
-        lo = float(values.min())
-        hi = float(values.max())
-    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
-        return out
+    if config.mode == "value":
+        if config.value_min is None or config.value_max is None:
+            raise ValueError("value_min/value_max are required for fixed-value stretching")
+        lo = float(config.value_min)
+        hi = float(config.value_max)
+    else:
+        values = arr[valid_mask].astype(np.float32, copy=False)
+        lo = float(np.percentile(values, config.low))
+        hi = float(np.percentile(values, config.high))
+        if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+            lo = float(values.min())
+            hi = float(values.max())
+        if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+            return out
 
     scaled = np.zeros(arr.shape, dtype=np.float32)
     scaled[valid_mask] = np.clip((arr[valid_mask].astype(np.float32, copy=False) - lo) / (hi - lo), 0.0, 1.0)
@@ -229,6 +320,8 @@ def write_outputs(
     args: argparse.Namespace,
     scene: SceneMeta,
     windows: list[Window],
+    pre_stretch: StretchConfig,
+    post_stretch: StretchConfig,
 ) -> tuple[list[dict[str, object]], dict[str, int]]:
     """同时导出 PNG/TIF/valid_mask，并记录 manifest 行。"""
     manifest_rows: list[dict[str, object]] = []
@@ -253,8 +346,8 @@ def write_outputs(
             post_tif_rel = Path("test/B_tif") / f"{tile_id}.tif"
             valid_tif_rel = Path("test/valid_mask") / f"{tile_id}.tif"
 
-            pre_png = stretch_to_uint8(arr_pre, valid_mask, args.stretch_low, args.stretch_high)
-            post_png = stretch_to_uint8(arr_post, valid_mask, args.stretch_low, args.stretch_high)
+            pre_png = stretch_to_uint8(arr_pre, valid_mask, pre_stretch)
+            post_png = stretch_to_uint8(arr_post, valid_mask, post_stretch)
 
             write_png_rgb(pre_png, args.out_root / pre_png_rel, args.dry_run)
             write_png_rgb(post_png, args.out_root / post_png_rel, args.dry_run)
@@ -322,6 +415,8 @@ def write_report(
     kept_tiles: int,
     skipped_tiles: int,
     manifest_rows: list[dict[str, object]],
+    pre_stretch: StretchConfig,
+    post_stretch: StretchConfig,
 ) -> None:
     payload = {
         "source": {
@@ -341,11 +436,40 @@ def write_report(
             "scene_tag": args.scene_tag,
             "tile_size": args.tile_size,
             "stride": args.stride,
+            "stretch_mode": args.stretch_mode,
             "stretch_low": args.stretch_low,
             "stretch_high": args.stretch_high,
+            "value_min": args.value_min,
+            "value_max": args.value_max,
+            "pre_stretch_mode": args.pre_stretch_mode,
+            "pre_stretch_low": args.pre_stretch_low,
+            "pre_stretch_high": args.pre_stretch_high,
+            "pre_value_min": args.pre_value_min,
+            "pre_value_max": args.pre_value_max,
+            "post_stretch_mode": args.post_stretch_mode,
+            "post_stretch_low": args.post_stretch_low,
+            "post_stretch_high": args.post_stretch_high,
+            "post_value_min": args.post_value_min,
+            "post_value_max": args.post_value_max,
             "min_valid_ratio": args.min_valid_ratio,
             "strict": args.strict,
             "dry_run": args.dry_run,
+        },
+        "effective_stretch": {
+            "pre": {
+                "mode": pre_stretch.mode,
+                "low": pre_stretch.low,
+                "high": pre_stretch.high,
+                "value_min": pre_stretch.value_min,
+                "value_max": pre_stretch.value_max,
+            },
+            "post": {
+                "mode": post_stretch.mode,
+                "low": post_stretch.low,
+                "high": post_stretch.high,
+                "value_min": post_stretch.value_min,
+                "value_max": post_stretch.value_max,
+            },
         },
         "tile_counts": {
             "candidate_tiles": candidate_tiles,
@@ -373,6 +497,8 @@ def main(
     args.src_root = Path(args.src_root)
     args.out_root = Path(args.out_root)
     ensure_args(args)
+    pre_stretch = resolve_stretch_config(args, "pre")
+    post_stretch = resolve_stretch_config(args, "post")
 
     pre_path = args.src_root / args.pre_image
     post_path = args.src_root / args.post_image
@@ -381,7 +507,7 @@ def main(
 
     clean_output_root(args.out_root, args.overwrite, args.dry_run)
     prepare_dirs(args.out_root, args.dry_run)
-    manifest_rows, counters = write_outputs(args, scene, windows)
+    manifest_rows, counters = write_outputs(args, scene, windows, pre_stretch, post_stretch)
     write_manifest(args.out_root, manifest_rows, args.dry_run)
     write_report(
         args,
@@ -390,6 +516,8 @@ def main(
         kept_tiles=len(manifest_rows),
         skipped_tiles=counters["skipped_tiles"],
         manifest_rows=manifest_rows,
+        pre_stretch=pre_stretch,
+        post_stretch=post_stretch,
     )
 
     print(

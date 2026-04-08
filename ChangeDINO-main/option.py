@@ -107,6 +107,12 @@ class Options:
         )
         self.parser.add_argument("--load_pretrain", action='store_true')
         self.parser.add_argument(
+            "--contrast_pool_size",
+            type=int,
+            default=5,
+            help="ContrastAwareDiff 局部对比度估计的 AvgPool 核大小，需为奇数。",
+        )
+        self.parser.add_argument(
             "--topo_grid_size",
             type=int,
             default=16,
@@ -198,12 +204,6 @@ class Options:
             type=int,
             default=4,
             help="偏移预测卷积的 group 数，用于控制对齐模块开销。",
-        )
-        self.parser.add_argument(
-            "--directional_diff_expand",
-            type=float,
-            default=4.0,
-            help="定向差分混合器的通道扩张比例。",
         )
         self.parser.add_argument('--n_layers', nargs='+', type=int, default=[1, 1, 1, 1])
         self.parser.add_argument(

@@ -23,6 +23,18 @@ python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
 --overwrite
 
 python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
+--src-root datasets/GF3_Henan \
+--pre-image Pre_Zhengzhou_ascending_s1_radmatch.tif \
+--post-image Post_Zhengzhou_descending_clip.tif \
+--out-root datasets/GF3_Henan_CD_infer_pre_value_only \
+--tile-size 256 \
+--stride 128 \
+--pre-stretch-mode value \
+--pre-value-min 0.2 \
+--pre-value-max 2.0 \
+--overwrite
+
+python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
 --src-root datasets/GF3_Zhuozhou \
 --pre-image Pre_Zhuozhou_clip.tif \
 --post-image Post_Zhuozhou_clip.tif \

@@ -66,7 +66,7 @@ class Model(nn.Module):
             align_on_levels=opt.align_on_levels,
             align_qkv_bias=opt.align_qkv_bias,
             align_offset_groups=opt.align_offset_groups,
-            directional_diff_expand=opt.directional_diff_expand,
+            contrast_pool_size=getattr(opt, "contrast_pool_size", 5),
             topo_grid_size=getattr(opt, "topo_grid_size", 16),
             topo_hidden_dim=getattr(opt, "topo_hidden_dim", 128),
             topo_neighbor_k=getattr(opt, "topo_neighbor_k", 12),
@@ -81,14 +81,14 @@ class Model(nn.Module):
         self.dice = DICELoss()
         
 
-        # T2: 分层学习率/weight_decay —— norm 层 wd=0，refiner/detector head lr×5
+        # T2: 分层学习率/weight_decay —— norm 层 wd=0，topo_router/detector head lr×5
         norm_params, head_params, base_params = [], [], []
         for name, param in self.model.named_parameters():
             if not param.requires_grad:
                 continue
             if any(k in name for k in ("norm", "bn", ".bias")):
                 norm_params.append(param)
-            elif "refiner" in name or "detector" in name:
+            elif "topo_router" in name or "detector" in name:
                 head_params.append(param)
             else:
                 base_params.append(param)
@@ -119,17 +119,13 @@ class Model(nn.Module):
         print("---------- Networks initialized -------------")
 
     def forward(self, x1, x2, label):
-        gt_mask = label.float().unsqueeze(1)
-        final_pred, preds, topo_loss = self.model(x1, x2, gt_mask=gt_mask)
+        final_pred, preds, topo_loss = self.model(x1, x2, gt_mask=label)
         label = label.long()
         focal = self.focal(final_pred, label)
         dice = self.dice(final_pred, label)
         for i in range(len(preds)):
             focal += self.focal(preds[i], label)
             dice += 0.5 * self.dice(preds[i], label)
-
-        if topo_loss is None:
-            topo_loss = torch.tensor(0.0, device=x1.device)
 
         return final_pred, focal, dice, topo_loss
 
@@ -168,7 +164,7 @@ class Model(nn.Module):
                 "align_on_levels": [int(v) for v in self.opt.align_on_levels],
                 "align_qkv_bias": bool(self.opt.align_qkv_bias),
                 "align_offset_groups": int(self.opt.align_offset_groups),
-                "directional_diff_expand": float(self.opt.directional_diff_expand),
+                "contrast_pool_size": int(getattr(self.opt, "contrast_pool_size", 5)),
                 "topo_grid_size": int(getattr(self.opt, "topo_grid_size", 16)),
                 "topo_hidden_dim": int(getattr(self.opt, "topo_hidden_dim", 128)),
                 "topo_neighbor_k": int(getattr(self.opt, "topo_neighbor_k", 12)),
@@ -197,6 +193,25 @@ class Model(nn.Module):
 
     def save(self, model_name, backbone):
         self.save_ckpt(self.model, self.optimizer, model_name, backbone)
+
+    def save_epoch_ckpt(self, network, optimizer, model_name, backbone, epoch):
+        """每 N epoch 定期保存一次快照，文件名含 epoch 编号，与 best 权重互不覆盖。"""
+        save_filename = f"{model_name}_{backbone}_epoch{epoch}.pth"
+        save_path = os.path.join(self.save_dir, save_filename)
+        torch.save(
+            {
+                "network": network.cpu().state_dict(),
+                "optimizer": optimizer.state_dict(),
+                "meta": self._build_checkpoint_meta(),
+                "epoch": epoch,
+            },
+            save_path,
+        )
+        if torch.cuda.is_available():
+            network.cuda()
+
+    def save_periodic(self, model_name, backbone, epoch):
+        self.save_epoch_ckpt(self.model, self.optimizer, model_name, backbone, epoch)
 
     def name(self):
         return self.opt.name

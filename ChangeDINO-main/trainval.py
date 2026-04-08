@@ -51,8 +51,8 @@ class Trainval(object):
         self.previous_best = 0.0
         self.running_metric = ConfuseMatrixMeter(n_class=2)
         self.alpha = 0.5
-        self.topo_loss_weight = getattr(opt, "topo_loss_weight", 0.5)
-        self.topo_warmup_epochs = 20
+        self.topo_loss_weight = self.model.topo_loss_weight
+        self.topo_warmup_epochs = 10
         self.num_epochs = opt.num_epochs
 
         self.log_path = os.path.join(self.model.save_dir, "record.txt")
@@ -106,8 +106,7 @@ class Trainval(object):
         _topo_loss = 0.0
         last_lr = self.optimizer.param_groups[0]["lr"]
 
-        # F6: topo_loss 线性预热 —— 前 topo_warmup_epochs 从 0 增至 topo_loss_weight
-        topo_w = self.topo_loss_weight * min(1.0, epoch / max(1, self.topo_warmup_epochs))
+        topo_w = self.topo_loss_weight if epoch > self.topo_warmup_epochs else 0.0
 
         for i, data in enumerate(tbar):
             self.model.model.train()
@@ -115,7 +114,9 @@ class Trainval(object):
                 data["img1"].cuda(), data["img2"].cuda(), data["cd_label"].cuda()
             )
 
-            loss = focal * self.alpha + dice + topo_w * topo_loss
+            loss = focal * self.alpha + dice
+            if topo_loss is not None and topo_w > 0:
+                loss = loss + topo_w * topo_loss
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -123,7 +124,8 @@ class Trainval(object):
             _loss += loss.item()
             _focal_loss += focal.item()
             _dice_loss += dice.item()
-            _topo_loss += topo_loss.item()
+            if topo_loss is not None:
+                _topo_loss += topo_loss.item()
             last_lr = self.optimizer.param_groups[0]["lr"]
             del loss
 
@@ -205,5 +207,9 @@ if __name__ == "__main__":
         val_scores = trainval.val(epoch)
 
         trainval._append_log_line(epoch, train_stats, val_scores)
+
+        if epoch % 10 == 0:
+            trainval.model.save_periodic(opt.name, opt.backbone, epoch)
+            print(f"[INFO] Periodic checkpoint saved at epoch {epoch}")
 
     print("Done!")
