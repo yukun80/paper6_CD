@@ -8,7 +8,7 @@
 | 推理数据集 | GF3_Henan_CD_infer (郑州 GF-3 SAR 整景切片, 256×256, stride=128) |
 | 切片总数 | 5901 |
 | 二值化阈值 | 0.5 |
-| 源影像 | Pre_Zhengzhou_descending_clip.tif (7893×16422) |
+| 源影像 | Pre_Zhengzhou_ascending_s1_radmatch.tif + Post_Zhengzhou_descending_clip.tif |
 
 ## 精度对比表
 

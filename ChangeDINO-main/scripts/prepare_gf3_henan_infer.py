@@ -15,8 +15,8 @@ from prepare_sar_scene_infer import main as prepare_main
 """
 python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
 --src-root datasets/GF3_Henan \
---pre-image Pre_Zhengzhou_descending_clip.tif \
---post-image Post_Zhengzhou_descending_clip.tif \
+--pre-image Pre_ZhengzhouC_descending.tif \
+--post-image Post_ZhengzhouC_descending.tif \
 --out-root datasets/GF3_Henan_CD_infer \
 --tile-size 256 \
 --stride 128 \
@@ -49,7 +49,7 @@ def main() -> None:
     prepare_main(
         defaults={
             "src_root": "datasets/GF3_Henan",
-            "pre_image": "Pre_Zhengzhou_descending_clip.tif",
+            "pre_image": "Pre_Zhengzhou_ascending_s1_radmatch.tif",
             "post_image": "Post_Zhengzhou_descending_clip.tif",
             "out_root": "datasets/GF3_Henan_CD_infer",
             "scene_tag": "gf3_henan",

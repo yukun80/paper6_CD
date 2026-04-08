@@ -196,11 +196,26 @@ Use the S1GFloods-trained checkpoint to run tiled inference on the GF3 Henan pre
 ```bash
 python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
   --src-root datasets/GF3_Henan \
-  --pre-image Pre_Zhengzhou_descending_clip.tif \
+  --pre-image Pre_Zhengzhou_ascending_s1_radmatch.tif \
   --post-image Post_Zhengzhou_descending_clip.tif \
   --out-root datasets/GF3_Henan_CD_infer \
   --tile-size 256 \
   --stride 128 \
+  --overwrite
+```
+
+If the pre/post scenes need different PNG stretch policies, override them independently:
+```bash
+python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
+  --src-root datasets/GF3_Henan \
+  --pre-image Pre_Zhengzhou_ascending_s1_radmatch.tif \
+  --post-image Post_Zhengzhou_descending_clip.tif \
+  --out-root datasets/GF3_Henan_CD_infer_preclip \
+  --tile-size 256 \
+  --stride 128 \
+  --pre-stretch-mode value \
+  --pre-value-min 0.2 \
+  --pre-value-max 2.0 \
   --overwrite
 ```
 
@@ -235,42 +250,13 @@ python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
 
 Notes for GF3 Henan:
 - Tiles are saved as both `PNG` and `tif`: `PNG` is the actual model input to stay closer to S1GFloods training data, while `tif` preserves original float32 values and georeferencing.
+- Default PNG export uses percentile stretch `2/98` for both pre/post branches.
+- Pre/Post PNG export can now be controlled independently with `--pre-*` / `--post-*` stretch arguments; the `tif` sidecars always keep original float32 values.
 - Label back-fill also writes both `test/label/*.png` and `test/label_tif/*.tif`, and appends `label_png` / `label_tif` to `tile_manifest.csv`.
 - `valid_mask` is generated for every tile and is used during stitching so `nodata` pixels do not contribute to predictions.
 - Final outputs include `change_prob.tif`, `change_binary.tif`, and `change_binary.png`.
 - New checkpoints written by `trainval.py` carry `model_config` metadata, so the tiled inference script can auto-restore the trained DINO architecture and layer ids.
 - For old checkpoints without metadata, pass matching `--dino_arch` and `--dino_weight` explicitly during inference.
-
-### S1 Henan Whole-Scene Inference
-Use the same S1GFloods-trained checkpoint to run tiled inference on the Sentinel-1 Henan pre/post VH pair.
-
-1. Prepare PNG/TIF tiles with explicit valid masks:
-```bash
-python ChangeDINO-main/scripts/prepare_s1_henan_infer.py \
-  --src-root datasets/S1_Henan \
-  --pre-image Zhengzhou_S1GRD_ASCENDING_VH_pre.tif \
-  --post-image Zhengzhou_S1GRD_ASCENDING_VH_Post.tif \
-  --out-root datasets/S1_Henan_CD_infer \
-  --tile-size 256 \
-  --stride 128 \
-  --overwrite
-```
-
-2. Run tiled inference and stitch back to whole-scene outputs:
-```bash
-python ChangeDINO-main/scripts/infer_s1_henan_tiles.py \
-  --tiles-root datasets/S1_Henan_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/<resolved_run_name>/<resolved_run_name>_convnextv2_nano_best.pth \
-  --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
-  --gpu_ids 0 \
-  --batch_size 8 \
-  --output-dir ChangeDINO-main/outputs/s1_henan
-```
-
-Notes for S1 Henan:
-- Current defaults expect single-band Sentinel-1 VH tif inputs.
-- Pre/Post tif must share the same shape, CRS, transform, and nodata definition.
-- Final outputs include `change_prob.tif`, `change_binary.tif`, and `change_binary.png`.
 
 ## Test
 ```bash
