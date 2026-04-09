@@ -10,7 +10,7 @@ from model.blocks.dinov3_meta import DINO_ARCH_CHOICES, resolve_dino_arch, resol
 
 OPTICAL_MEAN = [0.430, 0.411, 0.296]
 OPTICAL_STD = [0.213, 0.156, 0.143]
-DEFAULT_BACKBONE_WEIGHT = "pretrained/convnextv2_nano_22k_224_ema.pt"
+DEFAULT_BACKBONE_WEIGHT = "pretrained/efficientnet_b0_ra-3dd342df.pth"
 
 
 def _resolve_repo_relative_path(path_str: str) -> str:
@@ -31,6 +31,47 @@ def _parse_float_list(values: List[str] | None, field_name: str) -> List[float] 
     if len(values) != 3:
         raise ValueError(f"{field_name} expects exactly 3 floats, got {len(values)}")
     return [float(v) for v in values]
+
+
+def _validate_backbone_weight_path(path_str: str) -> None:
+    suffixes = {s.lower() for s in Path(path_str).suffixes}
+    if not suffixes:
+        raise ValueError(
+            "--backbone_weight must point to a local PyTorch weight file (.pth/.pt), got path without suffix."
+        )
+    if suffixes & {".tar", ".gz", ".zip", ".ckpt", ".index"}:
+        raise ValueError(
+            "--backbone_weight must be a local PyTorch .pth/.pt file. TensorFlow/TPU checkpoints must be converted first."
+        )
+    if not (".pth" in suffixes or ".pt" in suffixes):
+        raise ValueError(
+            f"--backbone_weight must be a local PyTorch .pth/.pt file, got: {path_str}"
+        )
+
+
+def normalize_contrast_pool_sizes(
+    contrast_pool_sizes: List[int] | None,
+    contrast_pool_size: int | None,
+) -> List[int]:
+    """兼容旧单值参数与新分层参数，统一返回 P2/P3/P4/P5 四层配置。"""
+    if contrast_pool_sizes is not None:
+        sizes = [int(v) for v in contrast_pool_sizes]
+    elif contrast_pool_size is not None:
+        sizes = [int(contrast_pool_size)]
+    else:
+        sizes = [5, 5, 5, 5]
+
+    if len(sizes) == 1:
+        sizes = sizes * 4
+    elif len(sizes) != 4:
+        raise ValueError(
+            f"contrast_pool_sizes expects 1 or 4 ints, got {len(sizes)} values: {sizes}"
+        )
+
+    for size in sizes:
+        if size < 1 or size % 2 == 0:
+            raise ValueError(f"contrast pool size must be positive odd integer, got {size}")
+    return sizes
 
 
 def _load_stats_from_json(stats_path: Path) -> tuple[List[float], List[float]]:
@@ -109,8 +150,22 @@ class Options:
         self.parser.add_argument(
             "--contrast_pool_size",
             type=int,
-            default=5,
-            help="ContrastAwareDiff 局部对比度估计的 AvgPool 核大小，需为奇数。",
+            default=None,
+            help="兼容旧版本的单值池化核大小；若未指定 --contrast_pool_sizes，则复制到四层。",
+        )
+        self.parser.add_argument(
+            "--contrast_pool_sizes",
+            nargs="+",
+            type=int,
+            default=None,
+            help="ContrastAwareDiff 在 P2/P3/P4/P5 的局部池化核大小，可传 1 个或 4 个奇数。",
+        )
+        self.parser.add_argument(
+            "--refiner",
+            type=str,
+            default="topo",
+            choices=["topo", "hybrid"],
+            help="末端精修器：topo 仅做拓扑连通修复，hybrid 结合 p1 像素级 tiny flood 精修。",
         )
         self.parser.add_argument(
             "--topo_grid_size",
@@ -142,14 +197,25 @@ class Options:
             default=0.5,
             help="拓扑连通性损失权重。",
         )
+        self.parser.add_argument(
+            "--topo_min_node_occ",
+            type=float,
+            default=0.25,
+            help="拓扑损失中参与监督的最小节点占据率，低于该值的 tiny 节点不计入负样本。",
+        )
 
         self.parser.add_argument("--phase", type=str, default="train")
-        self.parser.add_argument("--backbone", type=str, default="convnextv2_nano")
+        self.parser.add_argument(
+            "--backbone",
+            type=str,
+            default="efficientnet_b0",
+            help="CNN backbone，支持 efficientnet_b0、mobilenetv2。",
+        )
         self.parser.add_argument(
             "--backbone_weight",
             type=str,
             default=DEFAULT_BACKBONE_WEIGHT,
-            help="CNN backbone 预训练权重路径；默认使用仓库内 ConvNeXtV2 nano 权重。",
+            help="CNN backbone 本地 PyTorch 预训练权重路径；不接受 TPU/TensorFlow 原始 checkpoint。",
         )
         self.parser.add_argument(
             "--dino_arch",
@@ -191,8 +257,8 @@ class Options:
             "--align_on_levels",
             nargs="+",
             type=int,
-            default=[2, 3],
-            help="在哪些金字塔层上启用 deformable soft-alignment，默认 p2/p3。",
+            default=[1, 2, 3],
+            help="在哪些金字塔层上启用 deformable soft-alignment，默认在 p1/p2/p3。",
         )
         self.parser.add_argument(
             "--align_qkv_bias",
@@ -204,6 +270,30 @@ class Options:
             type=int,
             default=4,
             help="偏移预测卷积的 group 数，用于控制对齐模块开销。",
+        )
+        self.parser.add_argument(
+            "--p2_window_size",
+            type=int,
+            default=8,
+            help="P2 层 OCDA 窗口大小，默认与稳定三模块版保持一致。",
+        )
+        self.parser.add_argument(
+            "--micro_gate",
+            action="store_true",
+            help="启用 DQ 风格动态微小目标门控，仅调节 P2/P3 差分与拓扑修正强度。",
+        )
+        self.parser.add_argument(
+            "--dino_collab_mode",
+            type=str,
+            default="multilevel_v2",
+            choices=["legacy", "multilevel_v2"],
+            help="DINO 与 CNN 的协同模式；multilevel_v2 启用 p1 gate + p3 bridge + p2 bridge。",
+        )
+        self.parser.add_argument(
+            "--branch_consistency_weight",
+            type=float,
+            default=0.1,
+            help="p2->p1 单向语义一致性损失权重，仅约束 non-tiny 区域。",
         )
         self.parser.add_argument('--n_layers', nargs='+', type=int, default=[1, 1, 1, 1])
         self.parser.add_argument(
@@ -243,7 +333,18 @@ class Options:
             default=None,
             help="3 通道归一化方差，优先级高于 --stats_file。",
         )
-
+        self.parser.add_argument(
+            "--tiny_area_thresh",
+            type=int,
+            default=100,
+            help="验证时 tiny flood 连通域面积阈值。",
+        )
+        self.parser.add_argument(
+            "--small_area_thresh",
+            type=int,
+            default=400,
+            help="验证时 small flood 连通域面积阈值。",
+        )
     def parse(self):
         self.init()
         self.opt = self.parser.parse_args()
@@ -267,9 +368,19 @@ class Options:
 
         self.opt.dino_weight = _resolve_repo_relative_path(self.opt.dino_weight)
         if self.opt.backbone_weight:
+            _validate_backbone_weight_path(self.opt.backbone_weight)
             self.opt.backbone_weight = _resolve_repo_relative_path(self.opt.backbone_weight)
         self.opt.dino_arch = resolve_dino_arch(self.opt.dino_arch, self.opt.dino_weight)
         self.opt.extract_ids = resolve_extract_ids(self.opt.dino_arch, self.opt.extract_ids)
+        self.opt.contrast_pool_sizes = normalize_contrast_pool_sizes(
+            self.opt.contrast_pool_sizes, self.opt.contrast_pool_size
+        )
+        if self.opt.p2_window_size < 1:
+            raise ValueError("--p2_window_size must be a positive integer")
+        if self.opt.branch_consistency_weight < 0:
+            raise ValueError("--branch_consistency_weight must be >= 0")
+        if self.opt.small_area_thresh < self.opt.tiny_area_thresh:
+            raise ValueError("--small_area_thresh must be >= --tiny_area_thresh")
         self.opt.mean, self.opt.std = resolve_norm_stats(self.opt)
 
         args = vars(self.opt)

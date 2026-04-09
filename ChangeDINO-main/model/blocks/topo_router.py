@@ -137,12 +137,14 @@ class FloodTopoRouter(nn.Module):
         neighbor_k: int = 12,
         n_hops: int = 2,
         line_samples: int = 16,
+        min_node_occ: float = 0.25,
     ):
         super().__init__()
         self.grid_size = grid_size
         self.neighbor_k = neighbor_k
         self.n_hops = n_hops
         self.line_samples = line_samples
+        self.min_node_occ = float(min_node_occ)
         N = grid_size * grid_size
 
         # ── Step 1：Detector P2 特征投影（已含对比度信号 + 全局上下文） ──
@@ -211,12 +213,14 @@ class FloodTopoRouter(nn.Module):
 
     def _sparse_message_passing(self, edge_scores: torch.Tensor,
                                 node_feat: torch.Tensor,
-                                node_act: torch.Tensor) -> torch.Tensor:
+                                node_act: torch.Tensor,
+                                node_keep: torch.Tensor) -> torch.Tensor:
         """基于 KNN 稀疏结构的特征空间消息传递，显存 O(N*K) 而非 O(N²)。
 
         edge_scores : [B, N, K]  每条边的连通性分数
         node_feat   : [B, N, D]  节点变化特征
         node_act    : [B, N]     原始标量洪水概率
+        node_keep   : [B, N]     节点保留系数，高风险 tiny 区域应减小拓扑修正
         returns     : enhanced_act [B, N]
         """
         B, N, D = node_feat.shape
@@ -229,10 +233,10 @@ class FloodTopoRouter(nn.Module):
             neighbor_feat = feat[:, self.knn_idx.view(-1)].view(B, N, K, D)
             # 加权聚合（稀疏，仅 K 个邻居）: [B, N, K, D] * [B, N, K, 1] -> sum -> [B, N, D]
             msg = (neighbor_feat * edge_scores.unsqueeze(-1)).sum(dim=2)
-            feat = feat + alpha_h * msg
+            feat = feat + alpha_h * node_keep.unsqueeze(-1) * msg
 
         act_delta = self.feat_to_act(feat).squeeze(-1)                # [B, N]
-        enhanced = (node_act + torch.tanh(act_delta)).clamp(0, 1)
+        enhanced = (node_act + node_keep * torch.tanh(act_delta)).clamp(0, 1)
         return enhanced
 
     # ------------------------------------------------------------------ #
@@ -244,7 +248,7 @@ class FloodTopoRouter(nn.Module):
         """从 GT mask 计算网格节点的连通性标签（纯标签，无需梯度）。
 
         gt_mask : [B, H, W] 或 [B, 1, H, W]，整型或浮点均可
-        returns : gt_edge_labels [B, N, K]  float ∈ {0, 1}
+        returns : (gt_edge_labels, valid_mask)
         """
         gt_mask = gt_mask.float()
         if gt_mask.ndim == 3:
@@ -279,20 +283,27 @@ class FloodTopoRouter(nn.Module):
         src_flood = (gt_node[:, src_idx.reshape(-1)]).view(B, N, K)
         tgt_flood = (gt_node[:, self.knn_idx.reshape(-1)]).view(B, N, K)
 
+        valid_mask = (
+            (src_flood >= self.min_node_occ).float()
+            * (tgt_flood >= self.min_node_occ).float()
+        )
         gt_connected = (
             (src_flood > 0.5).float()
             * (tgt_flood > 0.5).float()
             * (line_avg > 0.5).float()
         )
-        return gt_connected
+        return gt_connected, valid_mask
 
     def _topo_loss(self, edge_logits: torch.Tensor,
                    gt_mask: torch.Tensor) -> torch.Tensor:
         """拓扑连通性监督损失 (BCEWithLogitsLoss)。"""
-        gt_labels = self._compute_gt_connectivity(gt_mask)            # [B, N, K]
+        gt_labels, valid_mask = self._compute_gt_connectivity(gt_mask)            # [B, N, K]
+        if torch.count_nonzero(valid_mask).item() == 0:
+            return edge_logits.sum() * 0.0
         loss = F.binary_cross_entropy_with_logits(
-            edge_logits, gt_labels, reduction="mean"
+            edge_logits, gt_labels, reduction="none"
         )
+        loss = (loss * valid_mask).sum() / valid_mask.sum().clamp_min(1.0)
         return loss
 
     # ------------------------------------------------------------------ #
@@ -303,6 +314,7 @@ class FloodTopoRouter(nn.Module):
         self,
         logit_2ch: torch.Tensor,
         det_p2_feat: torch.Tensor,
+        risk_map: torch.Tensor | None = None,
         gt_mask: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
@@ -310,6 +322,7 @@ class FloodTopoRouter(nn.Module):
         ----------
         logit_2ch   : [B, 2, H, W]  Detector 输出的初步 2 类 logits
         det_p2_feat : [B, C, h, w]  Detector P2 特征（已含对比度信号 + 全局上下文）
+        risk_map    : [B, 1, h, w]  动态微小目标风险图，高风险区域减小拓扑修正
         gt_mask     : [B, 1, H, W]  训练时传入 GT 洪水 mask，推理时为 None
 
         Returns
@@ -328,6 +341,14 @@ class FloodTopoRouter(nn.Module):
                                 mode="bilinear", align_corners=False)
         node_act = F.adaptive_avg_pool2d(p_small, (G, G))            # [B,1,G,G]
         node_act_flat = node_act.view(B, -1)                         # [B, N]
+        if risk_map is None:
+            node_keep = node_act_flat.new_ones(node_act_flat.shape)
+        else:
+            risk_node = F.adaptive_avg_pool2d(
+                F.interpolate(risk_map, size=(h, w), mode="bilinear", align_corners=False),
+                (G, G),
+            ).view(B, -1)
+            node_keep = (1.0 - risk_node).clamp(0.0, 1.0)
 
         change_map = self.det_feat_proj(det_p2_feat)                  # [B, D, h, w]
         node_feat = F.adaptive_avg_pool2d(change_map, (G, G))        # [B, D, G, G]
@@ -340,7 +361,7 @@ class FloodTopoRouter(nn.Module):
 
         # ============ Step 3: 图路由双向精修（稀疏 KNN） ============
         enhanced = self._sparse_message_passing(
-            edge_scores, node_feat, node_act_flat
+            edge_scores, node_feat, node_act_flat, node_keep
         )                                                            # [B, N]
 
         connectivity = enhanced - node_act_flat                       # [B, N] 双向
@@ -358,6 +379,11 @@ class FloodTopoRouter(nn.Module):
         gate = torch.sigmoid(self.gate_net(gate_input))               # [B, 1, H, W]
 
         routing_delta = routing_map.clamp(0, 1) - p_fg                # [B, 1, H, W] 双向
+        if risk_map is not None:
+            topo_keep = 1.0 - F.interpolate(
+                risk_map, size=(H, W), mode="bilinear", align_corners=False
+            ).clamp(0.0, 1.0)
+            routing_delta = routing_delta * topo_keep
 
         alpha = torch.sigmoid(self.alpha_raw)
         refined_p = (p_fg + alpha * gate * routing_delta).clamp(1e-6, 1 - 1e-6)

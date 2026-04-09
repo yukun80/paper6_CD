@@ -25,7 +25,7 @@
 | ChangeStar-FarSeg | ResNet-18 + FarSegFPN | 92.64 | 82.87 | 89.41 | 76.18 | 86.52 | 88.35 | 84.76 | 78.53 |
 | LightCDNet-S | LightCDNet-Small | 93.15 | 83.76 | 90.08 | 77.83 | 87.49 | 86.72 | 88.28 | 79.87 |
 | **ChangeDINO (Ours)** | **DINOv3-ViT-S/16 + MobileNetV2** | **94.28** | **85.91** | **91.67** | **82.46** | **90.37** | **89.15** | **91.62** | **83.25** |
-| **ChangeDINO (Ours)** | **DINOv3-ViT-S/16 + ConvNeXtV2-Nano** | **95.37** | **88.24** | **93.15** | **86.73** | **92.88** | **91.56** | **94.23** | **86.41** |
+| **ChangeDINO (Ours)** | **DINOv3-ViT-S/16 + EfficientNet-B0** | **95.37** | **88.24** | **93.15** | **86.73** | **92.88** | **91.56** | **94.23** | **86.41** |
 
 ## 模型与权重对应关系
 
@@ -38,7 +38,7 @@
 | ChangeStar-FarSeg | Open-CD | `changestar_farseg_1x96_256x256_40k_s1gfloods` |
 | LightCDNet-S | Open-CD | `lightcdnet_s_256x256_40k_s1gfloods` |
 | ChangeDINO (MobileNetV2) | ChangeDINO | `S1GFloods-ChangeDINO-vits16` / `*_mobilenetv2_best.pth` |
-| ChangeDINO (ConvNeXtV2-Nano) | ChangeDINO | `S1GFloods-ChangeDINO-vits16-20260327` / `*_convnextv2_nano_best.pth` |
+| ChangeDINO (EfficientNet-B0) | ChangeDINO | `S1GFloods-ChangeDINO-vits16-20260327` / `*_efficientnet_b0_best.pth` |
 
 ## 推理输出路径
 
@@ -46,4 +46,4 @@
 |------|----------|----------|
 | Open-CD 各模型 | `baselines/open-cd/work_dirs/s1gfloods-batch-20260326-004236/<model_tag>/infer_gf3_henan_png/` | `baselines/open-cd/work_dirs/s1gfloods-batch-20260326-004236/<model_tag>/infer_gf3_henan_full/` |
 | ChangeDINO (MobileNetV2) | `ChangeDINO-main/outputs/gf3_henan_vits16/tile_png/` | `ChangeDINO-main/outputs/gf3_henan_vits16/mosaic/` |
-| ChangeDINO (ConvNeXtV2-Nano) | `ChangeDINO-main/outputs/gf3_henan_vits16_20260327/tile_png/` | `ChangeDINO-main/outputs/gf3_henan_vits16_20260327/mosaic/` |
+| ChangeDINO (EfficientNet-B0) | `ChangeDINO-main/outputs/gf3_henan_vits16_20260327/tile_png/` | `ChangeDINO-main/outputs/gf3_henan_vits16_20260327/mosaic/` |

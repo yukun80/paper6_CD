@@ -66,7 +66,9 @@ class Transforms(object):
 
         if random.random() < 0.5:
             i, j, h, w = transforms.RandomResizedCrop(size=(self.input_size, self.input_size)).get_params(
-                img=img1, scale=[0.333, 1.0], ratio=[0.75, 1.333]
+                img=img1,
+                scale=[0.333, 1.0],
+                ratio=[0.75, 1.333],
             )
             resize_size = (self.input_size, self.input_size)
             img1 = TF.resized_crop(
@@ -110,7 +112,5 @@ class Compose(object):
             format_string += '    {0}'.format(t)
         format_string += '\n)'
         return format_string
-
-
 
 

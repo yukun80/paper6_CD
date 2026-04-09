@@ -4,6 +4,7 @@ https://github.com/justchenhao/BIT_CD
 """
 
 import numpy as np
+from scipy import ndimage
 
 
 ###################       metrics      ###################
@@ -171,3 +172,46 @@ def get_mIoU(num_classes, label_gts, label_preds):
     confusion_matrix = get_confuse_matrix(num_classes, label_gts, label_preds)
     score_dict = cm2score(confusion_matrix)
     return score_dict["miou"]
+
+
+def init_component_recall_stats():
+    return {
+        "tiny": {"hit": 0, "total": 0},
+        "small": {"hit": 0, "total": 0},
+        "large": {"hit": 0, "total": 0},
+    }
+
+
+def update_component_recall_stats(
+    stats,
+    label_gt,
+    label_pred,
+    tiny_area_thresh: int = 100,
+    small_area_thresh: int = 400,
+):
+    structure = np.ones((3, 3), dtype=np.int8)
+    cc_map, n_components = ndimage.label(label_gt.astype(np.uint8) > 0, structure=structure)
+    for component_id in range(1, n_components + 1):
+        mask = cc_map == component_id
+        area = int(mask.sum())
+        if area <= 0:
+            continue
+        if area <= tiny_area_thresh:
+            bucket = "tiny"
+        elif area <= small_area_thresh:
+            bucket = "small"
+        else:
+            bucket = "large"
+        stats[bucket]["total"] += 1
+        stats[bucket]["hit"] += int(np.any(label_pred[mask] > 0))
+    return stats
+
+
+def component_recall_scores(stats):
+    scores = {}
+    for bucket, values in stats.items():
+        total = int(values["total"])
+        hit = int(values["hit"])
+        scores[f"{bucket}_gt_components"] = total
+        scores[f"{bucket}_recall"] = hit / total if total > 0 else 0.0
+    return scores

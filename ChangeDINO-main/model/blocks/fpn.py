@@ -63,20 +63,33 @@ class GenerateBeta(nn.Module):
 class FPN(nn.Module):
     def __init__(self, in_channels, out_channels=128, deform_groups=4, gamma_mode='SE', beta_mode='contextgatedconv'):
         super(FPN, self).__init__()
+        self.has_p1 = len(in_channels) == 5
+        if len(in_channels) not in {4, 5}:
+            raise ValueError(f"FPN expects 4 or 5 input stages, got {len(in_channels)}")
 
-        self.p2 = DCNv2(in_channels=in_channels[0], out_channels=out_channels,
+        if self.has_p1:
+            c1, c2, c3, c4, c5 = in_channels
+        else:
+            c2, c3, c4, c5 = in_channels
+
+        if self.has_p1:
+            self.p1 = DCNv2(in_channels=c1, out_channels=out_channels,
+                            kernel_size=3, padding=1, deform_groups=deform_groups)
+        self.p2 = DCNv2(in_channels=c2, out_channels=out_channels,
                         kernel_size=3, padding=1, deform_groups=deform_groups)
-        self.p3 = DCNv2(in_channels=in_channels[1], out_channels=out_channels,
+        self.p3 = DCNv2(in_channels=c3, out_channels=out_channels,
                         kernel_size=3, padding=1, deform_groups=deform_groups)
-        self.p4 = DCNv2(in_channels=in_channels[2], out_channels=out_channels,
+        self.p4 = DCNv2(in_channels=c4, out_channels=out_channels,
                         kernel_size=3, padding=1, deform_groups=deform_groups)
-        self.p5 = DCNv2(in_channels=in_channels[3], out_channels=out_channels,
+        self.p5 = DCNv2(in_channels=c5, out_channels=out_channels,
                         kernel_size=3, padding=1, deform_groups=deform_groups)
 
         self.p5_bn = nn.BatchNorm2d(out_channels, affine=True)
         self.p4_bn = nn.BatchNorm2d(out_channels, affine=False)
         self.p3_bn = nn.BatchNorm2d(out_channels, affine=False)
         self.p2_bn = nn.BatchNorm2d(out_channels, affine=False)
+        if self.has_p1:
+            self.p1_bn = nn.BatchNorm2d(out_channels, affine=False)
         self.activation = nn.ReLU(True)
 
         self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
@@ -86,13 +99,21 @@ class FPN(nn.Module):
         self.p3_beta = GenerateBeta(out_channels, mode=beta_mode)
         self.p2_Gamma = GenerateGamma(out_channels, mode=gamma_mode)
         self.p2_beta = GenerateBeta(out_channels, mode=beta_mode)
+        if self.has_p1:
+            self.p1_Gamma = GenerateGamma(out_channels, mode=gamma_mode)
+            self.p1_beta = GenerateBeta(out_channels, mode=beta_mode)
 
         self.p5_smooth = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         self.p4_smooth = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         self.p3_smooth = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         self.p2_smooth = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        if self.has_p1:
+            self.p1_smooth = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
     def forward(self, input):
-        c2, c3, c4, c5 = input
+        if self.has_p1:
+            c1, c2, c3, c4, c5 = input
+        else:
+            c2, c3, c4, c5 = input
 
         p5 = self.activation(self.p5_bn(self.p5(c5)))
         p5_up = F.interpolate(p5, size=c4.shape[-2:], mode='bilinear', align_corners=False)
@@ -107,12 +128,21 @@ class FPN(nn.Module):
         p2 = self.p2_bn(self.p2(c2))
         p2_gamma, p2_beta = self.p2_Gamma(p3_up), self.p2_beta(p3_up)
         p2 = self.activation(p2 * (1 + p2_gamma) + p2_beta)
+        if self.has_p1:
+            p2_up = F.interpolate(p2, size=c1.shape[-2:], mode='bilinear', align_corners=False)
+            p1 = self.p1_bn(self.p1(c1))
+            p1_gamma, p1_beta = self.p1_Gamma(p2_up), self.p1_beta(p2_up)
+            p1 = self.activation(p1 * (1 + p1_gamma) + p1_beta)
 
         p5 = self.p5_smooth(p5)
         p4 = self.p4_smooth(p4)
         p3 = self.p3_smooth(p3)
         p2 = self.p2_smooth(p2)
+        if self.has_p1:
+            p1 = self.p1_smooth(p1)
 
+        if self.has_p1:
+            return p1, p2, p3, p4, p5
         return p2, p3, p4, p5
     
 ###############################################################################

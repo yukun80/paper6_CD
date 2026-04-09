@@ -27,7 +27,13 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from model.create_ChangeDINO import create_model  # noqa: E402
 from model.blocks.dinov3_meta import get_dino_arch_spec, resolve_dino_arch, resolve_extract_ids  # noqa: E402
-from option import DEFAULT_BACKBONE_WEIGHT, Options, resolve_norm_stats  # noqa: E402
+from option import (  # noqa: E402
+    DEFAULT_BACKBONE_WEIGHT,
+    Options,
+    _validate_backbone_weight_path,
+    normalize_contrast_pool_sizes,
+    resolve_norm_stats,
+)
 
 
 PROB_NODATA = -1.0
@@ -46,16 +52,23 @@ INFER_MODEL_CONFIG_FIELDS = {
     "align_on_levels",
     "align_qkv_bias",
     "align_offset_groups",
+    "p2_window_size",
+    "micro_gate",
+    "dino_collab_mode",
+    "branch_consistency_weight",
+    "refiner",
+    "contrast_pool_sizes",
     "contrast_pool_size",
     "topo_grid_size",
     "topo_hidden_dim",
     "topo_neighbor_k",
     "topo_n_hops",
+    "topo_min_node_occ",
     "dino_arch",
     "dino_weight",
     "extract_ids",
 }
-SUPPORTED_BACKBONES = {"mobilenetv2", "convnextv2_nano"}
+SUPPORTED_BACKBONES = {"mobilenetv2", "efficientnet_b0"}
 
 
 class TileDataset(Dataset):
@@ -110,7 +123,7 @@ def build_parser(
         dataset="S1GFloods_CD_DINO",
         batch_size=8,
         num_workers=4,
-        backbone="convnextv2_nano",
+        backbone="efficientnet_b0",
         backbone_weight=DEFAULT_BACKBONE_WEIGHT,
         stats_file="datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json",
     )
@@ -121,7 +134,7 @@ def build_parser(
         type=Path,
         default=Path(
             "ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/"
-            "S1GFloods-ChangeDINO-vitl16_convnextv2_nano_best.pth"
+            "S1GFloods-ChangeDINO-vitl16_efficientnet_b0_best.pth"
         ),
         help="trainval_s1gfloods.sh 训练得到的 checkpoint 路径。",
     )
@@ -209,6 +222,13 @@ def infer_checkpoint_model_config_from_state_dict(state_dict: dict[str, torch.Te
     """兼容旧 checkpoint：从参数形状反推关键模型配置。"""
     cfg: dict[str, object] = {}
 
+    def _infer_ocda_window_size(rel_pos_shape: int) -> int | None:
+        for window_size in range(1, 65):
+            rel_size = window_size + int(window_size * 0.5)
+            if 2 * rel_size - 1 == rel_pos_shape:
+                return window_size
+        return None
+
     cls_key = "encoder.dino.model.cls_token"
     if cls_key in state_dict:
         embed_dim = int(state_dict[cls_key].shape[-1])
@@ -230,10 +250,15 @@ def infer_checkpoint_model_config_from_state_dict(state_dict: dict[str, torch.Te
         offset_weight = state_dict[offset_key]
         cfg["deform_groups"] = int(offset_weight.shape[0] // 27)
         in_channels = int(offset_weight.shape[1])
-        if in_channels == 24:
+        p4_in_channels = int(state_dict.get("encoder.fpn.p4.conv_offset.weight", torch.empty(0)).shape[1]) if "encoder.fpn.p4.conv_offset.weight" in state_dict else None
+        if in_channels == 24 and p4_in_channels == 96:
             cfg["backbone"] = "mobilenetv2"
+        elif in_channels == 24 and p4_in_channels == 112:
+            cfg["backbone"] = "efficientnet_b0"
         elif in_channels == 80:
-            cfg["backbone"] = "convnextv2_nano"
+            raise ValueError(
+                "This checkpoint was trained with convnextv2_nano, which is no longer supported in the ChangeDINO main path."
+            )
 
     n_layers = []
     for prefix in ("detector.tb5", "detector.tb4", "detector.tb3", "detector.tb2"):
@@ -244,9 +269,30 @@ def infer_checkpoint_model_config_from_state_dict(state_dict: dict[str, torch.Te
         n_layers.append(depth)
     if n_layers:
         cfg["n_layers"] = n_layers
+    cfg["contrast_pool_sizes"] = [5, 5, 5, 5]
+
+    tb2_rel_key = "detector.tb2.0.spatial_attn.rel_pos_emb.rel_height"
+    if tb2_rel_key in state_dict:
+        inferred_p2_window = _infer_ocda_window_size(int(state_dict[tb2_rel_key].shape[0]))
+        if inferred_p2_window is not None:
+            cfg["p2_window_size"] = inferred_p2_window
+
+    if any(key.startswith("refiner.topo_net") for key in state_dict):
+        cfg["refiner"] = "topo"
+    if any(key.startswith("refiner.contrast_refiner") for key in state_dict):
+        cfg["refiner"] = "hybrid"
+    if any(key.startswith("detector.micro_gate.tiny_head") for key in state_dict):
+        cfg["micro_gate"] = True
+    cfg["dino_collab_mode"] = "legacy"
+    cfg["branch_consistency_weight"] = 0.0
+    if any(key.startswith("detector.p1_dino_gate") for key in state_dict) or any(
+        key.startswith("detector.p3_dino_ctx") for key in state_dict
+    ):
+        cfg["dino_collab_mode"] = "multilevel_v2"
+        cfg["branch_consistency_weight"] = 0.1
 
     if "backbone" not in cfg:
-        cfg["backbone"] = "convnextv2_nano"
+        cfg["backbone"] = "efficientnet_b0"
     if "gamma_mode" not in cfg:
         cfg["gamma_mode"] = "SE"
     if "beta_mode" not in cfg:
@@ -317,10 +363,30 @@ def parse_and_prepare(
     opt, used_checkpoint_model_config = apply_checkpoint_model_config(
         opt, checkpoint_model_config, explicit_overrides
     )
+    if (
+        checkpoint_model_config
+        and "dino_collab_mode" not in checkpoint_model_config
+        and "dino_collab_mode" not in explicit_overrides
+    ):
+        opt.dino_collab_mode = "legacy"
+    if (
+        checkpoint_model_config
+        and "branch_consistency_weight" not in checkpoint_model_config
+        and "branch_consistency_weight" not in explicit_overrides
+    ):
+        opt.branch_consistency_weight = 0.0
+    opt.contrast_pool_sizes = normalize_contrast_pool_sizes(
+        getattr(opt, "contrast_pool_sizes", None), getattr(opt, "contrast_pool_size", None)
+    )
+    if not hasattr(opt, "dino_collab_mode"):
+        opt.dino_collab_mode = "multilevel_v2"
+    if checkpoint_model_config is None:
+        opt.dino_collab_mode = "legacy"
+        opt.branch_consistency_weight = 0.0
     if opt.backbone not in SUPPORTED_BACKBONES:
         raise NotImplementedError(
             f"Unsupported backbone from CLI/checkpoint: {opt.backbone}. "
-            "Only mobilenetv2 and convnextv2_nano are supported."
+            "Only mobilenetv2 and efficientnet_b0 are supported."
         )
 
     if inferred_checkpoint_model_config is not None:
@@ -340,6 +406,7 @@ def parse_and_prepare(
         if candidate.is_file():
             opt.dino_weight = str(candidate)
     if opt.backbone_weight:
+        _validate_backbone_weight_path(str(opt.backbone_weight))
         backbone_weight = Path(opt.backbone_weight)
         if not backbone_weight.is_absolute():
             candidate = (PROJECT_ROOT / backbone_weight).resolve()
@@ -630,11 +697,21 @@ def main(
             "align_on_levels": [int(v) for v in opt.align_on_levels],
             "align_qkv_bias": bool(opt.align_qkv_bias),
             "align_offset_groups": int(opt.align_offset_groups),
-            "contrast_pool_size": int(getattr(opt, "contrast_pool_size", 5)),
+            "p2_window_size": int(getattr(opt, "p2_window_size", 8)),
+            "micro_gate": bool(getattr(opt, "micro_gate", False)),
+            "dino_collab_mode": getattr(opt, "dino_collab_mode", "multilevel_v2"),
+            "branch_consistency_weight": float(
+                getattr(opt, "branch_consistency_weight", 0.1)
+            ),
+            "refiner": getattr(opt, "refiner", "topo"),
+            "contrast_pool_sizes": [
+                int(v) for v in getattr(opt, "contrast_pool_sizes", [5, 5, 5, 5])
+            ],
             "topo_grid_size": int(getattr(opt, "topo_grid_size", 16)),
             "topo_hidden_dim": int(getattr(opt, "topo_hidden_dim", 128)),
             "topo_neighbor_k": int(getattr(opt, "topo_neighbor_k", 12)),
             "topo_n_hops": int(getattr(opt, "topo_n_hops", 2)),
+            "topo_min_node_occ": float(getattr(opt, "topo_min_node_occ", 0.25)),
             "dino_arch": opt.dino_arch,
             "dino_weight": str(opt.dino_weight),
             "extract_ids": [int(v) for v in opt.extract_ids],

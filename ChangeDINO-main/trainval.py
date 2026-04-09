@@ -4,7 +4,12 @@ from data.cd_dataset import DataLoader
 from model.create_ChangeDINO import create_model
 from tqdm import tqdm
 import math
-from util.metric_tool import ConfuseMatrixMeter
+from util.metric_tool import (
+    ConfuseMatrixMeter,
+    component_recall_scores,
+    init_component_recall_stats,
+    update_component_recall_stats,
+)
 import os
 import json
 import numpy as np
@@ -66,7 +71,9 @@ class Trainval(object):
                     "# name: %s | backbone: %s\n"
                     % (opt.name, getattr(opt, "backbone", "NA"))
                 )
-                f.write("# time,epoch,train_loss,train_focal,train_dice,train_topo,lr,")
+                f.write(
+                    "# time,epoch,train_loss,train_focal,train_dice,train_topo,train_consistency,lr,"
+                )
                 f.write("val_metrics(json)\n")
     
     def _append_log_line(self, epoch: int, train_stats: dict, val_scores: dict):
@@ -78,6 +85,7 @@ class Trainval(object):
             f"{train_stats.get('focal', float('nan')):.6f},"
             f"{train_stats.get('dice', float('nan')):.6f},"
             f"{train_stats.get('topo', float('nan')):.6f},"
+            f"{train_stats.get('consistency', float('nan')):.6f},"
             f"{train_stats.get('lr', float('nan')):.8f},"
             + json.dumps(val_scores, ensure_ascii=False)
             + "\n"
@@ -104,19 +112,25 @@ class Trainval(object):
         _focal_loss = 0.0
         _dice_loss = 0.0
         _topo_loss = 0.0
+        _consistency_loss = 0.0
         last_lr = self.optimizer.param_groups[0]["lr"]
 
         topo_w = self.topo_loss_weight if epoch > self.topo_warmup_epochs else 0.0
+        consistency_w = float(getattr(self.model, "branch_consistency_weight", 0.0))
 
         for i, data in enumerate(tbar):
             self.model.model.train()
-            pred, focal, dice, topo_loss = self.model(
-                data["img1"].cuda(), data["img2"].cuda(), data["cd_label"].cuda()
+            pred, focal, dice, topo_loss, consistency_loss = self.model(
+                data["img1"].cuda(),
+                data["img2"].cuda(),
+                data["cd_label"].cuda(),
             )
 
-            loss = focal * self.alpha + dice
+            loss = focal + dice
             if topo_loss is not None and topo_w > 0:
                 loss = loss + topo_w * topo_loss
+            if consistency_loss is not None and consistency_w > 0:
+                loss = loss + consistency_w * consistency_loss
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -126,16 +140,19 @@ class Trainval(object):
             _dice_loss += dice.item()
             if topo_loss is not None:
                 _topo_loss += topo_loss.item()
+            if consistency_loss is not None:
+                _consistency_loss += consistency_loss.item()
             last_lr = self.optimizer.param_groups[0]["lr"]
             del loss
 
             tbar.set_description(
-                "L:%.3f F:%.3f D:%.3f T:%.3f LR:%.6f"
+                "L:%.3f F:%.3f D:%.3f T:%.3f C:%.3f LR:%.6f"
                 % (
                     _loss / (i + 1),
                     _focal_loss / (i + 1),
                     _dice_loss / (i + 1),
                     _topo_loss / (i + 1),
+                    _consistency_loss / (i + 1),
                     last_lr,
                 )
             )
@@ -152,12 +169,14 @@ class Trainval(object):
             "focal": _focal_loss / n,
             "dice": _dice_loss / n,
             "topo": _topo_loss / n,
+            "consistency": _consistency_loss / n,
             "lr": last_lr,
         }
 
     def val(self, epoch):
         tbar = tqdm(self.val_data, ncols=80)
         self.running_metric.clear()
+        component_stats = init_component_recall_stats()
         opt.phase = "val"
         self.model.eval()
 
@@ -171,6 +190,16 @@ class Trainval(object):
                 _ = self.running_metric.update_cm(
                     pr=val_pred.cpu().numpy(), gt=val_target.cpu().numpy()
                 )
+                pred_np = val_pred.cpu().numpy()
+                gt_np = val_target.cpu().numpy()
+                for pred_item, gt_item in zip(pred_np, gt_np):
+                    update_component_recall_stats(
+                        component_stats,
+                        gt_item,
+                        pred_item,
+                        tiny_area_thresh=int(getattr(self.opt, "tiny_area_thresh", 100)),
+                        small_area_thresh=int(getattr(self.opt, "small_area_thresh", 400)),
+                    )
                 if i == len(tbar) - 1:
                     self._plot_cd_result(
                         _data["img1"],
@@ -181,14 +210,19 @@ class Trainval(object):
                         "val",
                     )
             val_scores = self.running_metric.get_scores()
+            val_scores.update(component_recall_scores(component_stats))
             message = "(phase: %s) " % (self.opt.phase)
             for k, v in val_scores.items():
-                message += "%s: %.3f " % (k, v * 100)
+                if k.endswith("_components"):
+                    message += "%s: %d " % (k, int(v))
+                else:
+                    message += "%s: %.3f " % (k, v * 100)
             print(message)
 
-        if val_scores.get("iou_1", 0.0) >= self.previous_best:
+        current_best = float(val_scores.get("iou_1", 0.0))
+        if current_best >= self.previous_best:
             self.model.save(self.opt.name, self.opt.backbone)
-            self.previous_best = val_scores["iou_1"]
+            self.previous_best = current_best
 
         return val_scores
 

@@ -1,8 +1,6 @@
 from .ChangeDINO import ChangeModel
 import torch
 from torch import nn
-import torch.nn.functional as F
-from einops import rearrange
 import os
 import torch.optim as optim
 from datetime import datetime
@@ -10,7 +8,7 @@ from .loss.focal import FocalLoss
 from .loss.dice import DICELoss
 
 
-def get_model(backbone_name="convnextv2_nano", fpn_channels=128, n_layers=[1, 1, 1, 1], **kwargs):
+def get_model(backbone_name="efficientnet_b0", fpn_channels=128, n_layers=[1, 1, 1, 1], **kwargs):
     model = ChangeModel(backbone_name, fpn_channels, n_layers=n_layers, **kwargs)
     # print(model)
     return model
@@ -66,51 +64,32 @@ class Model(nn.Module):
             align_on_levels=opt.align_on_levels,
             align_qkv_bias=opt.align_qkv_bias,
             align_offset_groups=opt.align_offset_groups,
-            contrast_pool_size=getattr(opt, "contrast_pool_size", 5),
+            contrast_pool_sizes=getattr(opt, "contrast_pool_sizes", [5, 5, 5, 5]),
+            p2_window_size=getattr(opt, "p2_window_size", 8),
+            refiner=getattr(opt, "refiner", "topo"),
+            micro_gate=getattr(opt, "micro_gate", False),
+            dino_collab_mode=getattr(opt, "dino_collab_mode", "multilevel_v2"),
+            branch_consistency_weight=float(getattr(opt, "branch_consistency_weight", 0.1)),
             topo_grid_size=getattr(opt, "topo_grid_size", 16),
             topo_hidden_dim=getattr(opt, "topo_hidden_dim", 128),
             topo_neighbor_k=getattr(opt, "topo_neighbor_k", 12),
             topo_n_hops=getattr(opt, "topo_n_hops", 2),
+            topo_min_node_occ=getattr(opt, "topo_min_node_occ", 0.25),
             dino_arch=opt.dino_arch,
             extract_ids=opt.extract_ids,
             dino_weight=opt.dino_weight,
             device=self.device,
         )
         self.topo_loss_weight = getattr(opt, "topo_loss_weight", 0.5)
+        self.branch_consistency_weight = float(getattr(opt, "branch_consistency_weight", 0.1))
+        self.aux_head_weights = [1.0, 1.0, 0.5, 0.25, 0.25]
         self.focal = FocalLoss(alpha=opt.alpha, gamma=opt.gamma)
         self.dice = DICELoss()
-        
-
-        # T2: 分层学习率/weight_decay —— norm 层 wd=0，topo_router/detector head lr×5
-        norm_params, head_params, base_params = [], [], []
-        for name, param in self.model.named_parameters():
-            if not param.requires_grad:
-                continue
-            if any(k in name for k in ("norm", "bn", ".bias")):
-                norm_params.append(param)
-            elif "topo_router" in name or "detector" in name:
-                head_params.append(param)
-            else:
-                base_params.append(param)
-
-        self.optimizer = optim.AdamW([
-            {"params": base_params, "lr": opt.lr, "weight_decay": opt.weight_decay},
-            {"params": norm_params, "lr": opt.lr, "weight_decay": 0.0},
-            {"params": head_params, "lr": opt.lr * 5, "weight_decay": opt.weight_decay},
-        ])
-
-        # T1: 5 epoch 线性预热 + CosineAnnealing
-        warmup_epochs = 5
-        warmup_scheduler = optim.lr_scheduler.LinearLR(
-            self.optimizer, start_factor=0.01, total_iters=warmup_epochs
+        self.optimizer = optim.AdamW(
+            self.model.parameters(), lr=opt.lr, weight_decay=opt.weight_decay
         )
-        cosine_scheduler = optim.lr_scheduler.CosineAnnealingLR(
-            self.optimizer, T_max=max(1, opt.num_epochs - warmup_epochs), eta_min=1e-7
-        )
-        self.schedular = optim.lr_scheduler.SequentialLR(
-            self.optimizer,
-            schedulers=[warmup_scheduler, cosine_scheduler],
-            milestones=[warmup_epochs],
+        self.schedular = optim.lr_scheduler.CosineAnnealingLR(
+            self.optimizer, opt.num_epochs, eta_min=1e-7
         )
         if opt.load_pretrain:
             self.load_ckpt(self.model, self.optimizer, opt.name, opt.backbone)
@@ -119,15 +98,14 @@ class Model(nn.Module):
         print("---------- Networks initialized -------------")
 
     def forward(self, x1, x2, label):
-        final_pred, preds, topo_loss = self.model(x1, x2, gt_mask=label)
+        final_pred, preds, topo_loss, consistency_loss = self.model(x1, x2, gt_mask=label)
         label = label.long()
-        focal = self.focal(final_pred, label)
+        focal = 0.5 * self.focal(final_pred, label)
         dice = self.dice(final_pred, label)
-        for i in range(len(preds)):
-            focal += self.focal(preds[i], label)
-            dice += 0.5 * self.dice(preds[i], label)
-
-        return final_pred, focal, dice, topo_loss
+        for weight, pred in zip(self.aux_head_weights, preds):
+            focal += 0.5 * weight * self.focal(pred, label)
+            dice += weight * self.dice(pred, label)
+        return final_pred, focal, dice, topo_loss, consistency_loss
 
     @torch.inference_mode()
     def inference(self, x1, x2):
@@ -144,7 +122,25 @@ class Model(nn.Module):
             checkpoint = torch.load(
                 save_path, map_location=self.device, weights_only=True
             )
-            network.load_state_dict(checkpoint["network"], strict=False)
+            state_dict = checkpoint["network"]
+            current_state = network.state_dict()
+            filtered_state = {}
+            skipped = []
+            for key, value in state_dict.items():
+                if key not in current_state:
+                    continue
+                if current_state[key].shape != value.shape:
+                    skipped.append(
+                        (key, tuple(value.shape), tuple(current_state[key].shape))
+                    )
+                    continue
+                filtered_state[key] = value
+            network.load_state_dict(filtered_state, strict=False)
+            if skipped:
+                print(
+                    "skip incompatible pretrain keys:",
+                    [f"{key}:{src}->{dst}" for key, src, dst in skipped[:5]],
+                )
             print("load pre-trained")
 
     def _build_checkpoint_meta(self):
@@ -164,11 +160,21 @@ class Model(nn.Module):
                 "align_on_levels": [int(v) for v in self.opt.align_on_levels],
                 "align_qkv_bias": bool(self.opt.align_qkv_bias),
                 "align_offset_groups": int(self.opt.align_offset_groups),
-                "contrast_pool_size": int(getattr(self.opt, "contrast_pool_size", 5)),
+                "contrast_pool_sizes": [
+                    int(v) for v in getattr(self.opt, "contrast_pool_sizes", [5, 5, 5, 5])
+                ],
+                "p2_window_size": int(getattr(self.opt, "p2_window_size", 8)),
+                "refiner": getattr(self.opt, "refiner", "topo"),
+                "micro_gate": bool(getattr(self.opt, "micro_gate", False)),
+                "dino_collab_mode": getattr(self.opt, "dino_collab_mode", "multilevel_v2"),
+                "branch_consistency_weight": float(
+                    getattr(self.opt, "branch_consistency_weight", 0.1)
+                ),
                 "topo_grid_size": int(getattr(self.opt, "topo_grid_size", 16)),
                 "topo_hidden_dim": int(getattr(self.opt, "topo_hidden_dim", 128)),
                 "topo_neighbor_k": int(getattr(self.opt, "topo_neighbor_k", 12)),
                 "topo_n_hops": int(getattr(self.opt, "topo_n_hops", 2)),
+                "topo_min_node_occ": float(getattr(self.opt, "topo_min_node_occ", 0.25)),
                 "dino_arch": self.opt.dino_arch,
                 "dino_weight": self.opt.dino_weight,
                 "extract_ids": [int(v) for v in self.opt.extract_ids],

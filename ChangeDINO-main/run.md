@@ -1,31 +1,64 @@
-# ── 默认训练（ContrastAwareDiff + FloodTopoRouter 双向精修版，batch=8）──
-RUN_NAME=S1GFloods-topo-b8 \
-BATCH_SIZE=8 \
+# ── 默认训练（第二阶段主线：hybrid + micro_gate + multilevel_v2，batch=6）──
+RUN_NAME=S1GFloods-hybrid-mv2-b6 \
+BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
+BATCH_SIZE=4 \
 bash ChangeDINO-main/trainval_s1gfloods.sh
 
 # ── 大 batch 训练 ──
-RUN_NAME=S1GFloods-topo-b12 \
-BATCH_SIZE=12 \
+RUN_NAME=S1GFloods-hybrid-mv2-b10 \
+BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
+BATCH_SIZE=10 \
 bash ChangeDINO-main/trainval_s1gfloods.sh
 
-# ── 自定义拓扑参数 ──
-RUN_NAME=S1GFloods-topo-g8k8 \
-BATCH_SIZE=8 \
+# ── 调整拓扑图粒度 ──
+RUN_NAME=S1GFloods-hybrid-mv2-g8k8-b6 \
+BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
+BATCH_SIZE=6 \
 TOPO_GRID=8 TOPO_K=8 \
 bash ChangeDINO-main/trainval_s1gfloods.sh
 
-# ── 自定义对比度池化核大小 ──
-RUN_NAME=S1GFloods-topo-pool7 \
-BATCH_SIZE=8 \
+# ── 退回旧版单层 DINO 协同（兼容对比）──
+RUN_NAME=S1GFloods-hybrid-legacy-b6 \
+BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
+BATCH_SIZE=6 \
+DINO_COLLAB_MODE=legacy \
+BRANCH_CONSISTENCY_WEIGHT=0.0 \
+bash ChangeDINO-main/trainval_s1gfloods.sh
+
+# ── 关闭动态微小目标门控（消融对比）──
+RUN_NAME=S1GFloods-hybrid-mv2-nomicro-b6 \
+BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
+BATCH_SIZE=6 \
+MICRO_GATE=0 \
+bash ChangeDINO-main/trainval_s1gfloods.sh
+
+# ── 自定义分层对比度池化核大小（P2/P3/P4/P5）──
+RUN_NAME=S1GFloods-hybrid-mv2-p3555-b6 \
+BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
+BATCH_SIZE=6 \
 bash ChangeDINO-main/trainval_s1gfloods.sh \
-  --contrast_pool_size 7
+  --contrast_pool_sizes 3 5 5 5
 
-# ── 串行对比实验 ──
-RUN_NAME=S1GFloods-topo-b8  BATCH_SIZE=8  bash ChangeDINO-main/trainval_s1gfloods.sh && \
-RUN_NAME=S1GFloods-topo-b16 BATCH_SIZE=16 bash ChangeDINO-main/trainval_s1gfloods.sh
+# ── 更低显存备选：保持结构不变，仅进一步降 batch ──
+RUN_NAME=S1GFloods-hybrid-mv2-b4 \
+BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
+BATCH_SIZE=4 \
+bash ChangeDINO-main/trainval_s1gfloods.sh
 
-# 训练结束后对比
-grep -h "iou_1" \
-  ChangeDINO-main/checkpoints/S1GFloods-topo-b8-*/record.txt \
-  ChangeDINO-main/checkpoints/S1GFloods-topo-b16-*/record.txt \
+# ── 串行对比实验：legacy vs multilevel_v2 ──
+RUN_NAME=S1GFloods-hybrid-legacy-b6 \
+BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
+BATCH_SIZE=6 \
+DINO_COLLAB_MODE=legacy \
+BRANCH_CONSISTENCY_WEIGHT=0.0 \
+bash ChangeDINO-main/trainval_s1gfloods.sh && \
+RUN_NAME=S1GFloods-hybrid-mv2-b6 \
+BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
+BATCH_SIZE=6 \
+bash ChangeDINO-main/trainval_s1gfloods.sh
+
+# 训练结束后对比：默认按 iou_1 选 best checkpoint
+grep -hE "iou_1|F1_1|recall_1|precision_1|tiny_recall_1|small_recall_1|large_recall_1" \
+  ChangeDINO-main/checkpoints/S1GFloods-hybrid-legacy-b6-*/record.txt \
+  ChangeDINO-main/checkpoints/S1GFloods-hybrid-mv2-b6-*/record.txt \
   | sort -t',' -k3 -rn | head -5
