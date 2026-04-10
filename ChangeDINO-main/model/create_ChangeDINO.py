@@ -69,11 +69,14 @@ class Model(nn.Module):
             refiner=getattr(opt, "refiner", "topo"),
             micro_gate=getattr(opt, "micro_gate", False),
             dino_collab_mode=getattr(opt, "dino_collab_mode", "multilevel_v2"),
-            branch_consistency_weight=float(getattr(opt, "branch_consistency_weight", 0.1)),
+            branch_consistency_weight=float(getattr(opt, "branch_consistency_weight", 0.05)),
+            consistency_warmup_epochs=int(getattr(opt, "consistency_warmup_epochs", 15)),
             topo_grid_size=getattr(opt, "topo_grid_size", 16),
             topo_hidden_dim=getattr(opt, "topo_hidden_dim", 128),
             topo_neighbor_k=getattr(opt, "topo_neighbor_k", 12),
-            topo_n_hops=getattr(opt, "topo_n_hops", 2),
+            topo_neighbor_mode=getattr(opt, "topo_neighbor_mode", "mixed"),
+            topo_long_offsets=getattr(opt, "topo_long_offsets", [2, 4]),
+            topo_n_hops=getattr(opt, "topo_n_hops", 3),
             topo_min_node_occ=getattr(opt, "topo_min_node_occ", 0.25),
             dino_arch=opt.dino_arch,
             extract_ids=opt.extract_ids,
@@ -81,7 +84,7 @@ class Model(nn.Module):
             device=self.device,
         )
         self.topo_loss_weight = getattr(opt, "topo_loss_weight", 0.5)
-        self.branch_consistency_weight = float(getattr(opt, "branch_consistency_weight", 0.1))
+        self.branch_consistency_weight = float(getattr(opt, "branch_consistency_weight", 0.05))
         self.aux_head_weights = [1.0, 1.0, 0.5, 0.25, 0.25]
         self.focal = FocalLoss(alpha=opt.alpha, gamma=opt.gamma)
         self.dice = DICELoss()
@@ -97,8 +100,10 @@ class Model(nn.Module):
 
         print("---------- Networks initialized -------------")
 
-    def forward(self, x1, x2, label):
-        final_pred, preds, topo_loss, consistency_loss = self.model(x1, x2, gt_mask=label)
+    def forward(self, x1, x2, label, epoch: int | None = None):
+        final_pred, preds, topo_loss, consistency_loss = self.model(
+            x1, x2, gt_mask=label, current_epoch=epoch
+        )
         label = label.long()
         focal = 0.5 * self.focal(final_pred, label)
         dice = self.dice(final_pred, label)
@@ -168,12 +173,19 @@ class Model(nn.Module):
                 "micro_gate": bool(getattr(self.opt, "micro_gate", False)),
                 "dino_collab_mode": getattr(self.opt, "dino_collab_mode", "multilevel_v2"),
                 "branch_consistency_weight": float(
-                    getattr(self.opt, "branch_consistency_weight", 0.1)
+                    getattr(self.opt, "branch_consistency_weight", 0.05)
+                ),
+                "consistency_warmup_epochs": int(
+                    getattr(self.opt, "consistency_warmup_epochs", 15)
                 ),
                 "topo_grid_size": int(getattr(self.opt, "topo_grid_size", 16)),
                 "topo_hidden_dim": int(getattr(self.opt, "topo_hidden_dim", 128)),
                 "topo_neighbor_k": int(getattr(self.opt, "topo_neighbor_k", 12)),
-                "topo_n_hops": int(getattr(self.opt, "topo_n_hops", 2)),
+                "topo_neighbor_mode": getattr(self.opt, "topo_neighbor_mode", "mixed"),
+                "topo_long_offsets": [
+                    int(v) for v in getattr(self.opt, "topo_long_offsets", [2, 4])
+                ],
+                "topo_n_hops": int(getattr(self.opt, "topo_n_hops", 3)),
                 "topo_min_node_occ": float(getattr(self.opt, "topo_min_node_occ", 0.25)),
                 "dino_arch": self.opt.dino_arch,
                 "dino_weight": self.opt.dino_weight,

@@ -186,9 +186,23 @@ class Options:
             help="每个网格节点的 KNN 邻居数。",
         )
         self.parser.add_argument(
+            "--topo_neighbor_mode",
+            type=str,
+            default="mixed",
+            choices=["knn", "mixed"],
+            help="FloodTopoRouter 的邻接模式：knn 为纯局部近邻，mixed 额外加入轴向长边。",
+        )
+        self.parser.add_argument(
+            "--topo_long_offsets",
+            nargs="+",
+            type=int,
+            default=[2, 4],
+            help="mixed 邻接下的轴向长边偏移量，单位为网格单元。",
+        )
+        self.parser.add_argument(
             "--topo_n_hops",
             type=int,
-            default=2,
+            default=3,
             help="图消息传递跳数，控制洪水证据传播范围。",
         )
         self.parser.add_argument(
@@ -292,8 +306,14 @@ class Options:
         self.parser.add_argument(
             "--branch_consistency_weight",
             type=float,
-            default=0.1,
+            default=0.05,
             help="p2->p1 单向语义一致性损失权重，仅约束 non-tiny 区域。",
+        )
+        self.parser.add_argument(
+            "--consistency_warmup_epochs",
+            type=int,
+            default=15,
+            help="前若干个 epoch 不启用 p2->p1 一致性损失，避免 early-stage 错误 tiny prior 误约束。",
         )
         self.parser.add_argument('--n_layers', nargs='+', type=int, default=[1, 1, 1, 1])
         self.parser.add_argument(
@@ -379,6 +399,13 @@ class Options:
             raise ValueError("--p2_window_size must be a positive integer")
         if self.opt.branch_consistency_weight < 0:
             raise ValueError("--branch_consistency_weight must be >= 0")
+        if self.opt.consistency_warmup_epochs < 0:
+            raise ValueError("--consistency_warmup_epochs must be >= 0")
+        if not getattr(self.opt, "topo_long_offsets", None):
+            self.opt.topo_long_offsets = [2, 4]
+        self.opt.topo_long_offsets = [int(v) for v in self.opt.topo_long_offsets if int(v) > 0]
+        if self.opt.topo_neighbor_mode == "mixed" and not self.opt.topo_long_offsets:
+            raise ValueError("--topo_long_offsets must contain at least one positive integer when mode=mixed")
         if self.opt.small_area_thresh < self.opt.tiny_area_thresh:
             raise ValueError("--small_area_thresh must be >= --tiny_area_thresh")
         self.opt.mean, self.opt.std = resolve_norm_stats(self.opt)

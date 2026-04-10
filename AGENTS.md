@@ -52,7 +52,7 @@ python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
 
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-ChangeDINO-vitl16/S1GFloods-ChangeDINO-vitl16_convnextv2_nano_best.pth \
+  --checkpoint ChangeDINO-main/checkpoints/<resolved_run_name>/<resolved_run_name>_efficientnet_b0_best.pth \
   --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
   --gpu_ids 0 \
   --batch_size 8 \
@@ -71,8 +71,8 @@ python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
   --pre-value-max 2.0 \
   --overwrite
 
-# Default ConvNeXtV2 nano local weight
-# Place at: ChangeDINO-main/pretrained/convnextv2_nano_22k_224_ema.pt
+# Default EfficientNet-B0 local weight
+# Place at: ChangeDINO-main/pretrained/efficientnet_b0_ra-3dd342df.pth
 
 # Optional dependency
 pip install kornia
@@ -107,10 +107,19 @@ pip install kornia
   - `ChangeDINO-main/trainval_s1gfloods.sh`
 - `S1GFloods` labels are binary flood-change labels; dataset preparation scripts convert mask semantics to training-ready format.
 - Keep `--dataset` and `--stats_file` naming consistent with the actual output directory.
-- Current default CNN backbone is `convnextv2_nano`.
-- Default local backbone weight path is `ChangeDINO-main/pretrained/convnextv2_nano_22k_224_ema.pt`.
-- Only `convnextv2_nano` and `mobilenetv2` are supported; `resnet18d` must not be used as current spec.
-- Current SAR refiner is `FloodTopoRouter`; topology-related options live in `option.py` (`--topo_grid_size`, `--topo_hidden_dim`, `--topo_neighbor_k`, `--topo_n_hops`, `--topo_loss_weight`).
+- Current default CNN backbone is `efficientnet_b0`.
+- Default local backbone weight path is `ChangeDINO-main/pretrained/efficientnet_b0_ra-3dd342df.pth`.
+- Only `efficientnet_b0` and `mobilenetv2` are supported in the current main path; old `convnextv2_nano` checkpoints are deprecated and must not be used as current spec.
+- Current SAR mainline is `efficientnet_b0 + multilevel_v2 DINO collaboration + hybrid refiner`.
+- The current detector/refiner stack includes:
+  - native `p1-p5` CNN pyramid,
+  - `Deformable Soft-Alignment` on `p1/p2/p3`,
+  - `ContrastAwareDiff` with spatial+channel gate,
+  - `DinoTokenBridge` on `p3/p2` plus `P1DinoSemanticGate`,
+  - `DynamicMicroGate` with 3-route tiny prior (`mean_abs_p1`, `mean_abs_p2_up`, `signed local contrast delta`),
+  - `HybridRefiner` with `FloodTopoRouter`.
+- Topology-related options live in `option.py`, including `--topo_grid_size`, `--topo_hidden_dim`, `--topo_neighbor_k`, `--topo_neighbor_mode`, `--topo_long_offsets`, `--topo_n_hops`, and `--topo_loss_weight`.
+- Current training defaults also include `--micro_gate`, `--dino_collab_mode multilevel_v2`, `--branch_consistency_weight 0.05`, and `--consistency_warmup_epochs 15` via `trainval_s1gfloods.sh`.
 - Current whole-scene inference entrypoint is the generic SAR tiling/stitching chain (`prepare_*_infer.py` -> `infer_gf3_henan_tiles.py` / `infer_sar_scene_tiles.py`), not the removed `prepare_s1_henan_infer.py` / `infer_s1_henan_tiles.py`.
 - PNG tile export now supports both global and pre/post-specific stretch controls; by default both branches still use percentile stretch `2/98`.
 

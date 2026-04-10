@@ -124,6 +124,7 @@ class Trainval(object):
                 data["img1"].cuda(),
                 data["img2"].cuda(),
                 data["cd_label"].cuda(),
+                epoch=epoch,
             )
 
             loss = focal + dice

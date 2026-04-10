@@ -56,12 +56,15 @@ INFER_MODEL_CONFIG_FIELDS = {
     "micro_gate",
     "dino_collab_mode",
     "branch_consistency_weight",
+    "consistency_warmup_epochs",
     "refiner",
     "contrast_pool_sizes",
     "contrast_pool_size",
     "topo_grid_size",
     "topo_hidden_dim",
     "topo_neighbor_k",
+    "topo_neighbor_mode",
+    "topo_long_offsets",
     "topo_n_hops",
     "topo_min_node_occ",
     "dino_arch",
@@ -285,6 +288,9 @@ def infer_checkpoint_model_config_from_state_dict(state_dict: dict[str, torch.Te
         cfg["micro_gate"] = True
     cfg["dino_collab_mode"] = "legacy"
     cfg["branch_consistency_weight"] = 0.0
+    cfg["consistency_warmup_epochs"] = 0
+    cfg["topo_neighbor_mode"] = "knn"
+    cfg["topo_long_offsets"] = []
     if any(key.startswith("detector.p1_dino_gate") for key in state_dict) or any(
         key.startswith("detector.p3_dino_ctx") for key in state_dict
     ):
@@ -317,7 +323,7 @@ def apply_checkpoint_model_config(
         if field not in checkpoint_model_config:
             continue
         value = checkpoint_model_config[field]
-        if field in {"n_layers", "extract_ids", "align_on_levels"} and value is not None:
+        if field in {"n_layers", "extract_ids", "align_on_levels", "topo_long_offsets"} and value is not None:
             value = [int(v) for v in value]
         setattr(opt, field, value)
     return opt, True
@@ -375,6 +381,24 @@ def parse_and_prepare(
         and "branch_consistency_weight" not in explicit_overrides
     ):
         opt.branch_consistency_weight = 0.0
+    if (
+        checkpoint_model_config
+        and "consistency_warmup_epochs" not in checkpoint_model_config
+        and "consistency_warmup_epochs" not in explicit_overrides
+    ):
+        opt.consistency_warmup_epochs = 0
+    if (
+        checkpoint_model_config
+        and "topo_neighbor_mode" not in checkpoint_model_config
+        and "topo_neighbor_mode" not in explicit_overrides
+    ):
+        opt.topo_neighbor_mode = "knn"
+    if (
+        checkpoint_model_config
+        and "topo_long_offsets" not in checkpoint_model_config
+        and "topo_long_offsets" not in explicit_overrides
+    ):
+        opt.topo_long_offsets = []
     opt.contrast_pool_sizes = normalize_contrast_pool_sizes(
         getattr(opt, "contrast_pool_sizes", None), getattr(opt, "contrast_pool_size", None)
     )
@@ -383,6 +407,9 @@ def parse_and_prepare(
     if checkpoint_model_config is None:
         opt.dino_collab_mode = "legacy"
         opt.branch_consistency_weight = 0.0
+        opt.consistency_warmup_epochs = 0
+        opt.topo_neighbor_mode = "knn"
+        opt.topo_long_offsets = []
     if opt.backbone not in SUPPORTED_BACKBONES:
         raise NotImplementedError(
             f"Unsupported backbone from CLI/checkpoint: {opt.backbone}. "
@@ -701,7 +728,10 @@ def main(
             "micro_gate": bool(getattr(opt, "micro_gate", False)),
             "dino_collab_mode": getattr(opt, "dino_collab_mode", "multilevel_v2"),
             "branch_consistency_weight": float(
-                getattr(opt, "branch_consistency_weight", 0.1)
+                getattr(opt, "branch_consistency_weight", 0.05)
+            ),
+            "consistency_warmup_epochs": int(
+                getattr(opt, "consistency_warmup_epochs", 15)
             ),
             "refiner": getattr(opt, "refiner", "topo"),
             "contrast_pool_sizes": [
@@ -710,7 +740,11 @@ def main(
             "topo_grid_size": int(getattr(opt, "topo_grid_size", 16)),
             "topo_hidden_dim": int(getattr(opt, "topo_hidden_dim", 128)),
             "topo_neighbor_k": int(getattr(opt, "topo_neighbor_k", 12)),
-            "topo_n_hops": int(getattr(opt, "topo_n_hops", 2)),
+            "topo_neighbor_mode": getattr(opt, "topo_neighbor_mode", "mixed"),
+            "topo_long_offsets": [
+                int(v) for v in getattr(opt, "topo_long_offsets", [2, 4])
+            ],
+            "topo_n_hops": int(getattr(opt, "topo_n_hops", 3)),
             "topo_min_node_occ": float(getattr(opt, "topo_min_node_occ", 0.25)),
             "dino_arch": opt.dino_arch,
             "dino_weight": str(opt.dino_weight),

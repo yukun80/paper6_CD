@@ -234,7 +234,7 @@ class ContrastAwareDiff(nn.Module):
         super().__init__()
         self.local_pool = nn.AvgPool2d(pool_size, stride=1, padding=pool_size // 2)
         self.contrast_branch = self._build_branch(dim)
-        self.gate = self._build_gate(dim)
+        self.gate = SpatialChannelGate(dim)
 
         self.tiny_local_pool = None
         self.tiny_contrast_branch = None
@@ -244,7 +244,7 @@ class ContrastAwareDiff(nn.Module):
                 tiny_pool_size, stride=1, padding=tiny_pool_size // 2
             )
             self.tiny_contrast_branch = self._build_branch(dim)
-            self.tiny_gate = self._build_gate(dim)
+            self.tiny_gate = SpatialChannelGate(dim)
             nn.init.zeros_(self.tiny_contrast_branch[-1].weight)
             nn.init.zeros_(self.tiny_contrast_branch[-1].bias)
 
@@ -256,16 +256,6 @@ class ContrastAwareDiff(nn.Module):
             nn.SiLU(inplace=True),
             nn.Conv2d(dim, dim, 1, bias=False),
             nn.BatchNorm2d(dim),
-        )
-
-    @staticmethod
-    def _build_gate(dim: int) -> nn.Sequential:
-        return nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(dim, dim // 4, 1),
-            nn.SiLU(inplace=True),
-            nn.Conv2d(dim // 4, dim, 1),
-            nn.Sigmoid(),
         )
 
     def _contrast_residual(
@@ -304,6 +294,30 @@ class ContrastAwareDiff(nn.Module):
             risk_map, size=abs_diff.shape[-2:], mode="bilinear", align_corners=False
         ).clamp(0.0, 1.0)
         return abs_diff + (1.0 - risk) * coarse_residual + risk * tiny_residual
+
+
+class SpatialChannelGate(nn.Module):
+    """同时保留通道选择与空间显著性，避免 tiny flood 在全局池化中被抹平。"""
+
+    def __init__(self, dim: int):
+        super().__init__()
+        hidden_dim = max(dim // 4, 8)
+        self.channel_gate = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(dim, hidden_dim, 1),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(hidden_dim, dim, 1),
+        )
+        self.spatial_gate = nn.Sequential(
+            nn.Conv2d(dim, dim, 3, padding=1, groups=dim, bias=False),
+            nn.BatchNorm2d(dim),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(dim, dim, 1, bias=True),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        gate = self.channel_gate(x) + self.spatial_gate(x)
+        return torch.sigmoid(gate)
 
 
 class DinoTokenBridge(nn.Module):
@@ -430,22 +444,38 @@ class DynamicMicroGate(nn.Module):
 
     def __init__(self, dim: int, hidden_dim: int = 64):
         super().__init__()
+        self.local_pool = nn.AvgPool2d(5, stride=1, padding=2)
         self.tiny_head = nn.Sequential(
-            nn.Conv2d(dim * 2, hidden_dim, 3, padding=1, bias=False),
+            nn.Conv2d(3, hidden_dim, 3, padding=1, bias=False),
             nn.BatchNorm2d(hidden_dim),
             nn.SiLU(inplace=True),
             nn.Conv2d(hidden_dim, 1, 1, bias=True),
         )
         nn.init.zeros_(self.tiny_head[-1].weight)
-        nn.init.constant_(self.tiny_head[-1].bias, -2.0)
+        nn.init.constant_(self.tiny_head[-1].bias, -1.0)
 
     def forward(
-        self, abs_diff_p1: torch.Tensor, abs_diff_p2: torch.Tensor, p3_size: tuple[int, int]
+        self,
+        aligned_pre_p1: torch.Tensor,
+        post_p1: torch.Tensor,
+        abs_diff_p2: torch.Tensor,
+        p3_size: tuple[int, int],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        abs_diff_p1 = torch.abs(aligned_pre_p1 - post_p1)
         p2_up = F.interpolate(
             abs_diff_p2, size=abs_diff_p1.shape[-2:], mode="bilinear", align_corners=False
         )
-        tiny_prior_p1 = torch.sigmoid(self.tiny_head(torch.cat([abs_diff_p1, p2_up], dim=1)))
+        mean_abs_p1 = abs_diff_p1.mean(dim=1, keepdim=True)
+        mean_abs_p2_up = p2_up.mean(dim=1, keepdim=True)
+        pre_mean = aligned_pre_p1.mean(dim=1, keepdim=True)
+        post_mean = post_p1.mean(dim=1, keepdim=True)
+        signed_delta_p1 = (post_mean - self.local_pool(post_mean)) - (
+            pre_mean - self.local_pool(pre_mean)
+        )
+        micro_feat = torch.cat(
+            [mean_abs_p1, mean_abs_p2_up, signed_delta_p1], dim=1
+        )
+        tiny_prior_p1 = torch.sigmoid(self.tiny_head(micro_feat))
         risk_p2 = F.interpolate(
             tiny_prior_p1, size=abs_diff_p2.shape[-2:], mode="bilinear", align_corners=False
         )
@@ -647,10 +677,9 @@ class Detector(nn.Module):
         risk_p2 = None
         risk_p3 = None
         if self.micro_gate is not None:
-            abs_diff_p1 = torch.abs(aligned_pre_p1 - t2_p1)
             abs_diff_p2 = torch.abs(aligned_pre_p2 - t2_p2)
             tiny_prior_p1, risk_p2, risk_p3 = self.micro_gate(
-                abs_diff_p1, abs_diff_p2, t2_p3.shape[-2:]
+                aligned_pre_p1, t2_p1, abs_diff_p2, t2_p3.shape[-2:]
             )
 
         diff_p1 = self.diff_p1(aligned_pre_p1, t2_p1, risk_map=tiny_prior_p1)
@@ -723,18 +752,22 @@ class ChangeModel(nn.Module):
         refiner="topo",
         micro_gate=False,
         dino_collab_mode="multilevel_v2",
-        branch_consistency_weight=0.1,
+        branch_consistency_weight=0.05,
+        consistency_warmup_epochs=15,
         topo_grid_size=16,
         topo_hidden_dim=128,
         topo_neighbor_k=12,
-        topo_n_hops=2,
+        topo_n_hops=3,
         topo_min_node_occ=0.25,
+        topo_neighbor_mode="mixed",
+        topo_long_offsets=(2, 4),
         **kwargs,
     ):
         super().__init__()
         self.refiner_mode = refiner
         self.dino_collab_mode = dino_collab_mode
         self.branch_consistency_weight = float(branch_consistency_weight)
+        self.consistency_warmup_epochs = int(consistency_warmup_epochs)
         self.encoder = Encoder(backbone=backbone, fpn_channels=fpn_channels, **kwargs)
         self.detector = Detector(
             fpn_channels=fpn_channels,
@@ -758,6 +791,8 @@ class ChangeModel(nn.Module):
             "neighbor_k": topo_neighbor_k,
             "n_hops": topo_n_hops,
             "min_node_occ": topo_min_node_occ,
+            "neighbor_mode": topo_neighbor_mode,
+            "long_offsets": topo_long_offsets,
         }
         if refiner == "topo":
             self.refiner = FloodTopoRouter(feat_dim=fpn_channels, **topo_kwargs)
@@ -771,17 +806,26 @@ class ChangeModel(nn.Module):
         pred_p1: torch.Tensor,
         pred_p2: torch.Tensor,
         tiny_prior_map: torch.Tensor | None,
+        current_epoch: int | None = None,
+        warmup_epochs: int = 0,
     ) -> torch.Tensor:
+        if current_epoch is not None and current_epoch <= warmup_epochs:
+            return pred_p1.sum() * 0.0
         p1_fg = F.softmax(pred_p1, dim=1)[:, 1:2]
         p2_fg = F.softmax(pred_p2.detach(), dim=1)[:, 1:2]
         if tiny_prior_map is None:
             non_tiny_mask = torch.ones_like(p1_fg)
         else:
-            non_tiny_mask = 1.0 - F.interpolate(
+            tiny_prior = F.interpolate(
                 tiny_prior_map, size=p1_fg.shape[-2:], mode="bilinear", align_corners=False
             ).clamp(0.0, 1.0)
+            non_tiny_mask = (tiny_prior < 0.3).float()
+        confidence_mask = ((p2_fg - 0.5).abs() > 0.15).float()
+        valid_mask = non_tiny_mask * confidence_mask
+        if torch.count_nonzero(valid_mask).item() == 0:
+            return pred_p1.sum() * 0.0
         diff = F.smooth_l1_loss(p1_fg, p2_fg, reduction="none")
-        return (diff * non_tiny_mask).sum() / non_tiny_mask.sum().clamp_min(1.0)
+        return (diff * valid_mask).sum() / valid_mask.sum().clamp_min(1.0)
 
     def _apply_refiner(
         self,
@@ -817,7 +861,7 @@ class ChangeModel(nn.Module):
         )
         return pred
 
-    def forward(self, x1, x2, gt_mask=None):
+    def forward(self, x1, x2, gt_mask=None, current_epoch: int | None = None):
         fea1, dino_levels1 = self.encoder(x1)
         fea2, dino_levels2 = self.encoder(x2)
 
@@ -827,5 +871,11 @@ class ChangeModel(nn.Module):
         final_pred, topo_loss = self._apply_refiner(
             pred_p1, pred_p2, det_p1_feat, det_p2_feat, tiny_prior, risk_map, gt_mask=gt_mask
         )
-        consistency_loss = self._branch_consistency_loss(pred_p1, pred_p2, tiny_prior)
+        consistency_loss = self._branch_consistency_loss(
+            pred_p1,
+            pred_p2,
+            tiny_prior,
+            current_epoch=current_epoch,
+            warmup_epochs=self.consistency_warmup_epochs,
+        )
         return final_pred, (pred_p1, pred_p2, pred_p3, pred_p4, pred_p5), topo_loss, consistency_loss

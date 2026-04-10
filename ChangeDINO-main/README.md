@@ -106,7 +106,7 @@ For the full ChangeDINO's pre-trained weights, which can be obtained from the fo
 
 ## Train / Validate
 ```bash
-cd dinov3/ChangeDINO
+cd ChangeDINO-main
 python trainval.py \
   --name WHU-ChangeDINO \
   --dataset WHU-CD \
@@ -125,8 +125,6 @@ BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
 bash trainval_s1gfloods.sh
 ```
 
-bash ChangeDINO-main/trainval_s1gfloods.sh
-
 Switch to a different local DINOv3 checkpoint by overriding env vars:
 ```bash
 cd ChangeDINO-main
@@ -137,27 +135,40 @@ RUN_NAME=S1GFloods-ChangeDINO-vits16 \
 bash trainval_s1gfloods.sh
 ```
 
-Equivalent explicit command:
+Equivalent explicit command for the current SAR mainline:
 ```bash
 python trainval.py \
-  --name S1GFloods-ChangeDINO-vitl16 \
+  --name S1GFloods-ChangeDINO-vits16 \
   --dataset S1GFloods_CD_DINO \
   --dataroot ../datasets \
   --dataset_mode sar \
   --stats_file ../datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
   --backbone efficientnet_b0 \
   --backbone_weight pretrained/efficientnet_b0_ra-3dd342df.pth \
-  --dino_arch dinov3_vitl16 \
-  --dino_weight dinov3/weights/dinov3_vitl16_pretrain_sat493m-eadcf0ff.pth \
+  --dino_arch dinov3_vits16 \
+  --dino_weight dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth \
+  --refiner hybrid \
+  --micro_gate \
+  --dino_collab_mode multilevel_v2 \
+  --branch_consistency_weight 0.05 \
+  --consistency_warmup_epochs 15 \
+  --topo_neighbor_mode mixed \
+  --topo_long_offsets 2 4 \
+  --topo_n_hops 3 \
   --gpu_ids 0 \
-  --batch_size 8 \
-  --num_epochs 100 \
+  --batch_size 6 \
+  --num_epochs 80 \
   --lr 1e-4
 ```
 
 Notes for S1GFloods:
-- SAR branch now replaces plain `|F_pre - F_post|` with directional difference features plus deformable cross-attention alignment on high-resolution pyramid levels (`p2/p3`).
-- New SAR alignment/difference hyper-parameters are exposed in `option.py`, including `--align_window`, `--align_points`, `--align_heads`, `--align_on_levels`, `--align_offset_groups`, and `--directional_diff_expand`.
+- Current SAR mainline is `efficientnet_b0 + multilevel_v2 + hybrid refiner`.
+- The detector now uses native `p1-p5` CNN features, deformable soft-alignment on `p1/p2/p3`, `ContrastAwareDiff`, `P1DinoSemanticGate`, and `DinoTokenBridge` on `p3/p2`.
+- `DynamicMicroGate` is enabled by default in `trainval_s1gfloods.sh` and currently uses a lightweight 3-route tiny prior: `mean_abs_p1`, `mean_abs_p2_up`, and signed local contrast delta.
+- `ContrastAwareDiff` now uses a spatial+channel gate instead of a pure SE-style global gate.
+- `branch_consistency_loss` is now conservative by default: `branch_consistency_weight=0.05` with `consistency_warmup_epochs=15`.
+- The topology branch now defaults to `mixed` long/short-range neighbors with `topo_long_offsets=2 4` and `topo_n_hops=3`.
+- New SAR alignment/topology hyper-parameters are exposed in `option.py`, including `--align_window`, `--align_points`, `--align_heads`, `--align_on_levels`, `--align_offset_groups`, `--topo_neighbor_mode`, `--topo_long_offsets`, and `--consistency_warmup_epochs`.
 - Input PNGs can be true grayscale or RGB-converted grayscale; loader normalizes both to 3-channel RGB tensors.
 - The fused builder writes training PNGs under `train/` and `val/`, and preserves VarFloods tiles as GeoTIFF sidecars under `train_tif/` and `val_tif/`.
 - SAR mode disables saturation jitter and uses milder brightness/contrast perturbation.
@@ -257,6 +268,7 @@ Notes for GF3 Henan:
 - `valid_mask` is generated for every tile and is used during stitching so `nodata` pixels do not contribute to predictions.
 - Final outputs include `change_prob.tif`, `change_binary.tif`, and `change_binary.png`.
 - New checkpoints written by `trainval.py` carry `model_config` metadata, so the tiled inference script can auto-restore the trained DINO architecture and layer ids.
+- The same metadata now also saves the current SAR structure knobs, including `micro_gate`, `dino_collab_mode`, `branch_consistency_weight`, `consistency_warmup_epochs`, `topo_neighbor_mode`, and `topo_long_offsets`.
 - For old checkpoints without metadata, pass matching `--dino_arch` and `--dino_weight` explicitly during inference.
 
 ## Test

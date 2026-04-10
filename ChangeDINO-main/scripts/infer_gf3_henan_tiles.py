@@ -42,7 +42,7 @@ python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
 
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-topo-micro-b8-YYYYMMDD/S1GFloods-topo-micro-b8-YYYYMMDD_efficientnet_b0_best.pth \
+  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-hybrid-mv2-b6-20260409-1/S1GFloods-hybrid-mv2-b6-20260409-1_efficientnet_b0_best.pth \
   --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
   --gpu_ids 0 \
   --batch_size 8 \

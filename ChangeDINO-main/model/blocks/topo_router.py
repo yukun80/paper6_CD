@@ -135,9 +135,11 @@ class FloodTopoRouter(nn.Module):
         n_heads: int = 4,
         n_tf_layers: int = 3,
         neighbor_k: int = 12,
-        n_hops: int = 2,
+        n_hops: int = 3,
         line_samples: int = 16,
         min_node_occ: float = 0.25,
+        neighbor_mode: str = "mixed",
+        long_offsets: tuple[int, ...] | list[int] = (2, 4),
     ):
         super().__init__()
         self.grid_size = grid_size
@@ -145,6 +147,10 @@ class FloodTopoRouter(nn.Module):
         self.n_hops = n_hops
         self.line_samples = line_samples
         self.min_node_occ = float(min_node_occ)
+        self.neighbor_mode = str(neighbor_mode)
+        self.long_offsets = tuple(
+            sorted({int(offset) for offset in long_offsets if int(offset) > 0})
+        )
         N = grid_size * grid_size
 
         # ── Step 1：Detector P2 特征投影（已含对比度信号 + 全局上下文） ──
@@ -179,7 +185,9 @@ class FloodTopoRouter(nn.Module):
         self.alpha_raw = nn.Parameter(torch.tensor(-3.0))
 
         # ── 预计算网格坐标与 KNN 索引 ──
-        grid_pos, knn_idx = self._build_grid_and_knn(grid_size, neighbor_k)
+        grid_pos, knn_idx = self._build_grid_and_knn(
+            grid_size, neighbor_k, self.neighbor_mode, self.long_offsets
+        )
         self.register_buffer("grid_pos", grid_pos)    # [N, 2]
         self.register_buffer("knn_idx", knn_idx)      # [N, K]
 
@@ -193,8 +201,13 @@ class FloodTopoRouter(nn.Module):
     # ------------------------------------------------------------------ #
 
     @staticmethod
-    def _build_grid_and_knn(G: int, K: int):
-        """生成 G×G 规则网格坐标 [0,1]² 并计算每个节点的 K 近邻索引。"""
+    def _build_grid_and_knn(
+        G: int,
+        K: int,
+        neighbor_mode: str = "knn",
+        long_offsets: tuple[int, ...] | list[int] = (),
+    ):
+        """生成规则网格坐标，并构建 mixed-range 或纯 KNN 邻接。"""
         coords = torch.linspace(0.5 / G, 1.0 - 0.5 / G, G)
         gy, gx = torch.meshgrid(coords, coords, indexing="ij")
         grid_pos = torch.stack([gx.flatten(), gy.flatten()], dim=-1)  # [N, 2]
@@ -202,9 +215,46 @@ class FloodTopoRouter(nn.Module):
         K = min(K, N - 1)
 
         dist = torch.cdist(grid_pos, grid_pos)                       # [N, N]
-        # 排除自身（设为大值）再取 top-K 最近
         dist.fill_diagonal_(float("inf"))
-        _, knn_idx = dist.topk(K, largest=False)                      # [N, K]
+
+        if neighbor_mode == "knn":
+            _, knn_idx = dist.topk(K, largest=False)
+            return grid_pos, knn_idx
+
+        if neighbor_mode != "mixed":
+            raise ValueError(f"Unsupported topo neighbor mode: {neighbor_mode}")
+
+        sorted_idx = dist.argsort(dim=1)
+        offset_set = tuple(sorted({int(offset) for offset in long_offsets if int(offset) > 0}))
+        knn_rows = []
+        for row in range(G):
+            for col in range(G):
+                src = row * G + col
+                selected = []
+                selected_set = set()
+                for offset in offset_set:
+                    for rr, cc in (
+                        (row, col + offset),
+                        (row, col - offset),
+                        (row + offset, col),
+                        (row - offset, col),
+                    ):
+                        if 0 <= rr < G and 0 <= cc < G:
+                            idx = rr * G + cc
+                            if idx != src and idx not in selected_set:
+                                selected.append(idx)
+                                selected_set.add(idx)
+                for idx in sorted_idx[src].tolist():
+                    if idx == src or idx in selected_set:
+                        continue
+                    selected.append(idx)
+                    selected_set.add(idx)
+                    if len(selected) >= K:
+                        break
+                if len(selected) < K:
+                    raise RuntimeError("Failed to build enough topo neighbors")
+                knn_rows.append(selected[:K])
+        knn_idx = torch.tensor(knn_rows, dtype=torch.long)
         return grid_pos, knn_idx
 
     # ------------------------------------------------------------------ #
@@ -244,6 +294,36 @@ class FloodTopoRouter(nn.Module):
     # ------------------------------------------------------------------ #
 
     @torch.no_grad()
+    def _sample_segment_mean(
+        self, gt_mask: torch.Tensor, start: torch.Tensor, end: torch.Tensor
+    ) -> torch.Tensor:
+        t = self._line_t.view(-1, 1, 1)
+        sample_pts = start.unsqueeze(0) * (1 - t) + end.unsqueeze(0) * t
+        M, NK, _ = sample_pts.shape
+        sample_pts = sample_pts.view(1, M * NK, 1, 2).expand(gt_mask.shape[0], -1, -1, -1)
+        gt_vals = F.grid_sample(
+            gt_mask,
+            sample_pts,
+            mode="bilinear",
+            padding_mode="zeros",
+            align_corners=False,
+        )
+        gt_vals = gt_vals.view(gt_mask.shape[0], M, NK)
+        return gt_vals.mean(dim=1)
+
+    @torch.no_grad()
+    def _sample_polyline_mean(
+        self,
+        gt_mask: torch.Tensor,
+        start: torch.Tensor,
+        mid: torch.Tensor,
+        end: torch.Tensor,
+    ) -> torch.Tensor:
+        seg1 = self._sample_segment_mean(gt_mask, start, mid)
+        seg2 = self._sample_segment_mean(gt_mask, mid, end)
+        return 0.5 * (seg1 + seg2)
+
+    @torch.no_grad()
     def _compute_gt_connectivity(self, gt_mask: torch.Tensor):
         """从 GT mask 计算网格节点的连通性标签（纯标签，无需梯度）。
 
@@ -267,18 +347,12 @@ class FloodTopoRouter(nn.Module):
                                ).unsqueeze(1).expand(N, K)            # [N, K]
         src_pos = pos_norm[src_idx.reshape(-1)]                       # [N*K, 2]
         tgt_pos = pos_norm[self.knn_idx.reshape(-1)]                  # [N*K, 2]
-
-        t = self._line_t.view(-1, 1, 1)                              # [M, 1, 1]
-        sample_pts = src_pos.unsqueeze(0) * (1 - t) + tgt_pos.unsqueeze(0) * t
-        M, NK, _ = sample_pts.shape
-
-        sample_pts = sample_pts.view(1, M * NK, 1, 2).expand(B, -1, -1, -1)
-        gt_vals = F.grid_sample(
-            gt_mask, sample_pts, mode="bilinear",
-            padding_mode="zeros", align_corners=False
-        )  # [B, 1, M*NK, 1]
-        gt_vals = gt_vals.view(B, M, N * K)                          # [B, M, N*K]
-        line_avg = gt_vals.mean(dim=1).view(B, N, K)                 # [B, N, K]
+        mid_hv = torch.stack([tgt_pos[:, 0], src_pos[:, 1]], dim=-1)
+        mid_vh = torch.stack([src_pos[:, 0], tgt_pos[:, 1]], dim=-1)
+        line_avg = self._sample_segment_mean(gt_mask, src_pos, tgt_pos).view(B, N, K)
+        hv_avg = self._sample_polyline_mean(gt_mask, src_pos, mid_hv, tgt_pos).view(B, N, K)
+        vh_avg = self._sample_polyline_mean(gt_mask, src_pos, mid_vh, tgt_pos).view(B, N, K)
+        path_avg = torch.maximum(line_avg, torch.maximum(hv_avg, vh_avg))
 
         src_flood = (gt_node[:, src_idx.reshape(-1)]).view(B, N, K)
         tgt_flood = (gt_node[:, self.knn_idx.reshape(-1)]).view(B, N, K)
@@ -290,7 +364,7 @@ class FloodTopoRouter(nn.Module):
         gt_connected = (
             (src_flood > 0.5).float()
             * (tgt_flood > 0.5).float()
-            * (line_avg > 0.5).float()
+            * (path_avg > 0.5).float()
         )
         return gt_connected, valid_mask
 
