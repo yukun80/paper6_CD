@@ -187,14 +187,20 @@ class Model(nn.Module):
                 ],
                 "topo_n_hops": int(getattr(self.opt, "topo_n_hops", 3)),
                 "topo_min_node_occ": float(getattr(self.opt, "topo_min_node_occ", 0.25)),
+                "topo_warmup_epochs": int(getattr(self.opt, "topo_warmup_epochs", 10)),
                 "dino_arch": self.opt.dino_arch,
                 "dino_weight": self.opt.dino_weight,
                 "extract_ids": [int(v) for v in self.opt.extract_ids],
+                "best_metric": getattr(self.opt, "best_metric", "iou_1"),
+                "eval_fg_threshold": float(getattr(self.opt, "eval_fg_threshold", 0.5)),
             }
         }
 
-    def save_ckpt(self, network, optimizer, model_name, backbone):
-        save_filename = "%s_%s_best.pth" % (model_name, backbone)
+    def save_ckpt(self, network, optimizer, model_name, backbone, tag: str = "best"):
+        if tag == "best":
+            save_filename = "%s_%s_best.pth" % (model_name, backbone)
+        else:
+            save_filename = f"{model_name}_{backbone}_{tag}.pth"
         save_path = os.path.join(self.save_dir, save_filename)
         if os.path.exists(save_path):
             os.remove(save_path)
@@ -209,8 +215,8 @@ class Model(nn.Module):
         if torch.cuda.is_available():
             network.cuda()
 
-    def save(self, model_name, backbone):
-        self.save_ckpt(self.model, self.optimizer, model_name, backbone)
+    def save(self, model_name, backbone, tag: str = "best"):
+        self.save_ckpt(self.model, self.optimizer, model_name, backbone, tag=tag)
 
     def save_epoch_ckpt(self, network, optimizer, model_name, backbone, epoch):
         """每 N epoch 定期保存一次快照，文件名含 epoch 编号，与 best 权重互不覆盖。"""

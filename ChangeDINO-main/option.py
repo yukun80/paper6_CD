@@ -212,6 +212,12 @@ class Options:
             help="拓扑连通性损失权重。",
         )
         self.parser.add_argument(
+            "--topo_warmup_epochs",
+            type=int,
+            default=10,
+            help="前若干个 epoch 不启用拓扑损失，避免早期训练过度偏向大区域结构。",
+        )
+        self.parser.add_argument(
             "--topo_min_node_occ",
             type=float,
             default=0.25,
@@ -365,6 +371,19 @@ class Options:
             default=400,
             help="验证时 small flood 连通域面积阈值。",
         )
+        self.parser.add_argument(
+            "--eval_fg_threshold",
+            type=float,
+            default=0.5,
+            help="验证/测试时前景概率阈值，替代硬编码 argmax 以提升 tiny flood 召回调节能力。",
+        )
+        self.parser.add_argument(
+            "--best_metric",
+            type=str,
+            default="iou_1",
+            choices=["iou_1", "tiny_recall", "tiny_combo"],
+            help="标准 best 权重保存依据；tiny-heavy 场景建议使用 tiny_combo。",
+        )
     def parse(self):
         self.init()
         self.opt = self.parser.parse_args()
@@ -401,6 +420,10 @@ class Options:
             raise ValueError("--branch_consistency_weight must be >= 0")
         if self.opt.consistency_warmup_epochs < 0:
             raise ValueError("--consistency_warmup_epochs must be >= 0")
+        if self.opt.topo_warmup_epochs < 0:
+            raise ValueError("--topo_warmup_epochs must be >= 0")
+        if not 0.0 <= self.opt.eval_fg_threshold <= 1.0:
+            raise ValueError("--eval_fg_threshold must be within [0, 1]")
         if not getattr(self.opt, "topo_long_offsets", None):
             self.opt.topo_long_offsets = [2, 4]
         self.opt.topo_long_offsets = [int(v) for v in self.opt.topo_long_offsets if int(v) > 0]

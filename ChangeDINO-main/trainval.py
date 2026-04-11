@@ -57,8 +57,23 @@ class Trainval(object):
         self.running_metric = ConfuseMatrixMeter(n_class=2)
         self.alpha = 0.5
         self.topo_loss_weight = self.model.topo_loss_weight
-        self.topo_warmup_epochs = 10
+        self.topo_warmup_epochs = int(getattr(opt, "topo_warmup_epochs", 10))
         self.num_epochs = opt.num_epochs
+        self.eval_fg_threshold = float(getattr(opt, "eval_fg_threshold", 0.5))
+        self.best_metric = str(getattr(opt, "best_metric", "iou_1"))
+        self.best_scores = {
+            "default": float("-inf"),
+            "iou_1": float("-inf"),
+            "tiny_recall": float("-inf"),
+            "tiny_combo": float("-inf"),
+        }
+        self.best_epochs = {
+            "default": 0,
+            "iou_1": 0,
+            "tiny_recall": 0,
+            "tiny_combo": 0,
+        }
+        self.best_summary_path = os.path.join(self.model.save_dir, "best_metrics.json")
 
         self.log_path = os.path.join(self.model.save_dir, "record.txt")
         self.vis_path = os.path.join(self.model.save_dir, opt.vis_path)
@@ -75,6 +90,57 @@ class Trainval(object):
                     "# time,epoch,train_loss,train_focal,train_dice,train_topo,train_consistency,lr,"
                 )
                 f.write("val_metrics(json)\n")
+
+    @staticmethod
+    def _threshold_prediction(logits: torch.Tensor, threshold: float) -> torch.Tensor:
+        probs = torch.softmax(logits.detach(), dim=1)[:, 1]
+        return (probs >= float(threshold)).long()
+
+    @staticmethod
+    def _compute_tiny_combo(val_scores: dict) -> float:
+        return (
+            0.45 * float(val_scores.get("iou_1", 0.0))
+            + 0.45 * float(val_scores.get("tiny_recall", 0.0))
+            + 0.10 * float(val_scores.get("small_recall", 0.0))
+        )
+
+    def _metric_value(self, metric_name: str, val_scores: dict) -> float:
+        if metric_name == "tiny_combo":
+            return float(val_scores.get("tiny_combo", self._compute_tiny_combo(val_scores)))
+        return float(val_scores.get(metric_name, 0.0))
+
+    def _write_best_summary(self):
+        payload = {
+            "best_metric": self.best_metric,
+            "eval_fg_threshold": self.eval_fg_threshold,
+            "best_scores": self.best_scores,
+            "best_epochs": self.best_epochs,
+        }
+        with open(self.best_summary_path, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    def _update_best_checkpoints(self, epoch: int, val_scores: dict):
+        track_to_tag = {
+            "iou_1": "best_iou",
+            "tiny_recall": "best_tiny_recall",
+            "tiny_combo": "best_tiny_combo",
+        }
+
+        selected_metric_value = self._metric_value(self.best_metric, val_scores)
+        if selected_metric_value >= self.best_scores["default"]:
+            self.model.save(self.opt.name, self.opt.backbone)
+            self.best_scores["default"] = selected_metric_value
+            self.best_epochs["default"] = epoch
+            self.previous_best = selected_metric_value
+
+        for metric_name, tag in track_to_tag.items():
+            metric_value = self._metric_value(metric_name, val_scores)
+            if metric_value >= self.best_scores[metric_name]:
+                self.model.save(self.opt.name, self.opt.backbone, tag=tag)
+                self.best_scores[metric_name] = metric_value
+                self.best_epochs[metric_name] = epoch
+
+        self._write_best_summary()
     
     def _append_log_line(self, epoch: int, train_stats: dict, val_scores: dict):
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -95,7 +161,7 @@ class Trainval(object):
 
     def _plot_cd_result(self, x1, x2, pred, target, epoch, stage):
         if len(pred.shape) == 4:
-            pred = torch.argmax(pred, dim=1)
+            pred = self._threshold_prediction(pred, threshold=self.eval_fg_threshold)
         vis_input = make_numpy_grid(de_norm(x1[0:8], self.opt.mean, self.opt.std))
         vis_input2 = make_numpy_grid(de_norm(x2[0:8], self.opt.mean, self.opt.std))
         vis_pred = make_numpy_grid(pred[0:8].unsqueeze(1).repeat(1, 3, 1, 1))
@@ -183,11 +249,13 @@ class Trainval(object):
 
         with torch.no_grad():
             for i, _data in enumerate(tbar):
-                val_pred = self.model.inference(
+                val_logits = self.model.inference(
                     _data["img1"].cuda(), _data["img2"].cuda()
                 )
                 val_target = _data["cd_label"].detach()
-                val_pred = torch.argmax(val_pred.detach(), dim=1)
+                val_pred = self._threshold_prediction(
+                    val_logits, threshold=self.eval_fg_threshold
+                )
                 _ = self.running_metric.update_cm(
                     pr=val_pred.cpu().numpy(), gt=val_target.cpu().numpy()
                 )
@@ -205,13 +273,14 @@ class Trainval(object):
                     self._plot_cd_result(
                         _data["img1"],
                         _data["img2"],
-                        val_pred,
+                        val_logits,
                         _data["cd_label"],
                         epoch,
                         "val",
                     )
             val_scores = self.running_metric.get_scores()
             val_scores.update(component_recall_scores(component_stats))
+            val_scores["tiny_combo"] = self._compute_tiny_combo(val_scores)
             message = "(phase: %s) " % (self.opt.phase)
             for k, v in val_scores.items():
                 if k.endswith("_components"):
@@ -219,11 +288,15 @@ class Trainval(object):
                 else:
                     message += "%s: %.3f " % (k, v * 100)
             print(message)
-
-        current_best = float(val_scores.get("iou_1", 0.0))
-        if current_best >= self.previous_best:
-            self.model.save(self.opt.name, self.opt.backbone)
-            self.previous_best = current_best
+        print(
+            "best-metric summary | "
+            f"selected={self.best_metric}:{self._metric_value(self.best_metric, val_scores) * 100:.3f} "
+            f"| iou_1={float(val_scores.get('iou_1', 0.0)) * 100:.3f} "
+            f"| tiny_recall={float(val_scores.get('tiny_recall', 0.0)) * 100:.3f} "
+            f"| small_recall={float(val_scores.get('small_recall', 0.0)) * 100:.3f} "
+            f"| tiny_combo={float(val_scores.get('tiny_combo', 0.0)) * 100:.3f}"
+        )
+        self._update_best_checkpoints(epoch, val_scores)
 
         return val_scores
 

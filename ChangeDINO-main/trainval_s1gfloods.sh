@@ -15,19 +15,23 @@ TOPO_NEIGHBOR_MODE="${TOPO_NEIGHBOR_MODE:-mixed}"
 TOPO_LONG_OFFSETS="${TOPO_LONG_OFFSETS:-2 4}"
 TOPO_HOPS="${TOPO_HOPS:-3}"
 TOPO_MIN_NODE_OCC="${TOPO_MIN_NODE_OCC:-0.25}"
+TOPO_LOSS_WEIGHT="${TOPO_LOSS_WEIGHT:-0.2}"
+TOPO_WARMUP_EPOCHS="${TOPO_WARMUP_EPOCHS:-10}"
 MICRO_GATE="${MICRO_GATE:-1}"
 REFINER="${REFINER:-hybrid}"
 DINO_COLLAB_MODE="${DINO_COLLAB_MODE:-multilevel_v2}"
-BRANCH_CONSISTENCY_WEIGHT="${BRANCH_CONSISTENCY_WEIGHT:-0.05}"
-CONSISTENCY_WARMUP_EPOCHS="${CONSISTENCY_WARMUP_EPOCHS:-15}"
+BRANCH_CONSISTENCY_WEIGHT="${BRANCH_CONSISTENCY_WEIGHT:-0.02}"
+CONSISTENCY_WARMUP_EPOCHS="${CONSISTENCY_WARMUP_EPOCHS:-25}"
+BEST_METRIC="${BEST_METRIC:-tiny_combo}"
+EVAL_FG_THRESHOLD="${EVAL_FG_THRESHOLD:-0.40}"
 
 cmd=(
 python trainval.py \
   --name "${RUN_NAME}" \
-  --dataset S1GFloods_CD_DINO \
+  --dataset S1GFloods_CD_DINO_ \
   --dataroot ../datasets \
   --dataset_mode sar \
-  --stats_file ../datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+  --stats_file ../datasets/S1GFloods_CD_DINO_/channel_stats_s1gfloods_train.json \
   --backbone "${BACKBONE}" \
   --dino_arch "${DINO_ARCH}" \
   --dino_weight "${DINO_WEIGHT}" \
@@ -37,10 +41,14 @@ python trainval.py \
   --topo_long_offsets ${TOPO_LONG_OFFSETS} \
   --topo_n_hops "${TOPO_HOPS}" \
   --topo_min_node_occ "${TOPO_MIN_NODE_OCC}" \
+  --topo_loss_weight "${TOPO_LOSS_WEIGHT}" \
+  --topo_warmup_epochs "${TOPO_WARMUP_EPOCHS}" \
   --refiner "${REFINER}" \
   --dino_collab_mode "${DINO_COLLAB_MODE}" \
   --branch_consistency_weight "${BRANCH_CONSISTENCY_WEIGHT}" \
   --consistency_warmup_epochs "${CONSISTENCY_WARMUP_EPOCHS}" \
+  --best_metric "${BEST_METRIC}" \
+  --eval_fg_threshold "${EVAL_FG_THRESHOLD}" \
   --gpu_ids 0 \
   --batch_size "${BATCH_SIZE}" \
   --num_epochs 80 \

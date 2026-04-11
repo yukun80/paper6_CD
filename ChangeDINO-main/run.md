@@ -1,72 +1,49 @@
-# ── 默认训练（第二阶段主线：hybrid + micro_gate + multilevel_v2，batch=6）──
-RUN_NAME=S1GFloods-hybrid-mv2-b6 \
-BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
-BATCH_SIZE=6 \
-bash ChangeDINO-main/trainval_s1gfloods.sh
+# 当前主线训练命令
 
-# ── 大 batch 训练 ──
-RUN_NAME=S1GFloods-hybrid-mv2-b10 \
-BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
-BATCH_SIZE=10 \
-bash ChangeDINO-main/trainval_s1gfloods.sh
+## 1. 默认 tiny-heavy 训练
+适合当前“小尺度内涝点优先”的主线设置。默认会使用：
+- `BEST_METRIC=tiny_combo`
+- `EVAL_FG_THRESHOLD=0.40`
+- 更晚的 `topo warmup`
+- 更弱的 `topo / consistency` 约束
 
-# ── 调整拓扑图粒度 ──
-RUN_NAME=S1GFloods-hybrid-mv2-g8k8-b6 \
-BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
-BATCH_SIZE=6 \
-TOPO_GRID=8 TOPO_K=8 \
-bash ChangeDINO-main/trainval_s1gfloods.sh
-
-# ── 收紧一致性 warmup，观察早期精度是否回升 ──
-RUN_NAME=S1GFloods-hybrid-mv2-warm5-b6 \
-BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
-BATCH_SIZE=6 \
-CONSISTENCY_WARMUP_EPOCHS=5 \
-bash ChangeDINO-main/trainval_s1gfloods.sh
-
-# ── 退回最小 tiny prior 复杂度：保持主线结构，只关掉 micro gate 观察对比 ──
-RUN_NAME=S1GFloods-hybrid-mv2-nomicro-b6 \
-BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
-BATCH_SIZE=6 \
-MICRO_GATE=0 \
-bash ChangeDINO-main/trainval_s1gfloods.sh
-
-# ── 退回旧版单层 DINO 协同（兼容对比）──
-RUN_NAME=S1GFloods-hybrid-legacy-b6 \
-BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
-BATCH_SIZE=6 \
-DINO_COLLAB_MODE=legacy \
-BRANCH_CONSISTENCY_WEIGHT=0.0 \
-bash ChangeDINO-main/trainval_s1gfloods.sh
-
-# ── 自定义分层对比度池化核大小（P2/P3/P4/P5）──
-RUN_NAME=S1GFloods-hybrid-mv2-p3555-b6 \
-BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
-BATCH_SIZE=6 \
-bash ChangeDINO-main/trainval_s1gfloods.sh \
-  --contrast_pool_sizes 3 5 5 5
-
-# ── 更低显存备选：保持结构不变，仅进一步降 batch ──
-RUN_NAME=S1GFloods-hybrid-mv2-b4 \
+```bash
+RUN_NAME=S1GFloods-hybrid-mv2-tiny-b4 \
 BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
 BATCH_SIZE=4 \
 bash ChangeDINO-main/trainval_s1gfloods.sh
+```
 
-# ── 串行对比实验：legacy vs multilevel_v2 ──
-RUN_NAME=S1GFloods-hybrid-legacy-b6 \
+## 2. 整体 IoU 优先训练
+如果目标是整体分割精度，而不是 tiny flood 召回，可切回 `iou_1` 作为主选择指标。
+
+```bash
+RUN_NAME=S1GFloods-hybrid-mv2-iou-b6 \
 BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
 BATCH_SIZE=6 \
-DINO_COLLAB_MODE=legacy \
-BRANCH_CONSISTENCY_WEIGHT=0.0 \
-bash ChangeDINO-main/trainval_s1gfloods.sh && \
-RUN_NAME=S1GFloods-hybrid-mv2-b6 \
-BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
-BATCH_SIZE=6 \
+BEST_METRIC=iou_1 \
+EVAL_FG_THRESHOLD=0.50 \
+TOPO_WARMUP_EPOCHS=10 \
+TOPO_LOSS_WEIGHT=0.5 \
+BRANCH_CONSISTENCY_WEIGHT=0.05 \
+CONSISTENCY_WARMUP_EPOCHS=15 \
 bash ChangeDINO-main/trainval_s1gfloods.sh
+```
 
-# 训练结束后对比：默认按 iou_1 选 best checkpoint
-grep -hE "iou_1|F1_1|recall_1|precision_1|tiny_recall_1|small_recall_1|large_recall_1" \
-  ChangeDINO-main/checkpoints/S1GFloods-hybrid-legacy-b6-*/record.txt \
-  ChangeDINO-main/checkpoints/S1GFloods-hybrid-mv2-b6-*/record.txt \
-  ChangeDINO-main/checkpoints/S1GFloods-hybrid-mv2-warm5-b6-*/record.txt \
-  | sort -t',' -k3 -rn | head -5
+## 3. 低显存训练
+结构保持不变，只降低 batch size。
+
+```bash
+RUN_NAME=S1GFloods-hybrid-mv2-tiny-b4 \
+BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
+BATCH_SIZE=4 \
+bash ChangeDINO-main/trainval_s1gfloods.sh
+```
+
+## checkpoint 说明
+- 默认 `best.pth` 由 `BEST_METRIC` 决定。
+- 训练过程还会额外保存：
+  - `best_iou`
+  - `best_tiny_recall`
+  - `best_tiny_combo`
+- 汇总信息保存在对应 checkpoint 目录下的 `best_metrics.json`。
