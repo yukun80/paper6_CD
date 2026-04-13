@@ -73,7 +73,7 @@ class ContrastRefiner(nn.Module):
 
 
 class HybridRefiner(nn.Module):
-    """先做像素级精修，再仅在大区域上施加拓扑约束。"""
+    """先做像素级精修，再在 contrast/topo 一致的大区域上施加拓扑约束。"""
 
     def __init__(self, feat_dim: int, topo_kwargs: dict[str, int | float]):
         super().__init__()
@@ -102,8 +102,20 @@ class HybridRefiner(nn.Module):
         contrast_fg = F.softmax(contrast_out, dim=1)[:, 1:2]
         topo_fg = F.softmax(topo_out, dim=1)[:, 1:2]
         pad = self.large_region_kernel // 2
-        density = F.avg_pool2d(contrast_fg, self.large_region_kernel, stride=1, padding=pad)
-        large_gate = torch.sigmoid((density - self.large_region_thresh) * 12.0)
+        contrast_density = F.avg_pool2d(
+            contrast_fg, self.large_region_kernel, stride=1, padding=pad
+        )
+        topo_density = F.avg_pool2d(
+            topo_fg, self.large_region_kernel, stride=1, padding=pad
+        )
+        agreement = 1.0 - torch.abs(contrast_fg - topo_fg)
+        agreement_density = F.avg_pool2d(
+            agreement, self.large_region_kernel, stride=1, padding=pad
+        ).clamp(0.0, 1.0)
+        contrast_gate = torch.sigmoid((contrast_density - self.large_region_thresh) * 12.0)
+        topo_gate = torch.sigmoid((topo_density - self.large_region_thresh) * 12.0)
+        agreement_gate = torch.sigmoid((agreement_density - 0.70) * 12.0)
+        large_gate = contrast_gate * topo_gate * agreement_gate
         if tiny_prior_map is not None:
             tiny_gate = F.interpolate(
                 tiny_prior_map, size=contrast_fg.shape[-2:], mode="bilinear", align_corners=False

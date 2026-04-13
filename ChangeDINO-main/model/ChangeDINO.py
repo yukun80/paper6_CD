@@ -216,11 +216,71 @@ class FuseGated(nn.Module):
             nn.SiLU(inplace=True),
         )
 
-    def forward(self, x1, x2):
+    def forward(
+        self,
+        x1: torch.Tensor,
+        x2: torch.Tensor,
+        support_map: torch.Tensor | None = None,
+    ) -> torch.Tensor:
         x1 = F.interpolate(x1, size=x2.shape[-2:], mode="bilinear", align_corners=False)
         g = self.gate(torch.cat([x1, x2], dim=1))
-        fused = x2 + g * x1
+        if support_map is None:
+            support = torch.ones_like(g)
+        else:
+            support = F.interpolate(
+                support_map, size=x2.shape[-2:], mode="bilinear", align_corners=False
+            ).clamp(0.0, 1.0)
+            if support.shape[1] == 1:
+                support = support.expand(-1, g.shape[1], -1, -1)
+            elif support.shape[1] != g.shape[1]:
+                raise ValueError(
+                    f"support_map channels must be 1 or {g.shape[1]}, got {support.shape[1]}"
+                )
+        fused = x2 + (g * support) * x1
         return self.mix(fused)
+
+
+class LocalSupportGate(nn.Module):
+    """利用浅层稳定变化证据约束粗尺度语义下传。
+
+    当 coarse feature 试图把整块区域推成前景时，只有在 p2 层局部变化
+    也提供支持的区域才允许强注入；tiny prior 仅作为小目标旁路增强。
+    """
+
+    def __init__(self, dim: int, hidden_dim: int | None = None):
+        super().__init__()
+        hidden_dim = max(dim // 2, 32) if hidden_dim is None else hidden_dim
+        self.body = nn.Sequential(
+            nn.Conv2d(dim + 1, hidden_dim, 3, padding=1, bias=False),
+            nn.BatchNorm2d(hidden_dim),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(hidden_dim, 1, 1, bias=True),
+        )
+        nn.init.zeros_(self.body[-1].weight)
+        nn.init.constant_(self.body[-1].bias, -2.0)
+
+    def forward(
+        self,
+        support_feat: torch.Tensor,
+        target_size: tuple[int, int],
+        prior_map: torch.Tensor | None = None,
+        prior_boost: bool = False,
+    ) -> torch.Tensor:
+        support_feat = F.interpolate(
+            support_feat, size=target_size, mode="bilinear", align_corners=False
+        )
+        if prior_map is None:
+            prior = support_feat.new_zeros(
+                support_feat.shape[0], 1, target_size[0], target_size[1]
+            )
+        else:
+            prior = F.interpolate(
+                prior_map, size=target_size, mode="bilinear", align_corners=False
+            ).clamp(0.0, 1.0)
+        gate = torch.sigmoid(self.body(torch.cat([support_feat, prior], dim=1)))
+        if prior_boost:
+            gate = torch.maximum(gate, prior)
+        return gate
 
 
 class ContrastAwareDiff(nn.Module):
@@ -618,6 +678,9 @@ class Detector(nn.Module):
         self.diff_p4 = ContrastAwareDiff(fpn_channels, pool_size=contrast_pool_sizes[2])
         self.diff_p5 = ContrastAwareDiff(fpn_channels, pool_size=contrast_pool_sizes[3])
         self.micro_gate = DynamicMicroGate(fpn_channels) if self.use_micro_gate else None
+        self.support_p4 = LocalSupportGate(fpn_channels)
+        self.support_p3 = LocalSupportGate(fpn_channels)
+        self.support_p2 = LocalSupportGate(fpn_channels)
         self.p5_to_p4 = FuseGated(fpn_channels)
         self.p4_to_p3 = FuseGated(fpn_channels)
         self.p3_to_p2 = FuseGated(fpn_channels)
@@ -767,17 +830,26 @@ class Detector(nn.Module):
                 tiny_prior_map=tiny_prior_p1,
             )
 
+        # 利用 p2 层较稳定的局部变化证据，抑制粗尺度语义向下游整块扩散。
+        support_p4 = self.support_p4(diff_p2, diff_p4.shape[-2:])
+        support_p3 = self.support_p3(
+            diff_p2, diff_p3.shape[-2:], prior_map=risk_p3, prior_boost=False
+        )
+        support_p2 = self.support_p2(
+            diff_p2, diff_p2.shape[-2:], prior_map=risk_p2, prior_boost=True
+        )
+
         fea_p5 = self.tb5(diff_p5)
         pred_p5 = self.p5_head(fea_p5)
-        fea_p4 = self.p5_to_p4(fea_p5, diff_p4)
+        fea_p4 = self.p5_to_p4(fea_p5, diff_p4, support_map=support_p4)
         fea_p4 = self.tb4(fea_p4)
         pred_p4 = self.p4_head(fea_p4)
-        fea_p3 = self.p4_to_p3(fea_p4, diff_p3)
+        fea_p3 = self.p4_to_p3(fea_p4, diff_p3, support_map=support_p3)
         fea_p3 = self.tb3(fea_p3)
         if self.p3_dino_ctx is not None:
             fea_p3 = self.p3_dino_ctx(fea_p3, dino_t1_levels[1:3], dino_t2_levels[1:3])
         pred_p3 = self.p3_head(fea_p3)
-        fea_p2 = self.p3_to_p2(fea_p3, diff_p2)
+        fea_p2 = self.p3_to_p2(fea_p3, diff_p2, support_map=support_p2)
         fea_p2 = self.tb2(fea_p2)
         if self.dino_collab_mode == "multilevel_v2":
             fea_p2 = self.dino_ctx(fea_p2, dino_t1_levels[2:4], dino_t2_levels[2:4])
@@ -826,6 +898,7 @@ class ChangeModel(nn.Module):
         micro_gate=False,
         dino_collab_mode="multilevel_v2",
         branch_consistency_weight=0.05,
+        coarse_fp_consistency_weight=0.03,
         consistency_warmup_epochs=15,
         topo_grid_size=16,
         topo_hidden_dim=128,
@@ -840,6 +913,7 @@ class ChangeModel(nn.Module):
         self.refiner_mode = refiner
         self.dino_collab_mode = dino_collab_mode
         self.branch_consistency_weight = float(branch_consistency_weight)
+        self.coarse_fp_consistency_weight = float(coarse_fp_consistency_weight)
         self.consistency_warmup_epochs = int(consistency_warmup_epochs)
         self.encoder = Encoder(backbone=backbone, fpn_channels=fpn_channels, **kwargs)
         self.detector = Detector(
@@ -901,6 +975,40 @@ class ChangeModel(nn.Module):
         diff = F.smooth_l1_loss(p1_fg, p2_fg, reduction="none")
         return (diff * valid_mask).sum() / valid_mask.sum().clamp_min(1.0)
 
+    @staticmethod
+    def _coarse_fp_consistency_loss(
+        pred_p2: torch.Tensor,
+        pred_p4: torch.Tensor,
+        pred_p5: torch.Tensor,
+        tiny_prior_map: torch.Tensor | None,
+        current_epoch: int | None = None,
+        warmup_epochs: int = 0,
+    ) -> torch.Tensor:
+        """抑制 coarse branch 在缺乏局部支持时整块点亮前景。"""
+        if current_epoch is not None and current_epoch <= warmup_epochs:
+            return pred_p2.sum() * 0.0
+
+        p2_fg = F.softmax(pred_p2.detach(), dim=1)[:, 1:2]
+        if tiny_prior_map is None:
+            non_tiny_mask = torch.ones_like(p2_fg)
+        else:
+            tiny_prior = F.interpolate(
+                tiny_prior_map, size=p2_fg.shape[-2:], mode="bilinear", align_corners=False
+            ).clamp(0.0, 1.0)
+            non_tiny_mask = (tiny_prior < 0.3).float()
+
+        weak_support_mask = (p2_fg < 0.35).float()
+        valid_mask = non_tiny_mask * weak_support_mask
+        if torch.count_nonzero(valid_mask).item() == 0:
+            return pred_p2.sum() * 0.0
+
+        loss = pred_p2.sum() * 0.0
+        for coarse_pred in (pred_p4, pred_p5):
+            coarse_fg = F.softmax(coarse_pred, dim=1)[:, 1:2]
+            excess = F.relu(coarse_fg - p2_fg - 0.15)
+            loss = loss + (excess * valid_mask).sum() / valid_mask.sum().clamp_min(1.0)
+        return loss / 2.0
+
     def _apply_refiner(
         self,
         pred_p1: torch.Tensor,
@@ -952,4 +1060,18 @@ class ChangeModel(nn.Module):
             current_epoch=current_epoch,
             warmup_epochs=self.consistency_warmup_epochs,
         )
-        return final_pred, (pred_p1, pred_p2, pred_p3, pred_p4, pred_p5), topo_loss, consistency_loss
+        coarse_fp_loss = self._coarse_fp_consistency_loss(
+            pred_p2,
+            pred_p4,
+            pred_p5,
+            tiny_prior,
+            current_epoch=current_epoch,
+            warmup_epochs=self.consistency_warmup_epochs,
+        )
+        return (
+            final_pred,
+            (pred_p1, pred_p2, pred_p3, pred_p4, pred_p5),
+            topo_loss,
+            consistency_loss,
+            coarse_fp_loss,
+        )

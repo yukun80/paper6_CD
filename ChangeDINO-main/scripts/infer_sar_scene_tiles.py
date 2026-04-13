@@ -16,6 +16,7 @@ import numpy as np
 import rasterio
 import torch
 from PIL import Image
+from scipy import ndimage
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 from tqdm import tqdm
@@ -57,6 +58,7 @@ INFER_MODEL_CONFIG_FIELDS = {
     "micro_gate",
     "dino_collab_mode",
     "branch_consistency_weight",
+    "coarse_fp_consistency_weight",
     "consistency_warmup_epochs",
     "refiner",
     "contrast_pool_sizes",
@@ -153,6 +155,15 @@ def build_parser(
         action="store_true",
         help="跳过切片级 PNG/TIF 保存，仅做整景拼接。",
     )
+    parser.add_argument(
+        "--disable_blob_filter",
+        action="store_true",
+        help="关闭基于 overlap 一致性的整景伪斑过滤，保留原始拼接结果。",
+    )
+    parser.add_argument("--blob_filter_area_thresh", type=int, default=1024)
+    parser.add_argument("--blob_filter_fill_thresh", type=float, default=0.45)
+    parser.add_argument("--blob_filter_std_thresh", type=float, default=0.20)
+    parser.add_argument("--blob_filter_vote_thresh", type=float, default=0.55)
     if defaults:
         parser.set_defaults(**defaults)
     return parser
@@ -302,6 +313,7 @@ def infer_checkpoint_model_config_from_state_dict(state_dict: dict[str, torch.Te
         cfg["micro_gate"] = True
     cfg["dino_collab_mode"] = "legacy"
     cfg["branch_consistency_weight"] = 0.0
+    cfg["coarse_fp_consistency_weight"] = 0.0
     cfg["consistency_warmup_epochs"] = 0
     cfg["topo_neighbor_mode"] = "knn"
     cfg["topo_long_offsets"] = []
@@ -361,6 +373,14 @@ def parse_and_prepare(
         raise FileNotFoundError(f"Checkpoint not found: {opt.checkpoint}")
     if not 0.0 <= opt.threshold <= 1.0:
         raise ValueError("--threshold must be within [0, 1]")
+    if opt.blob_filter_area_thresh < 1:
+        raise ValueError("--blob_filter_area_thresh must be >= 1")
+    if not 0.0 <= opt.blob_filter_fill_thresh <= 1.0:
+        raise ValueError("--blob_filter_fill_thresh must be within [0, 1]")
+    if not 0.0 <= opt.blob_filter_std_thresh <= 1.0:
+        raise ValueError("--blob_filter_std_thresh must be within [0, 1]")
+    if not 0.0 <= opt.blob_filter_vote_thresh <= 1.0:
+        raise ValueError("--blob_filter_vote_thresh must be within [0, 1]")
     if not opt.stats_file and not (opt.mean and opt.std):
         raise ValueError("Inference requires --stats_file or both --mean and --std")
 
@@ -401,6 +421,12 @@ def parse_and_prepare(
         opt.branch_consistency_weight = 0.0
     if (
         checkpoint_model_config
+        and "coarse_fp_consistency_weight" not in checkpoint_model_config
+        and "coarse_fp_consistency_weight" not in explicit_overrides
+    ):
+        opt.coarse_fp_consistency_weight = 0.0
+    if (
+        checkpoint_model_config
         and "consistency_warmup_epochs" not in checkpoint_model_config
         and "consistency_warmup_epochs" not in explicit_overrides
     ):
@@ -425,6 +451,7 @@ def parse_and_prepare(
     if checkpoint_model_config is None:
         opt.dino_collab_mode = "legacy"
         opt.branch_consistency_weight = 0.0
+        opt.coarse_fp_consistency_weight = 0.0
         opt.consistency_warmup_epochs = 0
         opt.topo_neighbor_mode = "knn"
         opt.topo_long_offsets = []
@@ -620,6 +647,56 @@ def save_tile_tif(
         dst.write(binary, 1)
 
 
+def filter_unstable_blobs(
+    binary_map: np.ndarray,
+    valid_output: np.ndarray,
+    prob_std_map: np.ndarray,
+    vote_ratio_map: np.ndarray,
+    *,
+    area_thresh: int,
+    fill_thresh: float,
+    std_thresh: float,
+    vote_thresh: float,
+) -> tuple[np.ndarray, dict[str, int]]:
+    """移除跨重叠 tile 不一致、但在单块内过于实心的大伪斑。"""
+    filtered = binary_map.copy()
+    fg_mask = (binary_map == 1) & valid_output
+    if not np.any(fg_mask):
+        return filtered, {"removed_components": 0, "removed_pixels": 0}
+
+    structure = np.ones((3, 3), dtype=np.int8)
+    cc_map, n_components = ndimage.label(fg_mask, structure=structure)
+    removed_components = 0
+    removed_pixels = 0
+
+    for component_id in range(1, n_components + 1):
+        mask = cc_map == component_id
+        area = int(mask.sum())
+        if area < area_thresh:
+            continue
+
+        ys, xs = np.where(mask)
+        height = int(ys.max() - ys.min() + 1)
+        width = int(xs.max() - xs.min() + 1)
+        fill_ratio = area / max(height * width, 1)
+        if fill_ratio < fill_thresh:
+            continue
+
+        mean_std = float(prob_std_map[mask].mean())
+        mean_vote = float(vote_ratio_map[mask].mean())
+        if mean_std < std_thresh or mean_vote >= vote_thresh:
+            continue
+
+        filtered[mask] = 0
+        removed_components += 1
+        removed_pixels += area
+
+    return filtered, {
+        "removed_components": removed_components,
+        "removed_pixels": removed_pixels,
+    }
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -644,6 +721,8 @@ def main(
     tile_size = int(prepare_report["params"]["tile_size"])
 
     accum_prob = np.zeros((full_height, full_width), dtype=np.float32)
+    accum_prob_sq = np.zeros((full_height, full_width), dtype=np.float32)
+    accum_pos_weight = np.zeros((full_height, full_width), dtype=np.float32)
     accum_weight = np.zeros((full_height, full_width), dtype=np.float32)
     base_weight = build_blend_weight(tile_size)
 
@@ -674,6 +753,13 @@ def main(
                 if not np.any(weight > 0):
                     continue
                 accum_prob[top : top + height, left : left + width] += probs[idx, :height, :width] * weight
+                accum_prob_sq[top : top + height, left : left + width] += (
+                    np.square(probs[idx, :height, :width]) * weight
+                )
+                accum_pos_weight[top : top + height, left : left + width] += (
+                    (probs[idx, :height, :width] >= float(opt.threshold)).astype(np.float32)
+                    * weight
+                )
                 accum_weight[top : top + height, left : left + width] += weight
 
                 if opt.tile_png_dir is not None:
@@ -696,16 +782,48 @@ def main(
     valid_output = accum_weight > 0
     prob_map = np.full((full_height, full_width), PROB_NODATA, dtype=np.float32)
     prob_map[valid_output] = accum_prob[valid_output] / np.maximum(accum_weight[valid_output], 1e-6)
+    prob_var_map = np.zeros((full_height, full_width), dtype=np.float32)
+    prob_var_map[valid_output] = (
+        accum_prob_sq[valid_output] / np.maximum(accum_weight[valid_output], 1e-6)
+        - np.square(prob_map[valid_output])
+    )
+    prob_std_map = np.zeros((full_height, full_width), dtype=np.float32)
+    prob_std_map[valid_output] = np.sqrt(np.clip(prob_var_map[valid_output], 0.0, None))
+    vote_ratio_map = np.zeros((full_height, full_width), dtype=np.float32)
+    vote_ratio_map[valid_output] = (
+        accum_pos_weight[valid_output] / np.maximum(accum_weight[valid_output], 1e-6)
+    )
 
-    binary_map = np.full((full_height, full_width), BINARY_NODATA, dtype=np.uint8)
-    binary_map[valid_output] = (prob_map[valid_output] >= float(opt.threshold)).astype(np.uint8)
+    raw_binary_map = np.full((full_height, full_width), BINARY_NODATA, dtype=np.uint8)
+    raw_binary_map[valid_output] = (
+        prob_map[valid_output] >= float(opt.threshold)
+    ).astype(np.uint8)
+
+    if opt.disable_blob_filter:
+        binary_map = raw_binary_map.copy()
+        blob_filter_stats = {"removed_components": 0, "removed_pixels": 0}
+    else:
+        binary_map, blob_filter_stats = filter_unstable_blobs(
+            raw_binary_map,
+            valid_output,
+            prob_std_map,
+            vote_ratio_map,
+            area_thresh=int(opt.blob_filter_area_thresh),
+            fill_thresh=float(opt.blob_filter_fill_thresh),
+            std_thresh=float(opt.blob_filter_std_thresh),
+            vote_thresh=float(opt.blob_filter_vote_thresh),
+        )
 
     mosaic_dir = opt.mosaic_dir
     prob_path = mosaic_dir / "change_prob.tif"
+    raw_binary_tif_path = mosaic_dir / "change_binary_raw.tif"
+    raw_binary_png_path = mosaic_dir / "change_binary_raw.png"
     binary_tif_path = mosaic_dir / "change_binary.tif"
     binary_png_path = mosaic_dir / "change_binary.png"
     print("[INFO] Writing stitched outputs ...")
     write_geotiff(source_pre, prob_path, prob_map, "float32", PROB_NODATA)
+    write_geotiff(source_pre, raw_binary_tif_path, raw_binary_map, "uint8", BINARY_NODATA)
+    write_preview_png(raw_binary_map, raw_binary_png_path)
     write_geotiff(source_pre, binary_tif_path, binary_map, "uint8", BINARY_NODATA)
     write_preview_png(binary_map, binary_png_path)
 
@@ -724,8 +842,18 @@ def main(
         },
         "output_files": {
             "change_prob_tif": str(prob_path),
+            "change_binary_raw_tif": str(raw_binary_tif_path),
+            "change_binary_raw_png": str(raw_binary_png_path),
             "change_binary_tif": str(binary_tif_path),
             "change_binary_png": str(binary_png_path),
+        },
+        "blob_filter": {
+            "enabled": not bool(opt.disable_blob_filter),
+            "area_thresh": int(opt.blob_filter_area_thresh),
+            "fill_thresh": float(opt.blob_filter_fill_thresh),
+            "std_thresh": float(opt.blob_filter_std_thresh),
+            "vote_thresh": float(opt.blob_filter_vote_thresh),
+            **blob_filter_stats,
         },
         "source_image": str(source_pre),
         "source_shape": [full_height, full_width],
@@ -748,6 +876,9 @@ def main(
             "dino_collab_mode": getattr(opt, "dino_collab_mode", "multilevel_v2"),
             "branch_consistency_weight": float(
                 getattr(opt, "branch_consistency_weight", 0.05)
+            ),
+            "coarse_fp_consistency_weight": float(
+                getattr(opt, "coarse_fp_consistency_weight", 0.03)
             ),
             "consistency_warmup_epochs": int(
                 getattr(opt, "consistency_warmup_epochs", 15)

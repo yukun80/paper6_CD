@@ -26,19 +26,27 @@ from infer_sar_scene_tiles import main as infer_main
 """
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Zhuozhou_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-topo-b8-YYYYMMDD/S1GFloods-topo-b8-YYYYMMDD_efficientnet_b0_best.pth \
+  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-hybrid-mv2-tiny-b4-20260413/S1GFloods-hybrid-mv2-tiny-b4-20260413_efficientnet_b0_best_tiny_safe.pth \
   --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
   --gpu_ids 0 \
   --batch_size 8 \
-  --output-dir ChangeDINO-main/outputs/gf3_zhuozhou_topo_b8
+  --output-dir ChangeDINO-main/outputs/gf3_zhuozhou_topo_micro_b4_iou_0413
 
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-hybrid-mv2-tiny-b4-20260412/S1GFloods-hybrid-mv2-tiny-b4-20260412_efficientnet_b0_best_tiny_combo.pth \
+  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-hybrid-mv2-tiny-b4-20260413/S1GFloods-hybrid-mv2-tiny-b4-20260413_efficientnet_b0_best_tiny_combo.pth \
   --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
   --gpu_ids 0 \
   --batch_size 8 \
-  --output-dir ChangeDINO-main/outputs/gf3_henan_topo_micro_b4_0412
+  --output-dir ChangeDINO-main/outputs/gf3_henan_topo_micro_b4_0413
+  
+python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
+  --tiles-root datasets/GF3_ShenZhen_CD_infer \
+  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-hybrid-mv2-tiny-b4-20260413/S1GFloods-hybrid-mv2-tiny-b4-20260413_efficientnet_b0_best_tiny_safe.pth \
+  --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+  --gpu_ids 0 \
+  --batch_size 8 \
+  --output-dir ChangeDINO-main/outputs/gf3_shenzhen_topo_micro_b4_0412
 
 """
 

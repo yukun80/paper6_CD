@@ -182,6 +182,15 @@ def init_component_recall_stats():
     }
 
 
+def init_prediction_blob_stats():
+    """统计大而紧致的误检连通域，用于约束整块伪斑。"""
+    return {
+        "compact_large_fp_count": 0,
+        "compact_large_fp_area": 0,
+        "pred_fg_area": 0,
+    }
+
+
 def update_component_recall_stats(
     stats,
     label_gt,
@@ -207,6 +216,51 @@ def update_component_recall_stats(
     return stats
 
 
+def update_prediction_blob_stats(
+    stats,
+    label_gt,
+    label_pred,
+    area_thresh: int = 1024,
+    fill_ratio_thresh: float = 0.45,
+    max_gt_iou: float = 0.1,
+):
+    """累计预测中大而紧致的伪斑块。
+
+    仅统计和 GT 几乎不重叠的实心大连通域，避免把细长水体或真实大洪水误判为伪块。
+    """
+    pred_mask = label_pred.astype(np.uint8) > 0
+    gt_mask = label_gt.astype(np.uint8) > 0
+    stats["pred_fg_area"] += int(pred_mask.sum())
+
+    if not np.any(pred_mask):
+        return stats
+
+    structure = np.ones((3, 3), dtype=np.int8)
+    cc_map, n_components = ndimage.label(pred_mask, structure=structure)
+    for component_id in range(1, n_components + 1):
+        mask = cc_map == component_id
+        area = int(mask.sum())
+        if area < area_thresh:
+            continue
+
+        ys, xs = np.where(mask)
+        height = int(ys.max() - ys.min() + 1)
+        width = int(xs.max() - xs.min() + 1)
+        bbox_area = max(height * width, 1)
+        fill_ratio = area / bbox_area
+        if fill_ratio < fill_ratio_thresh:
+            continue
+
+        gt_overlap = int(np.logical_and(mask, gt_mask).sum())
+        gt_support = gt_overlap / max(area, 1)
+        if gt_support >= max_gt_iou:
+            continue
+
+        stats["compact_large_fp_count"] += 1
+        stats["compact_large_fp_area"] += area
+    return stats
+
+
 def component_recall_scores(stats):
     scores = {}
     for bucket, values in stats.items():
@@ -215,3 +269,18 @@ def component_recall_scores(stats):
         scores[f"{bucket}_gt_components"] = total
         scores[f"{bucket}_recall"] = hit / total if total > 0 else 0.0
     return scores
+
+
+def prediction_blob_scores(stats):
+    pred_fg_area = int(stats["pred_fg_area"])
+    compact_large_fp_area = int(stats["compact_large_fp_area"])
+    compact_large_fp_ratio = (
+        compact_large_fp_area / pred_fg_area if pred_fg_area > 0 else 0.0
+    )
+    return {
+        "pred_fg_area": pred_fg_area,
+        "compact_large_fp_count": int(stats["compact_large_fp_count"]),
+        "compact_large_fp_area": compact_large_fp_area,
+        "compact_large_fp_ratio": compact_large_fp_ratio,
+        "blob_precision": max(0.0, 1.0 - min(1.0, compact_large_fp_ratio)),
+    }

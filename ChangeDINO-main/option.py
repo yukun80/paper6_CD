@@ -326,6 +326,12 @@ class Options:
             default=15,
             help="前若干个 epoch 不启用 p2->p1 一致性损失，避免 early-stage 错误 tiny prior 误约束。",
         )
+        self.parser.add_argument(
+            "--coarse_fp_consistency_weight",
+            type=float,
+            default=0.03,
+            help="粗尺度前景需受 p2 局部变化支持的约束权重，用于抑制整块误报。",
+        )
         self.parser.add_argument('--n_layers', nargs='+', type=int, default=[1, 1, 1, 1])
         self.parser.add_argument(
             '--extract_ids',
@@ -385,9 +391,9 @@ class Options:
         self.parser.add_argument(
             "--best_metric",
             type=str,
-            default="iou_1",
-            choices=["iou_1", "tiny_recall", "tiny_combo"],
-            help="标准 best 权重保存依据；tiny-heavy 场景建议使用 tiny_combo。",
+            default="tiny_safe_combo",
+            choices=["iou_1", "tiny_recall", "tiny_combo", "tiny_safe_combo"],
+            help="标准 best 权重保存依据；tiny-heavy 场景建议使用 tiny_safe_combo。",
         )
     def parse(self):
         self.init()
@@ -423,6 +429,8 @@ class Options:
             raise ValueError("--p2_window_size must be a positive integer")
         if self.opt.branch_consistency_weight < 0:
             raise ValueError("--branch_consistency_weight must be >= 0")
+        if self.opt.coarse_fp_consistency_weight < 0:
+            raise ValueError("--coarse_fp_consistency_weight must be >= 0")
         if self.opt.consistency_warmup_epochs < 0:
             raise ValueError("--consistency_warmup_epochs must be >= 0")
         if self.opt.topo_warmup_epochs < 0:

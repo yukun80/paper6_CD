@@ -12,15 +12,28 @@
 
 ## 1. 默认 tiny-heavy 训练
 适合当前“小尺度内涝点优先”的主线设置。默认会使用：
-- `BEST_METRIC=tiny_combo`
+- `BEST_METRIC=tiny_safe_combo`
 - `EVAL_FG_THRESHOLD=0.40`
 - 更晚的 `topo warmup`
 - 更弱的 `topo / consistency` 约束
+- `COARSE_FP_CONSISTENCY_WEIGHT=0.03`，用于抑制粗尺度整块误报
 
 ```bash
 RUN_NAME=S1GFloods-hybrid-mv2-tiny-b4 \
 BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
 BATCH_SIZE=4 \
+bash ChangeDINO-main/trainval_s1gfloods.sh
+```
+
+如果需要显式写出当前默认 tiny-heavy 训练命令，可使用：
+
+```bash
+RUN_NAME=S1GFloods-hybrid-mv2-tiny-b4 \
+BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth \
+BATCH_SIZE=4 \
+BEST_METRIC=tiny_safe_combo \
+EVAL_FG_THRESHOLD=0.40 \
+COARSE_FP_CONSISTENCY_WEIGHT=0.03 \
 bash ChangeDINO-main/trainval_s1gfloods.sh
 ```
 
@@ -67,5 +80,6 @@ bash ChangeDINO-main/trainval_s1gfloods.sh
   - `best_iou`
   - `best_tiny_recall`
   - `best_tiny_combo`
+  - `best_tiny_safe`
 - 汇总信息保存在对应 checkpoint 目录下的 `best_metrics.json`。
 - checkpoint 的 `model_config` 会记录 `disable_soft_alignment`，推理阶段会按训练时的 alignment 开关自动重建模型。

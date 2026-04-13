@@ -22,8 +22,9 @@ SOFT_ALIGNMENT="${SOFT_ALIGNMENT:-1}"
 REFINER="${REFINER:-hybrid}"
 DINO_COLLAB_MODE="${DINO_COLLAB_MODE:-multilevel_v2}"
 BRANCH_CONSISTENCY_WEIGHT="${BRANCH_CONSISTENCY_WEIGHT:-0.02}"
+COARSE_FP_CONSISTENCY_WEIGHT="${COARSE_FP_CONSISTENCY_WEIGHT:-0.03}"
 CONSISTENCY_WARMUP_EPOCHS="${CONSISTENCY_WARMUP_EPOCHS:-10}"
-BEST_METRIC="${BEST_METRIC:-tiny_combo}"
+BEST_METRIC="${BEST_METRIC:-tiny_safe_combo}"
 EVAL_FG_THRESHOLD="${EVAL_FG_THRESHOLD:-0.40}"
 
 cmd=(
@@ -47,6 +48,7 @@ python trainval.py \
   --refiner "${REFINER}" \
   --dino_collab_mode "${DINO_COLLAB_MODE}" \
   --branch_consistency_weight "${BRANCH_CONSISTENCY_WEIGHT}" \
+  --coarse_fp_consistency_weight "${COARSE_FP_CONSISTENCY_WEIGHT}" \
   --consistency_warmup_epochs "${CONSISTENCY_WARMUP_EPOCHS}" \
   --best_metric "${BEST_METRIC}" \
   --eval_fg_threshold "${EVAL_FG_THRESHOLD}" \

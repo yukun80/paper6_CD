@@ -8,7 +8,10 @@ from util.metric_tool import (
     ConfuseMatrixMeter,
     component_recall_scores,
     init_component_recall_stats,
+    init_prediction_blob_stats,
+    prediction_blob_scores,
     update_component_recall_stats,
+    update_prediction_blob_stats,
 )
 import os
 import json
@@ -66,12 +69,14 @@ class Trainval(object):
             "iou_1": float("-inf"),
             "tiny_recall": float("-inf"),
             "tiny_combo": float("-inf"),
+            "tiny_safe_combo": float("-inf"),
         }
         self.best_epochs = {
             "default": 0,
             "iou_1": 0,
             "tiny_recall": 0,
             "tiny_combo": 0,
+            "tiny_safe_combo": 0,
         }
         self.best_summary_path = os.path.join(self.model.save_dir, "best_metrics.json")
 
@@ -87,7 +92,7 @@ class Trainval(object):
                     % (opt.name, getattr(opt, "backbone", "NA"))
                 )
                 f.write(
-                    "# time,epoch,train_loss,train_focal,train_dice,train_topo,train_consistency,lr,"
+                    "# time,epoch,train_loss,train_focal,train_dice,train_topo,train_consistency,train_coarse_fp,lr,"
                 )
                 f.write("val_metrics(json)\n")
 
@@ -104,9 +109,26 @@ class Trainval(object):
             + 0.10 * float(val_scores.get("small_recall", 0.0))
         )
 
+    @staticmethod
+    def _compute_tiny_safe_combo(val_scores: dict) -> float:
+        return (
+            0.40 * float(val_scores.get("iou_1", 0.0))
+            + 0.25 * float(val_scores.get("tiny_recall", 0.0))
+            + 0.10 * float(val_scores.get("small_recall", 0.0))
+            + 0.15 * float(val_scores.get("precision_1", 0.0))
+            + 0.10 * float(val_scores.get("blob_precision", 0.0))
+        )
+
     def _metric_value(self, metric_name: str, val_scores: dict) -> float:
         if metric_name == "tiny_combo":
             return float(val_scores.get("tiny_combo", self._compute_tiny_combo(val_scores)))
+        if metric_name == "tiny_safe_combo":
+            return float(
+                val_scores.get(
+                    "tiny_safe_combo",
+                    self._compute_tiny_safe_combo(val_scores),
+                )
+            )
         return float(val_scores.get(metric_name, 0.0))
 
     def _write_best_summary(self):
@@ -124,6 +146,7 @@ class Trainval(object):
             "iou_1": "best_iou",
             "tiny_recall": "best_tiny_recall",
             "tiny_combo": "best_tiny_combo",
+            "tiny_safe_combo": "best_tiny_safe",
         }
 
         selected_metric_value = self._metric_value(self.best_metric, val_scores)
@@ -152,6 +175,7 @@ class Trainval(object):
             f"{train_stats.get('dice', float('nan')):.6f},"
             f"{train_stats.get('topo', float('nan')):.6f},"
             f"{train_stats.get('consistency', float('nan')):.6f},"
+            f"{train_stats.get('coarse_fp', float('nan')):.6f},"
             f"{train_stats.get('lr', float('nan')):.8f},"
             + json.dumps(val_scores, ensure_ascii=False)
             + "\n"
@@ -179,14 +203,16 @@ class Trainval(object):
         _dice_loss = 0.0
         _topo_loss = 0.0
         _consistency_loss = 0.0
+        _coarse_fp_loss = 0.0
         last_lr = self.optimizer.param_groups[0]["lr"]
 
         topo_w = self.topo_loss_weight if epoch > self.topo_warmup_epochs else 0.0
         consistency_w = float(getattr(self.model, "branch_consistency_weight", 0.0))
+        coarse_fp_w = float(getattr(self.model, "coarse_fp_consistency_weight", 0.0))
 
         for i, data in enumerate(tbar):
             self.model.model.train()
-            pred, focal, dice, topo_loss, consistency_loss = self.model(
+            pred, focal, dice, topo_loss, consistency_loss, coarse_fp_loss = self.model(
                 data["img1"].cuda(),
                 data["img2"].cuda(),
                 data["cd_label"].cuda(),
@@ -198,6 +224,8 @@ class Trainval(object):
                 loss = loss + topo_w * topo_loss
             if consistency_loss is not None and consistency_w > 0:
                 loss = loss + consistency_w * consistency_loss
+            if coarse_fp_loss is not None and coarse_fp_w > 0:
+                loss = loss + coarse_fp_w * coarse_fp_loss
             self.optimizer.zero_grad()
             loss.backward()
             self.optimizer.step()
@@ -209,17 +237,20 @@ class Trainval(object):
                 _topo_loss += topo_loss.item()
             if consistency_loss is not None:
                 _consistency_loss += consistency_loss.item()
+            if coarse_fp_loss is not None:
+                _coarse_fp_loss += coarse_fp_loss.item()
             last_lr = self.optimizer.param_groups[0]["lr"]
             del loss
 
             tbar.set_description(
-                "L:%.3f F:%.3f D:%.3f T:%.3f C:%.3f LR:%.6f"
+                "L:%.3f F:%.3f D:%.3f T:%.3f C:%.3f CF:%.3f LR:%.6f"
                 % (
                     _loss / (i + 1),
                     _focal_loss / (i + 1),
                     _dice_loss / (i + 1),
                     _topo_loss / (i + 1),
                     _consistency_loss / (i + 1),
+                    _coarse_fp_loss / (i + 1),
                     last_lr,
                 )
             )
@@ -237,6 +268,7 @@ class Trainval(object):
             "dice": _dice_loss / n,
             "topo": _topo_loss / n,
             "consistency": _consistency_loss / n,
+            "coarse_fp": _coarse_fp_loss / n,
             "lr": last_lr,
         }
 
@@ -244,6 +276,7 @@ class Trainval(object):
         tbar = tqdm(self.val_data, ncols=80)
         self.running_metric.clear()
         component_stats = init_component_recall_stats()
+        blob_stats = init_prediction_blob_stats()
         opt.phase = "val"
         self.model.eval()
 
@@ -269,6 +302,7 @@ class Trainval(object):
                         tiny_area_thresh=int(getattr(self.opt, "tiny_area_thresh", 100)),
                         small_area_thresh=int(getattr(self.opt, "small_area_thresh", 400)),
                     )
+                    update_prediction_blob_stats(blob_stats, gt_item, pred_item)
                 if i == len(tbar) - 1:
                     self._plot_cd_result(
                         _data["img1"],
@@ -280,10 +314,12 @@ class Trainval(object):
                     )
             val_scores = self.running_metric.get_scores()
             val_scores.update(component_recall_scores(component_stats))
+            val_scores.update(prediction_blob_scores(blob_stats))
             val_scores["tiny_combo"] = self._compute_tiny_combo(val_scores)
+            val_scores["tiny_safe_combo"] = self._compute_tiny_safe_combo(val_scores)
             message = "(phase: %s) " % (self.opt.phase)
             for k, v in val_scores.items():
-                if k.endswith("_components"):
+                if k.endswith("_components") or k.endswith("_count") or k.endswith("_area"):
                     message += "%s: %d " % (k, int(v))
                 else:
                     message += "%s: %.3f " % (k, v * 100)
@@ -294,7 +330,10 @@ class Trainval(object):
             f"| iou_1={float(val_scores.get('iou_1', 0.0)) * 100:.3f} "
             f"| tiny_recall={float(val_scores.get('tiny_recall', 0.0)) * 100:.3f} "
             f"| small_recall={float(val_scores.get('small_recall', 0.0)) * 100:.3f} "
-            f"| tiny_combo={float(val_scores.get('tiny_combo', 0.0)) * 100:.3f}"
+            f"| precision_1={float(val_scores.get('precision_1', 0.0)) * 100:.3f} "
+            f"| blob_precision={float(val_scores.get('blob_precision', 0.0)) * 100:.3f} "
+            f"| tiny_combo={float(val_scores.get('tiny_combo', 0.0)) * 100:.3f} "
+            f"| tiny_safe_combo={float(val_scores.get('tiny_safe_combo', 0.0)) * 100:.3f}"
         )
         self._update_best_checkpoints(epoch, val_scores)
 

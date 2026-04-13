@@ -71,6 +71,9 @@ class Model(nn.Module):
             micro_gate=getattr(opt, "micro_gate", False),
             dino_collab_mode=getattr(opt, "dino_collab_mode", "multilevel_v2"),
             branch_consistency_weight=float(getattr(opt, "branch_consistency_weight", 0.05)),
+            coarse_fp_consistency_weight=float(
+                getattr(opt, "coarse_fp_consistency_weight", 0.03)
+            ),
             consistency_warmup_epochs=int(getattr(opt, "consistency_warmup_epochs", 15)),
             topo_grid_size=getattr(opt, "topo_grid_size", 16),
             topo_hidden_dim=getattr(opt, "topo_hidden_dim", 128),
@@ -86,6 +89,9 @@ class Model(nn.Module):
         )
         self.topo_loss_weight = getattr(opt, "topo_loss_weight", 0.5)
         self.branch_consistency_weight = float(getattr(opt, "branch_consistency_weight", 0.05))
+        self.coarse_fp_consistency_weight = float(
+            getattr(opt, "coarse_fp_consistency_weight", 0.03)
+        )
         self.aux_head_weights = [1.0, 1.0, 0.5, 0.25, 0.25]
         self.focal = FocalLoss(alpha=opt.alpha, gamma=opt.gamma)
         self.dice = DICELoss()
@@ -102,7 +108,7 @@ class Model(nn.Module):
         print("---------- Networks initialized -------------")
 
     def forward(self, x1, x2, label, epoch: int | None = None):
-        final_pred, preds, topo_loss, consistency_loss = self.model(
+        final_pred, preds, topo_loss, consistency_loss, coarse_fp_loss = self.model(
             x1, x2, gt_mask=label, current_epoch=epoch
         )
         label = label.long()
@@ -111,7 +117,7 @@ class Model(nn.Module):
         for weight, pred in zip(self.aux_head_weights, preds):
             focal += 0.5 * weight * self.focal(pred, label)
             dice += weight * self.dice(pred, label)
-        return final_pred, focal, dice, topo_loss, consistency_loss
+        return final_pred, focal, dice, topo_loss, consistency_loss, coarse_fp_loss
 
     @torch.inference_mode()
     def inference(self, x1, x2):
@@ -176,6 +182,9 @@ class Model(nn.Module):
                 "dino_collab_mode": getattr(self.opt, "dino_collab_mode", "multilevel_v2"),
                 "branch_consistency_weight": float(
                     getattr(self.opt, "branch_consistency_weight", 0.05)
+                ),
+                "coarse_fp_consistency_weight": float(
+                    getattr(self.opt, "coarse_fp_consistency_weight", 0.03)
                 ),
                 "consistency_warmup_epochs": int(
                     getattr(self.opt, "consistency_warmup_epochs", 15)
