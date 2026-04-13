@@ -46,6 +46,7 @@ INFER_MODEL_CONFIG_FIELDS = {
     "gamma_mode",
     "beta_mode",
     "n_layers",
+    "disable_soft_alignment",
     "align_window",
     "align_points",
     "align_heads",
@@ -224,6 +225,9 @@ def count_transformer_blocks(state_dict: dict[str, torch.Tensor], prefix: str) -
 def infer_checkpoint_model_config_from_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, object] | None:
     """兼容旧 checkpoint：从参数形状反推关键模型配置。"""
     cfg: dict[str, object] = {}
+    cfg["disable_soft_alignment"] = not any(
+        key.startswith("detector.soft_align_p") for key in state_dict
+    )
 
     def _infer_ocda_window_size(rel_pos_shape: int) -> int | None:
         for window_size in range(1, 65):
@@ -273,6 +277,16 @@ def infer_checkpoint_model_config_from_state_dict(state_dict: dict[str, torch.Te
     if n_layers:
         cfg["n_layers"] = n_layers
     cfg["contrast_pool_sizes"] = [5, 5, 5, 5]
+    if not cfg["disable_soft_alignment"]:
+        cfg["align_on_levels"] = [
+            level
+            for level, prefix in (
+                (1, "detector.soft_align_p1"),
+                (2, "detector.soft_align_p2"),
+                (3, "detector.soft_align_p3"),
+            )
+            if any(key.startswith(prefix) for key in state_dict)
+        ]
 
     tb2_rel_key = "detector.tb2.0.spatial_attn.rel_pos_emb.rel_height"
     if tb2_rel_key in state_dict:
@@ -369,6 +383,10 @@ def parse_and_prepare(
     opt, used_checkpoint_model_config = apply_checkpoint_model_config(
         opt, checkpoint_model_config, explicit_overrides
     )
+    if getattr(opt, "disable_soft_alignment", False):
+        opt.align_on_levels = []
+    else:
+        opt.align_on_levels = sorted({int(v) for v in getattr(opt, "align_on_levels", [1, 2, 3])})
     if (
         checkpoint_model_config
         and "dino_collab_mode" not in checkpoint_model_config
@@ -718,6 +736,7 @@ def main(
             "gamma_mode": opt.gamma_mode,
             "beta_mode": opt.beta_mode,
             "n_layers": [int(v) for v in opt.n_layers],
+            "disable_soft_alignment": bool(getattr(opt, "disable_soft_alignment", False)),
             "align_window": int(opt.align_window),
             "align_points": int(opt.align_points),
             "align_heads": int(opt.align_heads),

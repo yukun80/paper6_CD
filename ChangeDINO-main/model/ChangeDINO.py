@@ -485,12 +485,49 @@ class DynamicMicroGate(nn.Module):
         return tiny_prior_p1, risk_p2, risk_p3
 
 
+class NoAlignFeatureAdapter(nn.Module):
+    """关闭 soft alignment 时的轻量双时相协同适配器。"""
+
+    def __init__(self, dim: int):
+        super().__init__()
+        hidden_dim = max(dim // 2, 32)
+        self.mix = nn.Sequential(
+            nn.Conv2d(dim * 3, hidden_dim, 1, bias=False),
+            nn.BatchNorm2d(hidden_dim),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(hidden_dim, hidden_dim, 3, padding=1, bias=False),
+            nn.BatchNorm2d(hidden_dim),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(hidden_dim, dim, 1, bias=False),
+            nn.BatchNorm2d(dim),
+        )
+        self.gate = nn.Sequential(
+            nn.Conv2d(dim * 2, dim, 1, bias=True),
+            nn.Sigmoid(),
+        )
+
+        # 以近似 identity 的方式起步，避免关闭 alignment 后训练初期分布突变。
+        nn.init.zeros_(self.mix[-1].weight)
+        nn.init.zeros_(self.mix[-1].bias)
+
+    def forward(self, pre_feat: torch.Tensor, post_feat: torch.Tensor) -> torch.Tensor:
+        if pre_feat.shape != post_feat.shape:
+            raise ValueError(
+                f"pre/post feature shapes must match, got {pre_feat.shape} vs {post_feat.shape}"
+            )
+        abs_delta = torch.abs(post_feat - pre_feat)
+        residual = self.mix(torch.cat([pre_feat, post_feat, abs_delta], dim=1))
+        gate = self.gate(torch.cat([pre_feat, post_feat], dim=1))
+        return pre_feat + gate * residual
+
+
 class Detector(nn.Module):
     def __init__(
         self,
         fpn_channels=128,
         dino_embed_dim=384,
         n_layers=[1, 1, 1, 1],
+        disable_soft_alignment=False,
         align_window=5,
         align_points=9,
         align_heads=4,
@@ -506,41 +543,63 @@ class Detector(nn.Module):
         super().__init__()
         if align_on_levels is None:
             align_on_levels = [1, 2, 3]
+        if disable_soft_alignment:
+            align_on_levels = []
         if contrast_pool_sizes is None:
             contrast_pool_sizes = [5, 5, 5, 5]
         if len(contrast_pool_sizes) != 4:
             raise ValueError(
                 f"contrast_pool_sizes expects 4 ints for P2/P3/P4/P5, got {contrast_pool_sizes}"
             )
+        invalid_levels = sorted({int(level) for level in align_on_levels if int(level) not in {1, 2, 3}})
+        if invalid_levels:
+            raise ValueError(f"align_on_levels only supports P1/P2/P3, got {invalid_levels}")
+        self.disable_soft_alignment = bool(disable_soft_alignment)
         self.align_on_levels = {int(level) for level in align_on_levels}
         self.use_micro_gate = bool(micro_gate)
         self.p1_pool_size = max(3, contrast_pool_sizes[0])
         self.dino_collab_mode = dino_collab_mode
 
-        self.soft_align_p1 = DeformableCrossAttentionAlign(
-            dim=fpn_channels,
-            num_heads=max(1, align_heads // 2),
-            num_points=max(4, align_points // 2),
-            window_size=align_window,
-            offset_groups=max(1, align_offset_groups // 2),
-            qkv_bias=align_qkv_bias,
+        self.soft_align_p1 = (
+            DeformableCrossAttentionAlign(
+                dim=fpn_channels,
+                num_heads=max(1, align_heads // 2),
+                num_points=max(4, align_points // 2),
+                window_size=align_window,
+                offset_groups=max(1, align_offset_groups // 2),
+                qkv_bias=align_qkv_bias,
+            )
+            if 1 in self.align_on_levels
+            else None
         )
-        self.soft_align_p2 = DeformableCrossAttentionAlign(
-            dim=fpn_channels,
-            num_heads=align_heads,
-            num_points=align_points,
-            window_size=align_window,
-            offset_groups=align_offset_groups,
-            qkv_bias=align_qkv_bias,
+        self.soft_align_p2 = (
+            DeformableCrossAttentionAlign(
+                dim=fpn_channels,
+                num_heads=align_heads,
+                num_points=align_points,
+                window_size=align_window,
+                offset_groups=align_offset_groups,
+                qkv_bias=align_qkv_bias,
+            )
+            if 2 in self.align_on_levels
+            else None
         )
-        self.soft_align_p3 = DeformableCrossAttentionAlign(
-            dim=fpn_channels,
-            num_heads=align_heads,
-            num_points=align_points,
-            window_size=align_window,
-            offset_groups=align_offset_groups,
-            qkv_bias=align_qkv_bias,
+        self.soft_align_p3 = (
+            DeformableCrossAttentionAlign(
+                dim=fpn_channels,
+                num_heads=align_heads,
+                num_points=align_points,
+                window_size=align_window,
+                offset_groups=align_offset_groups,
+                qkv_bias=align_qkv_bias,
+            )
+            if 3 in self.align_on_levels
+            else None
         )
+        use_no_align_adapter = len(self.align_on_levels) == 0
+        self.no_align_p1 = NoAlignFeatureAdapter(fpn_channels) if use_no_align_adapter else None
+        self.no_align_p2 = NoAlignFeatureAdapter(fpn_channels) if use_no_align_adapter else None
+        self.no_align_p3 = NoAlignFeatureAdapter(fpn_channels) if use_no_align_adapter else None
         self.diff_p1 = ContrastAwareDiff(
             fpn_channels,
             pool_size=self.p1_pool_size,
@@ -653,6 +712,19 @@ class Detector(nn.Module):
         self.p3_head = nn.Conv2d(fpn_channels, 2, 1)
         self.p2_head = nn.Conv2d(fpn_channels, 2, 1)
 
+    @staticmethod
+    def _prepare_pre_feat(
+        pre_feat: torch.Tensor,
+        post_feat: torch.Tensor,
+        align_module: nn.Module | None,
+        adapter_module: nn.Module | None,
+    ) -> torch.Tensor:
+        if align_module is not None:
+            return align_module(pre_feat, post_feat)
+        if adapter_module is not None:
+            return adapter_module(pre_feat, post_feat)
+        return pre_feat
+
     def forward(self, x1s, x2s, dino_t1_levels, dino_t2_levels, size=(256, 256)):
         """
         x1s, x2s  : Encoder 返回的 FPN 金字塔特征 (各 5 级)
@@ -661,14 +733,14 @@ class Detector(nn.Module):
         t1_p1, t1_p2, t1_p3, t1_p4, t1_p5 = x1s
         t2_p1, t2_p2, t2_p3, t2_p4, t2_p5 = x2s
 
-        aligned_pre_p1 = (
-            self.soft_align_p1(t1_p1, t2_p1) if 1 in self.align_on_levels else t1_p1
+        aligned_pre_p1 = self._prepare_pre_feat(
+            t1_p1, t2_p1, self.soft_align_p1, self.no_align_p1
         )
-        aligned_pre_p2 = (
-            self.soft_align_p2(t1_p2, t2_p2) if 2 in self.align_on_levels else t1_p2
+        aligned_pre_p2 = self._prepare_pre_feat(
+            t1_p2, t2_p2, self.soft_align_p2, self.no_align_p2
         )
-        aligned_pre_p3 = (
-            self.soft_align_p3(t1_p3, t2_p3) if 3 in self.align_on_levels else t1_p3
+        aligned_pre_p3 = self._prepare_pre_feat(
+            t1_p3, t2_p3, self.soft_align_p3, self.no_align_p3
         )
         aligned_pre_p4 = t1_p4
         aligned_pre_p5 = t1_p5
@@ -741,6 +813,7 @@ class ChangeModel(nn.Module):
         backbone="efficientnet_b0",
         fpn_channels=128,
         n_layers=[1, 1, 1, 1],
+        disable_soft_alignment=False,
         align_window=5,
         align_points=9,
         align_heads=4,
@@ -773,6 +846,7 @@ class ChangeModel(nn.Module):
             fpn_channels=fpn_channels,
             dino_embed_dim=self.encoder.dino.embed_dim,
             n_layers=n_layers,
+            disable_soft_alignment=disable_soft_alignment,
             align_window=align_window,
             align_points=align_points,
             align_heads=align_heads,

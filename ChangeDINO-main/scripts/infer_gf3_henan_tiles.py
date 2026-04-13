@@ -25,14 +25,6 @@ from infer_sar_scene_tiles import main as infer_main
 # 中的 *_efficientnet_b0_best.pth；OUTPUT 建议带实验名与日期便于对照。
 """
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
-  --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-topo-micro-b8-20260409/S1GFloods-topo-micro-b8-20260409_efficientnet_b0_best.pth \
-  --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
-  --gpu_ids 0 \
-  --batch_size 8 \
-  --output-dir ChangeDINO-main/outputs/gf3_henan_topo_b8
-
-python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Zhuozhou_CD_infer \
   --checkpoint ChangeDINO-main/checkpoints/S1GFloods-topo-b8-YYYYMMDD/S1GFloods-topo-b8-YYYYMMDD_efficientnet_b0_best.pth \
   --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
@@ -42,11 +34,11 @@ python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
 
 python ChangeDINO-main/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-hybrid-mv2-tiny-b4-20260410/S1GFloods-hybrid-mv2-tiny-b4-20260410_efficientnet_b0_best_tiny_combo.pth \
+  --checkpoint ChangeDINO-main/checkpoints/S1GFloods-hybrid-mv2-tiny-b4-20260412/S1GFloods-hybrid-mv2-tiny-b4-20260412_efficientnet_b0_best_tiny_combo.pth \
   --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
   --gpu_ids 0 \
   --batch_size 8 \
-  --output-dir ChangeDINO-main/outputs/gf3_henan_topo_micro_b4_tiny
+  --output-dir ChangeDINO-main/outputs/gf3_henan_topo_micro_b4_0412
 
 """
 

@@ -256,6 +256,11 @@ class Options:
         self.parser.add_argument("--gamma_mode", type=str, default="SE")
         self.parser.add_argument("--beta_mode", type=str, default="contextgatedconv")
         self.parser.add_argument(
+            "--disable_soft_alignment",
+            action="store_true",
+            help="关闭 deformable soft-alignment；关闭后 P1/P2/P3 将改用轻量双时相协同适配器。",
+        )
+        self.parser.add_argument(
             "--align_window",
             type=int,
             default=5,
@@ -422,6 +427,15 @@ class Options:
             raise ValueError("--consistency_warmup_epochs must be >= 0")
         if self.opt.topo_warmup_epochs < 0:
             raise ValueError("--topo_warmup_epochs must be >= 0")
+        if self.opt.disable_soft_alignment:
+            self.opt.align_on_levels = []
+        else:
+            self.opt.align_on_levels = sorted({int(v) for v in self.opt.align_on_levels})
+            invalid_align_levels = [v for v in self.opt.align_on_levels if v not in {1, 2, 3}]
+            if invalid_align_levels:
+                raise ValueError(
+                    f"--align_on_levels only supports P1/P2/P3, got {invalid_align_levels}"
+                )
         if not 0.0 <= self.opt.eval_fg_threshold <= 1.0:
             raise ValueError("--eval_fg_threshold must be within [0, 1]")
         if not getattr(self.opt, "topo_long_offsets", None):
