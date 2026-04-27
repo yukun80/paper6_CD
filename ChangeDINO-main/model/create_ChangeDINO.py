@@ -69,7 +69,7 @@ class Model(nn.Module):
             p2_window_size=getattr(opt, "p2_window_size", 8),
             refiner=getattr(opt, "refiner", "topo"),
             micro_gate=getattr(opt, "micro_gate", False),
-            dino_collab_mode=getattr(opt, "dino_collab_mode", "multilevel_v2"),
+            dino_collab_mode=getattr(opt, "dino_collab_mode", "none"),
             branch_consistency_weight=float(getattr(opt, "branch_consistency_weight", 0.05)),
             coarse_fp_consistency_weight=float(
                 getattr(opt, "coarse_fp_consistency_weight", 0.03)
@@ -179,7 +179,7 @@ class Model(nn.Module):
                 "p2_window_size": int(getattr(self.opt, "p2_window_size", 8)),
                 "refiner": getattr(self.opt, "refiner", "topo"),
                 "micro_gate": bool(getattr(self.opt, "micro_gate", False)),
-                "dino_collab_mode": getattr(self.opt, "dino_collab_mode", "multilevel_v2"),
+                "dino_collab_mode": getattr(self.opt, "dino_collab_mode", "none"),
                 "branch_consistency_weight": float(
                     getattr(self.opt, "branch_consistency_weight", 0.05)
                 ),

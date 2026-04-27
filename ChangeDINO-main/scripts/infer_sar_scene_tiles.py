@@ -311,7 +311,7 @@ def infer_checkpoint_model_config_from_state_dict(state_dict: dict[str, torch.Te
         cfg["refiner"] = "hybrid"
     if any(key.startswith("detector.micro_gate.tiny_head") for key in state_dict):
         cfg["micro_gate"] = True
-    cfg["dino_collab_mode"] = "legacy"
+    cfg["dino_collab_mode"] = "none"
     cfg["branch_consistency_weight"] = 0.0
     cfg["coarse_fp_consistency_weight"] = 0.0
     cfg["consistency_warmup_epochs"] = 0
@@ -320,7 +320,8 @@ def infer_checkpoint_model_config_from_state_dict(state_dict: dict[str, torch.Te
     if any(key.startswith("detector.p1_dino_gate") for key in state_dict) or any(
         key.startswith("detector.p3_dino_ctx") for key in state_dict
     ):
-        cfg["dino_collab_mode"] = "multilevel_v2"
+        # 旧版 checkpoint 含 Sub-B 模块，加载时这些 key 会被跳过（strict=False）
+        cfg["dino_collab_mode"] = "none"
         cfg["branch_consistency_weight"] = 0.1
 
     if "backbone" not in cfg:
@@ -412,7 +413,7 @@ def parse_and_prepare(
         and "dino_collab_mode" not in checkpoint_model_config
         and "dino_collab_mode" not in explicit_overrides
     ):
-        opt.dino_collab_mode = "legacy"
+        opt.dino_collab_mode = "none"
     if (
         checkpoint_model_config
         and "branch_consistency_weight" not in checkpoint_model_config
@@ -447,9 +448,9 @@ def parse_and_prepare(
         getattr(opt, "contrast_pool_sizes", None), getattr(opt, "contrast_pool_size", None)
     )
     if not hasattr(opt, "dino_collab_mode"):
-        opt.dino_collab_mode = "multilevel_v2"
+        opt.dino_collab_mode = "none"
     if checkpoint_model_config is None:
-        opt.dino_collab_mode = "legacy"
+        opt.dino_collab_mode = "none"
         opt.branch_consistency_weight = 0.0
         opt.coarse_fp_consistency_weight = 0.0
         opt.consistency_warmup_epochs = 0
@@ -873,7 +874,7 @@ def main(
             "align_offset_groups": int(opt.align_offset_groups),
             "p2_window_size": int(getattr(opt, "p2_window_size", 8)),
             "micro_gate": bool(getattr(opt, "micro_gate", False)),
-            "dino_collab_mode": getattr(opt, "dino_collab_mode", "multilevel_v2"),
+            "dino_collab_mode": getattr(opt, "dino_collab_mode", "none"),
             "branch_consistency_weight": float(
                 getattr(opt, "branch_consistency_weight", 0.05)
             ),

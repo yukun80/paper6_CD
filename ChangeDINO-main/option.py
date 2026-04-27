@@ -310,9 +310,9 @@ class Options:
         self.parser.add_argument(
             "--dino_collab_mode",
             type=str,
-            default="multilevel_v2",
-            choices=["legacy", "multilevel_v2"],
-            help="DINO 与 CNN 的协同模式；multilevel_v2 启用 p1 gate + p3 bridge + p2 bridge。",
+            default="none",
+            choices=["none", "legacy", "multilevel_v2"],
+            help="DINO 与 CNN 的协同模式；none 表示仅编码器 PFF 融合（方案A，推荐），legacy/multilevel_v2 为旧版解码器注入（已弃用）。",
         )
         self.parser.add_argument(
             "--branch_consistency_weight",

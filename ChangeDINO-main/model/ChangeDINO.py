@@ -181,17 +181,17 @@ class Encoder(nn.Module):
     def forward(self, x):
         """
         x : [B, 3, H, W]
-        returns : (fea_pyramid, dino_raw_levels)
-            fea_pyramid      : tuple of 5 级特征，p1/p2 保持 CNN 主导，
-                               p3-p5 为 FPN-DINO 融合特征
-            dino_raw_levels  : list of 4 个原始 DINOv3 特征，供 Detector 做
-                               浅层 gate / 中层 bridge / 深层 bridge 协同
+        returns : fea_pyramid
+            fea_pyramid : tuple of 5 级特征，p1/p2 保持 CNN 主导，
+                          p3-p5 为 FPN-DINO 融合特征。
+                          DINO 语义在编码器出口集中融合，解码器不再消费 raw DINO。
         """
         fea = self.backbone.forward(x)
         fea = self.fpn(fea if self.has_native_p1 else fea[-4:])
 
         ds_fea_raw = self.dino(x)
-        ds_fea = self.dense_adp(ds_fea_raw)
+        # 方案A：跳过 raw[0]（最浅层），只取 raw[1:] 三层送入 DenseAdapterLite
+        ds_fea = self.dense_adp(ds_fea_raw[1:])
 
         if len(fea) == 5:
             p1, p2, p3, p4, p5 = fea
@@ -201,9 +201,9 @@ class Encoder(nn.Module):
             )
             p2, p3, p4, p5 = fea
 
-        p3, p4, p5 = self.pff((p3, p4, p5), ds_fea[1:])
+        p3, p4, p5 = self.pff((p3, p4, p5), ds_fea)
 
-        return (p1, p2, p3, p4, p5), ds_fea_raw
+        return (p1, p2, p3, p4, p5)
 
 
 class FuseGated(nn.Module):
@@ -597,7 +597,7 @@ class Detector(nn.Module):
         contrast_pool_sizes=None,
         p2_window_size=8,
         micro_gate=False,
-        dino_collab_mode="multilevel_v2",
+        dino_collab_mode="none",
         **kwargs,
     ):
         super().__init__()
@@ -618,7 +618,6 @@ class Detector(nn.Module):
         self.align_on_levels = {int(level) for level in align_on_levels}
         self.use_micro_gate = bool(micro_gate)
         self.p1_pool_size = max(3, contrast_pool_sizes[0])
-        self.dino_collab_mode = dino_collab_mode
 
         self.soft_align_p1 = (
             DeformableCrossAttentionAlign(
@@ -754,21 +753,8 @@ class Detector(nn.Module):
             DsBnRelu(fpn_channels, fpn_channels),
             CBAM(fpn_channels, 8),
         )
-        self.p1_dino_gate = (
-            P1DinoSemanticGate(fpn_channels, dino_embed_dim, num_dino_levels=2)
-            if self.dino_collab_mode == "multilevel_v2"
-            else None
-        )
-        self.p3_dino_ctx = (
-            DinoTokenBridge(fpn_channels, dino_embed_dim, num_dino_levels=2)
-            if self.dino_collab_mode == "multilevel_v2"
-            else None
-        )
-        self.dino_ctx = DinoTokenBridge(
-            fpn_channels,
-            dino_embed_dim,
-            num_dino_levels=2 if self.dino_collab_mode == "multilevel_v2" else 1,
-        )
+        # 方案A：删除 Sub-B（P1gate / P3bridge / P2bridge），
+        # DINO 语义集中在编码器 PFF 融合，解码器保持纯 CNN 差分流。
         self.p1_head = nn.Conv2d(fpn_channels, 2, 1)
         self.p5_head = nn.Conv2d(fpn_channels, 2, 1)
         self.p4_head = nn.Conv2d(fpn_channels, 2, 1)
@@ -788,10 +774,10 @@ class Detector(nn.Module):
             return adapter_module(pre_feat, post_feat)
         return pre_feat
 
-    def forward(self, x1s, x2s, dino_t1_levels, dino_t2_levels, size=(256, 256)):
+    def forward(self, x1s, x2s, size=(256, 256)):
         """
-        x1s, x2s  : Encoder 返回的 FPN 金字塔特征 (各 5 级)
-        dino_t1_levels / dino_t2_levels : Encoder 返回的 4 层 DINOv3 原始特征
+        x1s, x2s : Encoder 返回的 FPN 金字塔特征 (各 5 级)
+        方案A简化：解码器不再接收 dino_raw_levels，纯 CNN 差分流。
         """
         t1_p1, t1_p2, t1_p3, t1_p4, t1_p5 = x1s
         t2_p1, t2_p2, t2_p3, t2_p4, t2_p5 = x2s
@@ -822,13 +808,6 @@ class Detector(nn.Module):
         diff_p3 = self.diff_p3(aligned_pre_p3, t2_p3, risk_map=risk_p3)
         diff_p4 = self.diff_p4(aligned_pre_p4, t2_p4)
         diff_p5 = self.diff_p5(aligned_pre_p5, t2_p5)
-        if self.p1_dino_gate is not None:
-            diff_p1 = self.p1_dino_gate(
-                diff_p1,
-                dino_t1_levels[:2],
-                dino_t2_levels[:2],
-                tiny_prior_map=tiny_prior_p1,
-            )
 
         # 利用 p2 层较稳定的局部变化证据，抑制粗尺度语义向下游整块扩散。
         support_p4 = self.support_p4(diff_p2, diff_p4.shape[-2:])
@@ -846,15 +825,9 @@ class Detector(nn.Module):
         pred_p4 = self.p4_head(fea_p4)
         fea_p3 = self.p4_to_p3(fea_p4, diff_p3, support_map=support_p3)
         fea_p3 = self.tb3(fea_p3)
-        if self.p3_dino_ctx is not None:
-            fea_p3 = self.p3_dino_ctx(fea_p3, dino_t1_levels[1:3], dino_t2_levels[1:3])
         pred_p3 = self.p3_head(fea_p3)
         fea_p2 = self.p3_to_p2(fea_p3, diff_p2, support_map=support_p2)
         fea_p2 = self.tb2(fea_p2)
-        if self.dino_collab_mode == "multilevel_v2":
-            fea_p2 = self.dino_ctx(fea_p2, dino_t1_levels[2:4], dino_t2_levels[2:4])
-        else:
-            fea_p2 = self.dino_ctx(fea_p2, [dino_t1_levels[-1]], [dino_t2_levels[-1]])
         pred_p2 = self.p2_head(fea_p2)
         fea_p1 = self.p2_to_p1(fea_p2, diff_p1)
         fea_p1 = self.tb1(fea_p1)
@@ -896,7 +869,7 @@ class ChangeModel(nn.Module):
         p2_window_size=8,
         refiner="topo",
         micro_gate=False,
-        dino_collab_mode="multilevel_v2",
+        dino_collab_mode="none",
         branch_consistency_weight=0.05,
         coarse_fp_consistency_weight=0.03,
         consistency_warmup_epochs=15,
@@ -911,7 +884,6 @@ class ChangeModel(nn.Module):
     ):
         super().__init__()
         self.refiner_mode = refiner
-        self.dino_collab_mode = dino_collab_mode
         self.branch_consistency_weight = float(branch_consistency_weight)
         self.coarse_fp_consistency_weight = float(coarse_fp_consistency_weight)
         self.consistency_warmup_epochs = int(consistency_warmup_epochs)
@@ -1033,10 +1005,10 @@ class ChangeModel(nn.Module):
 
     @torch.inference_mode()
     def _forward(self, x1, x2):
-        fea1, dino_levels1 = self.encoder(x1)
-        fea2, dino_levels2 = self.encoder(x2)
+        fea1 = self.encoder(x1)
+        fea2 = self.encoder(x2)
         pred_p1, pred_p2, _, _, _, det_p1_feat, det_p2_feat, tiny_prior, risk_map = self.detector(
-            fea1, fea2, dino_levels1, dino_levels2, x1.shape[-2:]
+            fea1, fea2, x1.shape[-2:]
         )
         pred, _ = self._apply_refiner(
             pred_p1, pred_p2, det_p1_feat, det_p2_feat, tiny_prior, risk_map
@@ -1044,11 +1016,11 @@ class ChangeModel(nn.Module):
         return pred
 
     def forward(self, x1, x2, gt_mask=None, current_epoch: int | None = None):
-        fea1, dino_levels1 = self.encoder(x1)
-        fea2, dino_levels2 = self.encoder(x2)
+        fea1 = self.encoder(x1)
+        fea2 = self.encoder(x2)
 
         pred_p1, pred_p2, pred_p3, pred_p4, pred_p5, det_p1_feat, det_p2_feat, tiny_prior, risk_map = self.detector(
-            fea1, fea2, dino_levels1, dino_levels2, x1.shape[-2:]
+            fea1, fea2, x1.shape[-2:]
         )
         final_pred, topo_loss = self._apply_refiner(
             pred_p1, pred_p2, det_p1_feat, det_p2_feat, tiny_prior, risk_map, gt_mask=gt_mask

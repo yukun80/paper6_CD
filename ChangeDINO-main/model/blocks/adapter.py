@@ -91,34 +91,48 @@ class SepAdapterBlock(nn.Module):
 
 
 class DenseAdapterLite(nn.Module):
+    """将 DINOv3 中间层特征适配到与 FPN 金字塔匹配的通道数和空间尺度。
+
+    方案A简化版：只处理 3 层 DINO 特征（跳过最浅层 raw[0]），
+    分别对应 PFF 在 p3/p4/p5 的融合。每层独立 SepAdapterBlock + 尺度缩放。
+    """
+
     def __init__(
         self,
         in_dim=1024,
         out_dim=256,
         bottleneck=64,
         share=False,
+        num_levels=3,
     ):
         super().__init__()
+        self.num_levels = num_levels
         if share:
             self.blocks = nn.ModuleList(
                 [SepAdapterBlock(in_dim, out_dim, r=bottleneck)]
             )
         else:
             self.blocks = nn.ModuleList(
-                [SepAdapterBlock(in_dim, out_dim, r=bottleneck) for _ in range(4)]
+                [SepAdapterBlock(in_dim, out_dim, r=bottleneck) for _ in range(num_levels)]
             )
         self.share = share
 
     def forward(self, feats):
         """
-        feats: list of 4 tensors, each [B, C, H_i, W_i]（C = in_dim）
-        return: list of 4 tensors, each [B, out_dim, S_i, S_i], S_i ∈ self.sizes
+        feats: list of num_levels tensors, each [B, C, H_i, W_i]（C = in_dim）
+               默认 3 层，对应 raw[1], raw[2], raw[3]
+        return: list of num_levels tensors, each [B, out_dim, S_i, S_i]
         """
+        if len(feats) != self.num_levels:
+            raise ValueError(
+                f"DenseAdapterLite expects {self.num_levels} features, got {len(feats)}"
+            )
         outs = []
         for i, x in enumerate(feats):
+            # i=0 对应 PFF p3（scale ×1），i=1 对应 p4（×0.5），i=2 对应 p5（×0.25）
             x = F.interpolate(
                 x,
-                scale_factor=2 / (2**i),
+                scale_factor=1.0 / (2**i),
                 mode="bilinear",
                 align_corners=False,
                 antialias=True,
