@@ -79,6 +79,8 @@ class HACQITrainer(object):
         self.alpha = 0.5
         self.num_epochs = opt.num_epochs
         self.eval_fg_threshold = float(getattr(opt, "eval_fg_threshold", 0.5))
+        self.eval_thresholds = [float(v) for v in getattr(opt, "eval_thresholds", [])]
+        self.last_threshold_scan = {}
         self.best_metric = str(getattr(opt, "best_metric", "iou_1"))
         self.best_scores = {
             "default": float("-inf"),
@@ -108,7 +110,12 @@ class HACQITrainer(object):
                     "# amp: %s | amp_dtype: %s\n"
                     % (str(self.amp_enabled), getattr(opt, "amp_dtype", "fp16"))
                 )
-                f.write("# time,epoch,train_loss,train_focal,train_dice,lr,")
+                f.write(
+                    "# time,epoch,train_loss,train_focal,train_tversky,"
+                    "main_focal,main_tversky,aux_focal,aux_tversky,"
+                    "support_loss,coarse_loss,support_weight,coarse_weight,"
+                    "aux_loss_scale,tversky_beta,query_gate,lr,"
+                )
                 f.write("val_metrics(json)\n")
 
     @staticmethod
@@ -197,16 +204,57 @@ class HACQITrainer(object):
 
     def _append_log_line(self, epoch: int, train_stats: dict, val_scores: dict):
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        val_payload = dict(val_scores)
+        if self.last_threshold_scan:
+            val_payload["threshold_scan"] = self.last_threshold_scan
 
         line = (
             f"{ts},{epoch},"
             f"{train_stats.get('loss', float('nan')):.6f},"
             f"{train_stats.get('focal', float('nan')):.6f},"
-            f"{train_stats.get('dice', float('nan')):.6f},"
-            f"{train_stats.get('lr', float('nan')):.8f}," + json.dumps(val_scores, ensure_ascii=False) + "\n"
+            f"{train_stats.get('tversky', float('nan')):.6f},"
+            f"{train_stats.get('main_focal', float('nan')):.6f},"
+            f"{train_stats.get('main_tversky', float('nan')):.6f},"
+            f"{train_stats.get('aux_focal', float('nan')):.6f},"
+            f"{train_stats.get('aux_tversky', float('nan')):.6f},"
+            f"{train_stats.get('support_loss', float('nan')):.6f},"
+            f"{train_stats.get('coarse_loss', float('nan')):.6f},"
+            f"{train_stats.get('support_weight', float('nan')):.6f},"
+            f"{train_stats.get('coarse_weight', float('nan')):.6f},"
+            f"{train_stats.get('aux_loss_scale', float('nan')):.6f},"
+            f"{train_stats.get('tversky_beta', float('nan')):.6f},"
+            f"{train_stats.get('query_gate', float('nan')):.6f},"
+            f"{train_stats.get('lr', float('nan')):.8f}," + json.dumps(val_payload, ensure_ascii=False) + "\n"
         )
         with open(self.log_path, "a", encoding="utf-8") as f:
             f.write(line)
+
+    def _new_eval_state(self):
+        return {
+            "metric": ConfuseMatrixMeter(n_class=2),
+            "component": init_component_recall_stats(),
+            "blob": init_prediction_blob_stats(),
+        }
+
+    def _update_eval_state(self, state: dict, pred_np: np.ndarray, gt_np: np.ndarray) -> None:
+        _ = state["metric"].update_cm(pr=pred_np, gt=gt_np)
+        for pred_item, gt_item in zip(pred_np, gt_np):
+            update_component_recall_stats(
+                state["component"],
+                gt_item,
+                pred_item,
+                tiny_area_thresh=int(getattr(self.opt, "tiny_area_thresh", 100)),
+                small_area_thresh=int(getattr(self.opt, "small_area_thresh", 400)),
+            )
+            update_prediction_blob_stats(state["blob"], gt_item, pred_item)
+
+    def _scores_from_eval_state(self, state: dict) -> dict:
+        scores = state["metric"].get_scores()
+        scores.update(component_recall_scores(state["component"]))
+        scores.update(prediction_blob_scores(state["blob"]))
+        scores["tiny_combo"] = self._compute_tiny_combo(scores)
+        scores["tiny_safe_combo"] = self._compute_tiny_safe_combo(scores)
+        return scores
 
     def _plot_cd_result(self, x1, x2, pred, target, epoch, stage):
         if len(pred.shape) == 4:
@@ -225,7 +273,20 @@ class HACQITrainer(object):
         opt.phase = "train"
         _loss = 0.0
         _focal_loss = 0.0
-        _dice_loss = 0.0
+        _tversky_loss = 0.0
+        loss_stat_sums = {
+            "main_focal": 0.0,
+            "main_tversky": 0.0,
+            "aux_focal": 0.0,
+            "aux_tversky": 0.0,
+            "support_loss": 0.0,
+            "coarse_loss": 0.0,
+            "support_weight": 0.0,
+            "coarse_weight": 0.0,
+            "aux_loss_scale": 0.0,
+            "tversky_beta": 0.0,
+            "query_gate": 0.0,
+        }
         last_lr = self.optimizer.param_groups[0]["lr"]
 
         for i, data in enumerate(tbar):
@@ -235,8 +296,8 @@ class HACQITrainer(object):
             label = data["cd_label"].to(self.model.device)
             self.optimizer.zero_grad(set_to_none=True)
             with self._autocast_context():
-                pred, focal, dice = self.model(img1, img2, label, epoch=epoch)
-                loss = focal + dice
+                pred, focal, tversky = self.model(img1, img2, label, epoch=epoch)
+                loss = focal + tversky
 
             if self.amp_enabled:
                 self.scaler.scale(loss).backward()
@@ -248,16 +309,22 @@ class HACQITrainer(object):
 
             _loss += loss.item()
             _focal_loss += focal.item()
-            _dice_loss += dice.item()
+            _tversky_loss += tversky.item()
+            for key in loss_stat_sums:
+                value = self.model.last_loss_stats.get(key)
+                if value is not None:
+                    loss_stat_sums[key] += float(value.detach().item())
             last_lr = self.optimizer.param_groups[0]["lr"]
             del loss
 
             tbar.set_description(
-                "L:%.3f F:%.3f D:%.3f LR:%.6f"
+                "L:%.3f F:%.3f T:%.3f B:%.2f Q:%.3f LR:%.6f"
                 % (
                     _loss / (i + 1),
                     _focal_loss / (i + 1),
-                    _dice_loss / (i + 1),
+                    _tversky_loss / (i + 1),
+                    loss_stat_sums["tversky_beta"] / (i + 1),
+                    loss_stat_sums["query_gate"] / (i + 1),
                     last_lr,
                 )
             )
@@ -270,7 +337,18 @@ class HACQITrainer(object):
         return {
             "loss": _loss / n,
             "focal": _focal_loss / n,
-            "dice": _dice_loss / n,
+            "tversky": _tversky_loss / n,
+            "main_focal": loss_stat_sums["main_focal"] / n,
+            "main_tversky": loss_stat_sums["main_tversky"] / n,
+            "aux_focal": loss_stat_sums["aux_focal"] / n,
+            "aux_tversky": loss_stat_sums["aux_tversky"] / n,
+            "support_loss": loss_stat_sums["support_loss"] / n,
+            "coarse_loss": loss_stat_sums["coarse_loss"] / n,
+            "support_weight": loss_stat_sums["support_weight"] / n,
+            "coarse_weight": loss_stat_sums["coarse_weight"] / n,
+            "aux_loss_scale": loss_stat_sums["aux_loss_scale"] / n,
+            "tversky_beta": loss_stat_sums["tversky_beta"] / n,
+            "query_gate": loss_stat_sums["query_gate"] / n,
             "lr": last_lr,
         }
 
@@ -281,6 +359,8 @@ class HACQITrainer(object):
         blob_stats = init_prediction_blob_stats()
         opt.phase = "val"
         self.model.eval()
+        threshold_states = {threshold: self._new_eval_state() for threshold in self.eval_thresholds}
+        self.last_threshold_scan = {}
 
         with torch.no_grad():
             for i, _data in enumerate(tbar):
@@ -293,6 +373,9 @@ class HACQITrainer(object):
                 _ = self.running_metric.update_cm(pr=val_pred.cpu().numpy(), gt=val_target.cpu().numpy())
                 pred_np = val_pred.cpu().numpy()
                 gt_np = val_target.cpu().numpy()
+                for threshold, state in threshold_states.items():
+                    scan_pred = self._threshold_prediction(val_logits, threshold=threshold)
+                    self._update_eval_state(state, scan_pred.cpu().numpy(), gt_np)
                 for pred_item, gt_item in zip(pred_np, gt_np):
                     update_component_recall_stats(
                         component_stats,
@@ -316,6 +399,23 @@ class HACQITrainer(object):
             val_scores.update(prediction_blob_scores(blob_stats))
             val_scores["tiny_combo"] = self._compute_tiny_combo(val_scores)
             val_scores["tiny_safe_combo"] = self._compute_tiny_safe_combo(val_scores)
+            self.last_threshold_scan = {
+                f"{threshold:.2f}": {
+                    key: float(scores.get(key, 0.0))
+                    for key in [
+                        "iou_1",
+                        "precision_1",
+                        "recall_1",
+                        "tiny_recall",
+                        "small_recall",
+                        "tiny_safe_combo",
+                    ]
+                }
+                for threshold, scores in (
+                    (threshold, self._scores_from_eval_state(state))
+                    for threshold, state in threshold_states.items()
+                )
+            }
             message = "(phase: %s) " % (self.opt.phase)
             for k, v in val_scores.items():
                 if k.endswith("_components") or k.endswith("_count") or k.endswith("_area"):
@@ -323,6 +423,16 @@ class HACQITrainer(object):
                 else:
                     message += "%s: %.3f " % (k, v * 100)
             print(message)
+            if self.last_threshold_scan:
+                scan_message = "threshold-scan "
+                for threshold, scores in self.last_threshold_scan.items():
+                    scan_message += (
+                        f"| th={threshold} "
+                        f"iou_1={scores['iou_1'] * 100:.2f} "
+                        f"tiny={scores['tiny_recall'] * 100:.2f} "
+                        f"safe={scores['tiny_safe_combo'] * 100:.2f} "
+                    )
+                print(scan_message)
         print(
             "best-metric summary | "
             f"selected={self.best_metric}:{self._metric_value(self.best_metric, val_scores) * 100:.3f} "

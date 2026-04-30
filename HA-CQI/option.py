@@ -266,7 +266,7 @@ class Options:
             help="从 DINO 主干抽取的层号；默认按 --dino_arch 自动选择。",
         )
         self.parser.add_argument("--alpha", type=float, default=0.25)
-        self.parser.add_argument("--gamma", type=int, default=4, help="gamma for Focal loss")
+        self.parser.add_argument("--gamma", type=float, default=2.0, help="gamma for Focal loss")
 
         self.parser.add_argument("--batch_size", type=int, default=16)
         self.parser.add_argument("--num_epochs", type=int, default=100)
@@ -274,6 +274,72 @@ class Options:
         self.parser.add_argument("--num_workers", type=int, default=4, help="#threads for loading data")
         self.parser.add_argument("--lr", type=float, default=5e-4)
         self.parser.add_argument("--weight_decay", type=float, default=5e-4)
+        self.parser.add_argument(
+            "--head_lr_mult",
+            type=float,
+            default=2.0,
+            help="随机初始化的 HA/CQI/head 模块相对基础学习率的倍率。",
+        )
+        self.parser.add_argument(
+            "--aux_loss_weight",
+            type=float,
+            default=1.0,
+            help="辅助监督总权重；内部会对各尺度 aux 权重归一化。",
+        )
+        self.parser.add_argument(
+            "--aux_loss_weight_end",
+            type=float,
+            default=0.5,
+            help="辅助监督在中后期退火后的目标总权重。",
+        )
+        self.parser.add_argument(
+            "--aux_decay_start_epoch",
+            type=int,
+            default=5,
+            help="从该 epoch 开始线性衰减辅助监督权重。",
+        )
+        self.parser.add_argument(
+            "--tversky_beta_start",
+            type=float,
+            default=0.70,
+            help="Tversky FN 权重起始值，用于训练早期保护召回。",
+        )
+        self.parser.add_argument(
+            "--tversky_beta_end",
+            type=float,
+            default=0.55,
+            help="Tversky FN 权重退火终值，用于中后期平衡 precision/IoU。",
+        )
+        self.parser.add_argument(
+            "--loss_anneal_epochs",
+            type=int,
+            default=20,
+            help="Tversky 与 aux 权重退火的线性周期。",
+        )
+        self.parser.add_argument(
+            "--support_consistency_weight",
+            type=float,
+            default=0.03,
+            help="P1/P2 高分辨率支持区域的 final mask 保留损失最大权重。",
+        )
+        self.parser.add_argument(
+            "--coarse_consistency_weight",
+            type=float,
+            default=0.02,
+            help="缺乏 P1/P2 局部支持时的粗尺度前景抑制损失最大权重。",
+        )
+        self.parser.add_argument(
+            "--consistency_warmup_epochs",
+            type=int,
+            default=5,
+            help="前若干 epoch 不启用 HA-CQI 自一致性约束。",
+        )
+        self.parser.add_argument(
+            "--consistency_ramp_epochs",
+            type=int,
+            default=10,
+            help="自一致性约束从 0 线性升到目标权重的周期。",
+        )
         self.parser.add_argument(
             "--amp",
             action="store_true",
@@ -324,6 +390,13 @@ class Options:
             type=float,
             default=0.5,
             help="验证/测试时前景概率阈值，替代硬编码 argmax 以提升 tiny flood 召回调节能力。",
+        )
+        self.parser.add_argument(
+            "--eval_thresholds",
+            nargs="+",
+            type=float,
+            default=[],
+            help="可选验证阈值扫描列表，仅用于日志诊断，不影响 best checkpoint 选择。",
         )
         self.parser.add_argument(
             "--best_metric",
@@ -385,8 +458,34 @@ class Options:
             raise ValueError("--mask_decoder_layers must be a positive integer")
         if self.opt.mask_heads < 1:
             raise ValueError("--mask_heads must be a positive integer")
+        if self.opt.head_lr_mult <= 0.0:
+            raise ValueError("--head_lr_mult must be positive")
+        if self.opt.aux_loss_weight < 0.0:
+            raise ValueError("--aux_loss_weight must be non-negative")
+        if self.opt.aux_loss_weight_end < 0.0:
+            raise ValueError("--aux_loss_weight_end must be non-negative")
+        if self.opt.aux_decay_start_epoch < 1:
+            raise ValueError("--aux_decay_start_epoch must be >= 1")
+        if not 0.0 <= self.opt.tversky_beta_start <= 1.0:
+            raise ValueError("--tversky_beta_start must be within [0, 1]")
+        if not 0.0 <= self.opt.tversky_beta_end <= 1.0:
+            raise ValueError("--tversky_beta_end must be within [0, 1]")
+        if self.opt.loss_anneal_epochs < 1:
+            raise ValueError("--loss_anneal_epochs must be >= 1")
+        if self.opt.support_consistency_weight < 0.0:
+            raise ValueError("--support_consistency_weight must be non-negative")
+        if self.opt.coarse_consistency_weight < 0.0:
+            raise ValueError("--coarse_consistency_weight must be non-negative")
+        if self.opt.consistency_warmup_epochs < 0:
+            raise ValueError("--consistency_warmup_epochs must be >= 0")
+        if self.opt.consistency_ramp_epochs < 1:
+            raise ValueError("--consistency_ramp_epochs must be >= 1")
         if not 0.0 <= self.opt.eval_fg_threshold <= 1.0:
             raise ValueError("--eval_fg_threshold must be within [0, 1]")
+        self.opt.eval_thresholds = [float(v) for v in self.opt.eval_thresholds]
+        invalid_eval_thresholds = [v for v in self.opt.eval_thresholds if not 0.0 <= v <= 1.0]
+        if invalid_eval_thresholds:
+            raise ValueError(f"--eval_thresholds must be within [0, 1], got {invalid_eval_thresholds}")
         if self.opt.small_area_thresh < self.opt.tiny_area_thresh:
             raise ValueError("--small_area_thresh must be >= --tiny_area_thresh")
         self.opt.mean, self.opt.std = resolve_norm_stats(self.opt)

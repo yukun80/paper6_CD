@@ -1,3 +1,5 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -14,9 +16,16 @@ class MultiScalePixelDecoder(nn.Module):
         self.lateral = nn.ModuleList([nn.Conv2d(channels, mask_dim, 1, bias=False) for _ in range(5)])
         self.smooth = nn.ModuleList([DsBnRelu(mask_dim, mask_dim) for _ in range(5)])
         self.out = nn.Sequential(DsBnRelu(mask_dim, mask_dim), CBAM(mask_dim, 8))
+        # 初始化时更信任高分辨率 P1/P2/P3，后续由训练自适应调整。
+        self.scale_logits = nn.Parameter(torch.tensor([1.0, 1.0, 0.5, 0.0, 0.0]))
+
+    def scale_weights(self) -> torch.Tensor:
+        return torch.softmax(self.scale_logits, dim=0)
 
     def forward(self, features):
+        weights = self.scale_weights().to(dtype=features[0].dtype, device=features[0].device)
         projected = [smooth(lateral(feat)) for feat, lateral, smooth in zip(features, self.lateral, self.smooth)]
+        projected = [feat * weights[idx] for idx, feat in enumerate(projected)]
         x = projected[-1]
         for feat in reversed(projected[:-1]):
             x = F.interpolate(x, size=feat.shape[-2:], mode="bilinear", align_corners=False)
@@ -60,6 +69,7 @@ class Mask2FormerChangeHead(nn.Module):
         self.mask_queries = nn.Parameter(torch.randn(num_mask_queries, mask_dim) * 0.02)
         self.pixel_decoder = MultiScalePixelDecoder(channels, mask_dim)
         self.memory_proj = nn.ModuleList([nn.Conv2d(channels, mask_dim, 1, bias=False) for _ in range(5)])
+        self.memory_scale_logits = nn.Parameter(torch.tensor([1.0, 1.0, 0.5, 0.0, 0.0]))
         self.decoder_layers = nn.ModuleList(
             [MaskQueryDecoderLayer(mask_dim, num_heads=num_heads) for _ in range(num_decoder_layers)]
         )
@@ -70,16 +80,27 @@ class Mask2FormerChangeHead(nn.Module):
             nn.Linear(mask_dim, mask_dim),
         )
         self.semantic_head = nn.Sequential(DsBnRelu(mask_dim, mask_dim), nn.Conv2d(mask_dim, 2, 1))
-        self.query_alpha = nn.Parameter(torch.tensor(0.0))
+        # 非零初始门控让 mask query 分支从训练初期即可获得有效梯度，并通过 floor 避免塌缩。
+        self.query_gate_floor = 0.15
+        init_gate = 0.25
+        raw_gate = (init_gate - self.query_gate_floor) / (1.0 - self.query_gate_floor)
+        self.query_gate_logit = nn.Parameter(torch.tensor(math.log(raw_gate / (1.0 - raw_gate))))
+
+    def query_gate(self) -> torch.Tensor:
+        return self.query_gate_floor + (1.0 - self.query_gate_floor) * torch.sigmoid(self.query_gate_logit)
+
+    def memory_scale_weights(self) -> torch.Tensor:
+        return torch.softmax(self.memory_scale_logits, dim=0)
 
     def _build_memory(self, features, target_size: tuple[int, int]) -> torch.Tensor:
-        memories = []
-        for feat, proj in zip(features, self.memory_proj):
+        weights = self.memory_scale_weights().to(dtype=features[0].dtype, device=features[0].device)
+        memory = None
+        for idx, (feat, proj) in enumerate(zip(features, self.memory_proj)):
             mem = proj(feat)
             if mem.shape[-2:] != target_size:
                 mem = F.interpolate(mem, size=target_size, mode="bilinear", align_corners=False)
-            memories.append(mem)
-        memory = torch.stack(memories, dim=0).mean(dim=0)
+            mem = mem * weights[idx]
+            memory = mem if memory is None else memory + mem
         return memory.flatten(2).transpose(1, 2)
 
     def forward(self, features, output_size: tuple[int, int]) -> torch.Tensor:
@@ -95,5 +116,5 @@ class Mask2FormerChangeHead(nn.Module):
         mask_logits = torch.einsum("bqc,bchw->bqhw", mask_kernels, mask_feature)
         class_prob = torch.softmax(class_logits, dim=-1)
         query_logits = torch.einsum("bqc,bqhw->bchw", class_prob, mask_logits)
-        logits = self.semantic_head(mask_feature) + torch.tanh(self.query_alpha) * query_logits
+        logits = self.semantic_head(mask_feature) + self.query_gate() * query_logits
         return F.interpolate(logits, size=output_size, mode="bilinear", align_corners=False)

@@ -21,6 +21,18 @@ MASK_DECODER_LAYERS="${MASK_DECODER_LAYERS:-3}"
 MASK_HEADS="${MASK_HEADS:-4}"
 BEST_METRIC="${BEST_METRIC:-tiny_safe_combo}"
 EVAL_FG_THRESHOLD="${EVAL_FG_THRESHOLD:-0.40}"
+EVAL_THRESHOLDS="${EVAL_THRESHOLDS:-0.25 0.30 0.35 0.40 0.45 0.50}"
+HEAD_LR_MULT="${HEAD_LR_MULT:-2.0}"
+AUX_LOSS_WEIGHT="${AUX_LOSS_WEIGHT:-1.0}"
+AUX_LOSS_WEIGHT_END="${AUX_LOSS_WEIGHT_END:-0.5}"
+AUX_DECAY_START_EPOCH="${AUX_DECAY_START_EPOCH:-5}"
+TVERSKY_BETA_START="${TVERSKY_BETA_START:-0.70}"
+TVERSKY_BETA_END="${TVERSKY_BETA_END:-0.55}"
+LOSS_ANNEAL_EPOCHS="${LOSS_ANNEAL_EPOCHS:-20}"
+SUPPORT_CONSISTENCY_WEIGHT="${SUPPORT_CONSISTENCY_WEIGHT:-0.03}"
+COARSE_CONSISTENCY_WEIGHT="${COARSE_CONSISTENCY_WEIGHT:-0.02}"
+CONSISTENCY_WARMUP_EPOCHS="${CONSISTENCY_WARMUP_EPOCHS:-5}"
+CONSISTENCY_RAMP_EPOCHS="${CONSISTENCY_RAMP_EPOCHS:-10}"
 AMP="${AMP:-1}"
 AMP_DTYPE="${AMP_DTYPE:-fp16}"
 
@@ -60,6 +72,17 @@ python trainval.py \
   --mask_queries "${MASK_QUERIES}" \
   --mask_decoder_layers "${MASK_DECODER_LAYERS}" \
   --mask_heads "${MASK_HEADS}" \
+  --head_lr_mult "${HEAD_LR_MULT}" \
+  --aux_loss_weight "${AUX_LOSS_WEIGHT}" \
+  --aux_loss_weight_end "${AUX_LOSS_WEIGHT_END}" \
+  --aux_decay_start_epoch "${AUX_DECAY_START_EPOCH}" \
+  --tversky_beta_start "${TVERSKY_BETA_START}" \
+  --tversky_beta_end "${TVERSKY_BETA_END}" \
+  --loss_anneal_epochs "${LOSS_ANNEAL_EPOCHS}" \
+  --support_consistency_weight "${SUPPORT_CONSISTENCY_WEIGHT}" \
+  --coarse_consistency_weight "${COARSE_CONSISTENCY_WEIGHT}" \
+  --consistency_warmup_epochs "${CONSISTENCY_WARMUP_EPOCHS}" \
+  --consistency_ramp_epochs "${CONSISTENCY_RAMP_EPOCHS}" \
   --best_metric "${BEST_METRIC}" \
   --eval_fg_threshold "${EVAL_FG_THRESHOLD}" \
   --gpu_ids 0 \
@@ -78,6 +101,12 @@ fi
 
 if [[ "${AMP}" == "1" ]]; then
   cmd+=(--amp --amp_dtype "${AMP_DTYPE}")
+fi
+
+if [[ -n "${EVAL_THRESHOLDS}" ]]; then
+  # shellcheck disable=SC2206
+  threshold_args=(${EVAL_THRESHOLDS})
+  cmd+=(--eval_thresholds "${threshold_args[@]}")
 fi
 
 cmd+=("$@")

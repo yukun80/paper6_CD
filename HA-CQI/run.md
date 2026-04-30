@@ -21,7 +21,7 @@ bash trainval_s1gfloods.sh
 cd HA-CQI
 DATASET_NAME=S1GFloods_CD_DINO_ \
 DATA_ROOT=../datasets \
-RUN_NAME=S1GFloods-HA-CQI-vits16_0427 \
+RUN_NAME=S1GFloods-HA-CQI-vits16 \
 BATCH_SIZE=8 \
 BEST_METRIC=tiny_safe_combo \
 EVAL_FG_THRESHOLD=0.40 \
