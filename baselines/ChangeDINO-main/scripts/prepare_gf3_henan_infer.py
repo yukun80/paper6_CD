@@ -43,14 +43,6 @@ python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
 --stride 128 \
 --overwrite
 
-python ChangeDINO-main/scripts/prepare_gf3_henan_infer.py \
---src-root datasets/GF3_ShenZhen \
---pre-image Pre_ShenZhen_clip.tif \
---post-image Post_ShenZhen_clip.tif \
---out-root datasets/GF3_ShenZhen_CD_infer \
---tile-size 256 \
---stride 128 \
---overwrite
 
 """
 
