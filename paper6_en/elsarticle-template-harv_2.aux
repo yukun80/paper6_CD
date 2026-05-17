@@ -1,0 +1,238 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\emailauthor{zhanghong@radi.ac.cn}{Hong Zhang\corref {cor1}}
+\Newlabel{cor1}{1}
+\citation{balaian2024urbanForm,feng2021urbanizationFloodRisk,li2023urbanFloodRiskReview}
+\citation{mudashiru2021floodHazardReview,liu2025floodDepthReview,brown2016operationalSarLidar}
+\citation{zhang2025opticalFloodReview,notti2018potentialLimitations}
+\citation{amitrano2024sarFloodReview,brown2016operationalSarLidar}
+\citation{bonafilia2020sen1floods11}
+\citation{wang2025dmcf}
+\citation{chen2025flood}
+\Newlabel{inst1}{a}
+\Newlabel{inst2}{b}
+\Newlabel{inst3}{c}
+\Newlabel{inst4}{d}
+\Newlabel{inst5}{e}
+\@LN@col{1}
+\providecommand \oddpage@label [2]{}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{1}{section.1}\protected@file@percent }
+\@LN@col{2}
+\citation{daudt2018fully,chen2021remote}
+\citation{saleh2024dam,du2026high}
+\citation{li2024new,dong2026peftcd}
+\citation{mason2010urbanFloodTgrs,giustarini2013urbanFloodCd,mason2014doubleScattering}
+\citation{li2019urbanFloodAslcnn,zhao2022urbanAwareUnet}
+\citation{liu2025floodDepthReview}
+\citation{cian2018flood}
+\citation{cohen2018estimating,cohen2019floodwater}
+\citation{teng2022comprehensive}
+\citation{betterle2024water}
+\@LN@col{1}
+\@LN@col{2}
+\citation{daudt2018fully}
+\citation{chen2020spatial,chen2021remote,bandara2022changeformer}
+\citation{saleh2024dam}
+\citation{saleh2024list}
+\citation{saleh2024high}
+\citation{du2026high}
+\citation{wang2025dmcf,chen2025flood}
+\citation{chen2023ttp}
+\citation{ding2024adapting}
+\citation{li2024new}
+\citation{wei2025ass}
+\citation{qin2025sam2}
+\citation{dong2026peftcd}
+\citation{liu2026multi}
+\citation{matgen2007integration}
+\citation{cian2018flood}
+\citation{surampudi2023flood}
+\citation{nobre2011height}
+\citation{cohen2018estimating}
+\citation{cohen2019floodwater}
+\citation{teng2022comprehensive}
+\citation{betterle2024water}
+\citation{akkimi2026fldepth}
+\@LN@col{1}
+\@writefile{toc}{\contentsline {section}{\numberline {2}Related Work}{3}{section.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}SAR Flood Change Detection}{3}{subsection.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}Foundation Models for Change Detection}{3}{subsection.2.2}\protected@file@percent }
+\@LN@col{2}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}DEM-Constrained Flood Depth Estimation}{3}{subsection.2.3}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Overall framework for urban flood mapping from SAR flood extent to depth. HA-CQI extracts flood extent from paired SAR images, and CFDepth estimates flood depth by combining DEM-based surface initialization with nearest outer-boundary propagation inside the change-defined flood support.}}{4}{figure.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:framework}{{1}{4}{Overall framework for urban flood mapping from SAR flood extent to depth. HA-CQI extracts flood extent from paired SAR images, and CFDepth estimates flood depth by combining DEM-based surface initialization with nearest outer-boundary propagation inside the change-defined flood support}{figure.caption.1}{}}
+\@LN@col{1}
+\@writefile{toc}{\contentsline {section}{\numberline {3}Methodology}{4}{section.3}\protected@file@percent }
+\@LN@col{2}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}HA-CQI for Urban Flood Extent Mapping}{4}{subsection.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.1.1}Harmonized Alignment (HA)}{4}{subsubsection.3.1.1}\protected@file@percent }
+\newlabel{sec:ha}{{3.1.1}{4}{Harmonized Alignment (HA)}{subsubsection.3.1.1}{}}
+\@LN@col{1}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces HA module with pair-shared style calibration, deformable alignment, and semantic calibration.}}{5}{figure.caption.2}\protected@file@percent }
+\newlabel{fig:ha}{{2}{5}{HA module with pair-shared style calibration, deformable alignment, and semantic calibration}{figure.caption.2}{}}
+\newlabel{eq:ha_stat}{{1}{5}{Harmonized Alignment (HA)}{equation.1}{}}
+\newlabel{eq:ha_remap}{{2}{5}{Harmonized Alignment (HA)}{equation.2}{}}
+\@LN@col{2}
+\newlabel{eq:ha_align}{{3}{5}{Harmonized Alignment (HA)}{equation.3}{}}
+\newlabel{eq:ha_sem}{{4}{5}{Harmonized Alignment (HA)}{equation.4}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.1.2}Change Query Interaction (CQI)}{5}{subsubsection.3.1.2}\protected@file@percent }
+\newlabel{sec:cqi}{{3.1.2}{5}{Change Query Interaction (CQI)}{subsubsection.3.1.2}{}}
+\newlabel{eq:cqi_pair}{{5}{5}{Change Query Interaction (CQI)}{equation.5}{}}
+\newlabel{eq:cqi_query}{{6}{5}{Change Query Interaction (CQI)}{equation.6}{}}
+\newlabel{eq:cqi_token}{{7}{5}{Change Query Interaction (CQI)}{equation.7}{}}
+\@LN@col{1}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces CQI module for multi-scale change representation from bi-temporal pair tokens and learnable change queries.}}{6}{figure.caption.3}\protected@file@percent }
+\newlabel{fig:cqi}{{3}{6}{CQI module for multi-scale change representation from bi-temporal pair tokens and learnable change queries}{figure.caption.3}{}}
+\newlabel{eq:cqi_representation}{{8}{6}{Change Query Interaction (CQI)}{equation.8}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.1.3}Mask2Former Head for Mask Prediction}{6}{subsubsection.3.1.3}\protected@file@percent }
+\newlabel{eq:mask_decoder}{{9}{6}{Mask2Former Head for Mask Prediction}{equation.9}{}}
+\@LN@col{2}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Mask2Former prediction head for flood mask prediction from CQI-derived multi-scale change representations.}}{6}{figure.caption.4}\protected@file@percent }
+\newlabel{fig:mask2former}{{4}{6}{Mask2Former prediction head for flood mask prediction from CQI-derived multi-scale change representations}{figure.caption.4}{}}
+\newlabel{eq:mask_pred}{{10}{6}{Mask2Former Head for Mask Prediction}{equation.10}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Change-defined Flood Depth Estimation}{6}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}Change-defined depth formulation}{6}{subsubsection.3.2.1}\protected@file@percent }
+\newlabel{eq:cfdepth_boundary}{{11}{6}{Change-defined depth formulation}{equation.11}{}}
+\@LN@col{1}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}Boundary-constrained water-surface construction}{7}{subsubsection.3.2.2}\protected@file@percent }
+\newlabel{eq:wd_init}{{12}{7}{Boundary-constrained water-surface construction}{equation.12}{}}
+\newlabel{eq:wd_unstable}{{13}{7}{Boundary-constrained water-surface construction}{equation.13}{}}
+\newlabel{eq:wd_search}{{14}{7}{Boundary-constrained water-surface construction}{equation.14}{}}
+\newlabel{eq:wd_update_boundary}{{15}{7}{Boundary-constrained water-surface construction}{equation.15}{}}
+\newlabel{eq:wd_completion}{{16}{7}{Boundary-constrained water-surface construction}{equation.16}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.3}Depth generation and algorithm summary}{7}{subsubsection.3.2.3}\protected@file@percent }
+\newlabel{eq:wd_surface_fusion}{{17}{7}{Depth generation and algorithm summary}{equation.17}{}}
+\@LN@col{2}
+\@writefile{loa}{\contentsline {algorithm}{\numberline {1}{\ignorespaces CFDepth procedure}}{7}{algorithm.1}\protected@file@percent }
+\newlabel{alg:cfdepth}{{1}{7}{CFDepth procedure}{algorithm.1}{}}
+\newlabel{eq:wd_final}{{18}{7}{Depth generation and algorithm summary}{equation.18}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Loss Functions}{7}{subsection.3.3}\protected@file@percent }
+\newlabel{sec:loss}{{3.3}{7}{Loss Functions}{subsection.3.3}{}}
+\newlabel{eq:loss}{{19}{7}{Loss Functions}{equation.19}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Implementation Details}{7}{subsection.3.4}\protected@file@percent }
+\citation{xinhua2021henanEmergency,li2023zhengzhou720Flood}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Study areas, land-cover context, and field-photo depth references. The map panels locate Zhengzhou and Zhuozhou and show their land-cover settings. Markers P1--P4 in Zhengzhou and P5--P8 in Zhuozhou indicate field-photo reference locations, with depth intervals estimated from visible objects such as cars, people, and traffic signs.}}{8}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:dataset}{{5}{8}{Study areas, land-cover context, and field-photo depth references. The map panels locate Zhengzhou and Zhuozhou and show their land-cover settings. Markers P1--P4 in Zhengzhou and P5--P8 in Zhuozhou indicate field-photo reference locations, with depth intervals estimated from visible objects such as cars, people, and traffic signs}{figure.caption.5}{}}
+\@LN@col{1}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Experiments}{8}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Datasets and Study Area}{8}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.1}Training datasets}{8}{subsubsection.4.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.2}Study areas and evaluation datasets}{8}{subsubsection.4.1.2}\protected@file@percent }
+\@LN@col{2}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Evaluation metrics}{8}{subsection.4.2}\protected@file@percent }
+\newlabel{eq:precision}{{20}{8}{Evaluation metrics}{equation.20}{}}
+\newlabel{eq:recall}{{21}{8}{Evaluation metrics}{equation.21}{}}
+\newlabel{eq:f1}{{22}{8}{Evaluation metrics}{equation.22}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces GF3 evaluation data for Zhengzhou and Zhuozhou. The left column shows Zhengzhou and the right column shows Zhuozhou: (a1)/(b1) pre-event SAR images with ROI1--ROI6 used in Figs.~\ref {fig:qual_zhengzhou} and~\ref {fig:qual_zhuozhou}; (a2)/(b2) post-event SAR images; (a3)/(b3) flood labels.}}{9}{figure.caption.6}\protected@file@percent }
+\newlabel{fig:gf3_eval_data}{{6}{9}{GF3 evaluation data for Zhengzhou and Zhuozhou. The left column shows Zhengzhou and the right column shows Zhuozhou: (a1)/(b1) pre-event SAR images with ROI1--ROI6 used in Figs.~\ref {fig:qual_zhengzhou} and~\ref {fig:qual_zhuozhou}; (a2)/(b2) post-event SAR images; (a3)/(b3) flood labels}{figure.caption.6}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Summary of the GF3 evaluation data used in this study.}}{9}{table.caption.7}\protected@file@percent }
+\newlabel{tab:gf3_eval}{{1}{9}{Summary of the GF3 evaluation data used in this study}{table.caption.7}{}}
+\@LN@col{1}
+\newlabel{eq:iou}{{23}{9}{Evaluation metrics}{equation.23}{}}
+\newlabel{eq:oa}{{24}{9}{Evaluation metrics}{equation.24}{}}
+\@LN@col{2}
+\citation{daudt2018fcsiam}
+\citation{fang2022snunet}
+\citation{chen2022bit}
+\citation{bandara2022changeformer}
+\citation{han2023change}
+\citation{chen2023ttp}
+\citation{cheng2025changedino}
+\@LN@col{1}
+\newlabel{eq:valid_depth_ratio}{{25}{10}{Evaluation metrics}{equation.25}{}}
+\newlabel{eq:wse_gradient_ecdf}{{26}{10}{Evaluation metrics}{equation.26}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Urban Flood Extent Mapping Evaluation}{10}{subsection.4.3}\protected@file@percent }
+\@LN@col{2}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}DEM-constrained Depth Assessment}{10}{subsection.4.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.4.1}Spatial comparison of depth estimates}{10}{subsubsection.4.4.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Quantitative comparison of urban flood extent delineation on the Zhengzhou and Zhuozhou evaluation scenes.}}{11}{table.caption.8}\protected@file@percent }
+\newlabel{tab:main_comparison}{{2}{11}{Quantitative comparison of urban flood extent delineation on the Zhengzhou and Zhuozhou evaluation scenes}{table.caption.8}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Qualitative comparison in Zhengzhou using the ROI slices marked in Fig.~\ref {fig:gf3_eval_data}. (a) pre-event SAR; (b) post-event SAR; (c) ground truth; (d) FC-Siam-Diff; (e) HANet; (f) SNUNet; (g) BIT; (h) ChangeFormer; (i) CGNet; (j) TTP; (k) ChangeDINO; (l) Ours (HA-CQI). For (d)--(l), white, blue, red, and black denote TP, FN, FP, and TN, respectively.}}{11}{figure.caption.9}\protected@file@percent }
+\newlabel{fig:qual_zhengzhou}{{7}{11}{Qualitative comparison in Zhengzhou using the ROI slices marked in Fig.~\ref {fig:gf3_eval_data}. (a) pre-event SAR; (b) post-event SAR; (c) ground truth; (d) FC-Siam-Diff; (e) HANet; (f) SNUNet; (g) BIT; (h) ChangeFormer; (i) CGNet; (j) TTP; (k) ChangeDINO; (l) Ours (HA-CQI). For (d)--(l), white, blue, red, and black denote TP, FN, FP, and TN, respectively}{figure.caption.9}{}}
+\@LN@col{1}
+\@LN@col{2}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Valid depth ratio within the SAR-derived flood support.}}{11}{table.caption.13}\protected@file@percent }
+\newlabel{tab:valid_depth_ratio}{{3}{11}{Valid depth ratio within the SAR-derived flood support}{table.caption.13}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.4.2}Field-photo reference validation}{11}{subsubsection.4.4.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Qualitative comparison in Zhuozhou using the ROI slices marked in Fig.~\ref {fig:gf3_eval_data}. (a) pre-event SAR; (b) post-event SAR; (c) ground truth; (d) FC-Siam-Diff; (e) HANet; (f) SNUNet; (g) BIT; (h) ChangeFormer; (i) CGNet; (j) TTP; (k) ChangeDINO; (l) Ours (HA-CQI). For (d)--(l), white, blue, red, and black denote TP, FN, FP, and TN, respectively.}}{12}{figure.caption.10}\protected@file@percent }
+\newlabel{fig:qual_zhuozhou}{{8}{12}{Qualitative comparison in Zhuozhou using the ROI slices marked in Fig.~\ref {fig:gf3_eval_data}. (a) pre-event SAR; (b) post-event SAR; (c) ground truth; (d) FC-Siam-Diff; (e) HANet; (f) SNUNet; (g) BIT; (h) ChangeFormer; (i) CGNet; (j) TTP; (k) ChangeDINO; (l) Ours (HA-CQI). For (d)--(l), white, blue, red, and black denote TP, FN, FP, and TN, respectively}{figure.caption.10}{}}
+\@LN@col{1}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.4.3}WSE consistency diagnostics}{12}{subsubsection.4.4.3}\protected@file@percent }
+\@LN@col{2}
+\@writefile{toc}{\contentsline {section}{\numberline {5}Discussion}{12}{section.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Flood-depth comparison in Zhengzhou within the HA-CQI-derived flood support. (a) FwDET; (b) CFDepth. Insets p1--p4 correspond to the field-photo reference points P1--P4 in Fig.~\ref {fig:dataset}; white pixels indicate missed or unresolved locations without valid positive depth.}}{13}{figure.caption.11}\protected@file@percent }
+\newlabel{fig:depth_zhengzhou}{{9}{13}{Flood-depth comparison in Zhengzhou within the HA-CQI-derived flood support. (a) FwDET; (b) CFDepth. Insets p1--p4 correspond to the field-photo reference points P1--P4 in Fig.~\ref {fig:dataset}; white pixels indicate missed or unresolved locations without valid positive depth}{figure.caption.11}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Flood-depth comparison in Zhuozhou within the HA-CQI-derived flood support. (a) FwDET; (b) CFDepth. Insets p5--p8 correspond to the field-photo reference points P5--P8 in Fig.~\ref {fig:dataset}; white pixels indicate missed or unresolved locations without valid positive depth.}}{13}{figure.caption.12}\protected@file@percent }
+\newlabel{fig:depth_zhuozhou}{{10}{13}{Flood-depth comparison in Zhuozhou within the HA-CQI-derived flood support. (a) FwDET; (b) CFDepth. Insets p5--p8 correspond to the field-photo reference points P5--P8 in Fig.~\ref {fig:dataset}; white pixels indicate missed or unresolved locations without valid positive depth}{figure.caption.12}{}}
+\@LN@col{1}
+\@LN@col{2}
+\citation{trepekli2022uavLidarUrbanFlood}
+\citation{hultquist2020crowdsourcedFloodDepth,teng2017floodInundationUncertainty}
+\bibstyle{elsarticle-harv}
+\bibdata{reference}
+\bibcite{akkimi2026fldepth}{{1}{2026}{{Akkimi et~al.}}{{Akkimi, Jella, Peesapati, Singh, Khv and Chauhan}}}
+\bibcite{amitrano2024sarFloodReview}{{2}{2024}{{Amitrano et~al.}}{{Amitrano, Di~Martino, Di~Simone and Imperatore}}}
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Empirical cumulative distribution functions of WSE gradient for FwDET and CFDepth. WSE was reconstructed as \(S=Z+d\), where \(Z\) is DEM elevation and \(d\) is the estimated depth. WSE gradient is expressed in permille. The ECDFs were computed over valid WSE-gradient pixels of each method to diagnose local WSE variation within connected flood-support components, while valid-depth coverage was evaluated separately in Table~\ref {tab:valid_depth_ratio}.}}{14}{figure.caption.14}\protected@file@percent }
+\newlabel{fig:wse_gradient_cdf}{{11}{14}{Empirical cumulative distribution functions of WSE gradient for FwDET and CFDepth. WSE was reconstructed as \(S=Z+d\), where \(Z\) is DEM elevation and \(d\) is the estimated depth. WSE gradient is expressed in permille. The ECDFs were computed over valid WSE-gradient pixels of each method to diagnose local WSE variation within connected flood-support components, while valid-depth coverage was evaluated separately in Table~\ref {tab:valid_depth_ratio}}{figure.caption.14}{}}
+\@LN@col{1}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion}{14}{section.6}\protected@file@percent }
+\@LN@col{2}
+\bibcite{balaian2024urbanForm}{{3}{2024}{{Balaian et~al.}}{{Balaian, Sanders and Abdolhosseini~Qomi}}}
+\bibcite{bandara2022changeformer}{{4}{2022}{{Bandara and Patel}}{{}}}
+\bibcite{betterle2024water}{{5}{2024}{{Betterle and Salamon}}{{}}}
+\bibcite{bonafilia2020sen1floods11}{{6}{2020}{{Bonafilia et~al.}}{{Bonafilia, Tellman, Anderson and Issenberg}}}
+\bibcite{brown2016operationalSarLidar}{{7}{2016}{{Brown et~al.}}{{Brown, Hambidge and Brownett}}}
+\bibcite{chen2021remote}{{8}{2022a}{{Chen et~al.}}{{Chen, Qi and Shi}}}
+\bibcite{chen2022bit}{{9}{2022b}{{Chen et~al.}}{{Chen, Qi and Shi}}}
+\bibcite{chen2020spatial}{{10}{2020}{{Chen and Shi}}{{}}}
+\bibcite{chen2023ttp}{{11}{2023}{{Chen et~al.}}{{Chen, Liu, Li, Liu, Chen, Zhang, Zou and Shi}}}
+\bibcite{chen2025flood}{{12}{2025}{{Chen et~al.}}{{Chen, Zhou and Li}}}
+\bibcite{cheng2025changedino}{{13}{2025}{{Cheng and Hsu}}{{}}}
+\bibcite{cian2018flood}{{14}{2018}{{Cian et~al.}}{{Cian, Marconcini, Ceccato and Giupponi}}}
+\bibcite{cohen2018estimating}{{15}{2018}{{Cohen et~al.}}{{Cohen, Brakenridge, Kettner, Bates, Nelson, McDonald, Huang, Munasinghe and Zhang}}}
+\bibcite{cohen2019floodwater}{{16}{2019}{{Cohen et~al.}}{{Cohen, Raney, Munasinghe, Loftis, Molthan, Bell, Rogers, Galantowicz, Brakenridge, Kettner et~al.}}}
+\bibcite{daudt2018fully}{{17}{2018a}{{Daudt et~al.}}{{Daudt, Le~Saux and Boulch}}}
+\bibcite{daudt2018fcsiam}{{18}{2018b}{{Daudt et~al.}}{{Daudt, Le~Saux and Boulch}}}
+\bibcite{ding2024adapting}{{19}{2024}{{Ding et~al.}}{{Ding, Zhu, Peng, Tang, Yang and Bruzzone}}}
+\bibcite{dong2026peftcd}{{20}{2026}{{Dong et~al.}}{{Dong, Hu, Wang, Chen and Meng}}}
+\bibcite{du2026high}{{21}{2026}{{Du et~al.}}{{Du, Shao, Xiao, Zhang, Zhu, Wang, Balz and Li}}}
+\bibcite{fang2022snunet}{{22}{2022}{{Fang et~al.}}{{Fang, Li, Shao and Li}}}
+\bibcite{feng2021urbanizationFloodRisk}{{23}{2021}{{Feng et~al.}}{{Feng, Zhang and Bourke}}}
+\bibcite{giustarini2013urbanFloodCd}{{24}{2013}{{Giustarini et~al.}}{{Giustarini, Hostache, Matgen, Schumann, Bates and Mason}}}
+\bibcite{han2023change}{{25}{2023}{{Han et~al.}}{{Han, Wu, Guo, Hu, Li and Chen}}}
+\@LN@col{1}
+\@LN@col{2}
+\bibcite{hultquist2020crowdsourcedFloodDepth}{{26}{2020}{{Hultquist and Cervone}}{{}}}
+\bibcite{li2023urbanFloodRiskReview}{{27}{2023a}{{Li et~al.}}{{Li, Sun, Lu, Guo, Wang, Sun and Yao}}}
+\bibcite{li2024new}{{28}{2024}{{Li et~al.}}{{Li, Cao and Meng}}}
+\bibcite{li2019urbanFloodAslcnn}{{29}{2019}{{Li et~al.}}{{Li, Martinis and Wieland}}}
+\bibcite{li2023zhengzhou720Flood}{{30}{2023b}{{Li et~al.}}{{Li, Ye, Wu, Wu and Qian}}}
+\bibcite{liu2025floodDepthReview}{{31}{2025}{{Liu et~al.}}{{Liu, Li, Ma and Mao}}}
+\bibcite{liu2026multi}{{32}{2026}{{Liu et~al.}}{{Liu, Zhao and Tang}}}
+\bibcite{mason2014doubleScattering}{{33}{2014}{{Mason et~al.}}{{Mason, Giustarini, Garcia-Pintado and Cloke}}}
+\bibcite{mason2010urbanFloodTgrs}{{34}{2010}{{Mason et~al.}}{{Mason, Speck, Devereux, Schumann, Neal and Bates}}}
+\bibcite{matgen2007integration}{{35}{2007}{{Matgen et~al.}}{{Matgen, Schumann, Henry, Hoffmann and Pfister}}}
+\bibcite{mudashiru2021floodHazardReview}{{36}{2021}{{Mudashiru et~al.}}{{Mudashiru, Sabtu, Abustan and Balogun}}}
+\bibcite{nobre2011height}{{37}{2011}{{Nobre et~al.}}{{Nobre, Cuartas, Hodnett, Renn{\'o}, Rodrigues, Silveira and Saleska}}}
+\bibcite{notti2018potentialLimitations}{{38}{2018}{{Notti et~al.}}{{Notti, Giordan, Cal{\`o}, Pepe, Zucca and Galve}}}
+\bibcite{qin2025sam2}{{39}{2025}{{Qin et~al.}}{{Qin, Wang, Fan and Pan}}}
+\bibcite{saleh2024high}{{40}{2024a}{{Saleh et~al.}}{{Saleh, Holail, Xiao and Xia}}}
+\bibcite{saleh2024list}{{41}{2024b}{{Saleh et~al.}}{{Saleh, Holail, Zahran, Xiao and Xia}}}
+\bibcite{saleh2024dam}{{42}{2024c}{{Saleh et~al.}}{{Saleh, Weng, Holail, Hao and Xia}}}
+\bibcite{surampudi2023flood}{{43}{2023}{{Surampudi and Kumar}}{{}}}
+\bibcite{teng2017floodInundationUncertainty}{{44}{2017}{{Teng et~al.}}{{Teng, Jakeman, Vaze, Croke, Dutta and Kim}}}
+\bibcite{teng2022comprehensive}{{45}{2022}{{Teng et~al.}}{{Teng, Penton, Ticehurst, Sengupta, Freebairn, Marvanek, Vaze, Gibbs, Streeton, Karim et~al.}}}
+\bibcite{trepekli2022uavLidarUrbanFlood}{{46}{2022}{{Trepekli et~al.}}{{Trepekli, Balstrom, Friborg, Fog, Allotey, Kofie and Moller-Jensen}}}
+\bibcite{wang2025dmcf}{{47}{2025}{{Wang et~al.}}{{Wang, Zhao, Jiang, Sun, Yang, Shi, Shi and Li}}}
+\@LN@col{1}
+\@LN@col{2}
+\bibcite{wei2025ass}{{48}{2025}{{Wei et~al.}}{{Wei, Wu and Wang}}}
+\bibcite{xinhua2021henanEmergency}{{49}{2021}{{Xinhua}}{{}}}
+\bibcite{zhang2025opticalFloodReview}{{50}{2025}{{Zhang et~al.}}{{Zhang, Chen, Wang, Kar and Pierce}}}
+\bibcite{zhao2022urbanAwareUnet}{{51}{2022}{{Zhao et~al.}}{{Zhao, Li, Matgen, Pelich, Hostache, Wagner and Chini}}}
+\@LN@col{1}
+\@LN@col{2}
+\gdef \@abspage@last{17}

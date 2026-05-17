@@ -1,0 +1,589 @@
+%% Elsevier manuscript translated and adapted from paper6/jstar.tex
+% \documentclass[preprint,12pt,authoryear]{elsarticle}
+\documentclass[final,5p,times,twocolumn,authoryear]{elsarticle}
+
+\usepackage{amssymb}
+\usepackage{amsmath}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{array}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{makecell}
+\usepackage{enumitem}
+\usepackage{siunitx}
+\usepackage{adjustbox}
+\usepackage[table]{xcolor}
+\usepackage{lineno}
+\usepackage{threeparttable}
+\usepackage{threeparttablex}
+\usepackage{tikz}
+\usepackage{tabularx}
+\usepackage{caption}
+\usepackage{textcomp}
+\usepackage{hyperref}
+\usepackage{graphicx}
+
+\captionsetup[table]{font=small,labelfont=bf}
+\newcommand{\elsvtabsetup}{
+  \footnotesize
+  \setlength{\tabcolsep}{6pt}
+  \renewcommand{\arraystretch}{1.15}
+}
+\sisetup{
+  detect-all      = true,
+  round-mode      = places,
+  round-precision = 2
+}
+
+\setcounter{topnumber}{2}
+\setcounter{bottomnumber}{0}
+\setcounter{totalnumber}{4}
+\setcounter{dbltopnumber}{2}
+\renewcommand{\topfraction}{0.95}
+\renewcommand{\dbltopfraction}{0.95}
+\renewcommand{\bottomfraction}{0}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.80}
+\renewcommand{\dblfloatpagefraction}{0.80}
+
+\hypersetup{
+  hidelinks,
+  pdftitle  = {HA-CQI and CFDepth for Urban Flood Extent Mapping and Change-Defined Depth Estimation from Bi-Temporal SAR Imagery},
+  pdfauthor = {Yukun Fan, Zhongqi Shi, Hong Zhang, Yuzhou Liu, Mingyang Song, Yazhe Xie, Yixian Tang}
+}
+
+\makeatletter
+\setlength{\@fptop}{0pt}
+\makeatother
+\setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
+
+\linenumbers
+\journal{Journal of Hydrology}
+
+\begin{document}
+
+\begin{frontmatter}
+
+\title{HA-CQI and CFDepth for Urban Flood Extent Mapping and Change-Defined Depth Estimation from Bi-Temporal SAR Imagery}
+
+\author[inst1,inst2,inst3]{Yukun Fan}
+\author[inst4,inst5]{Zhongqi Shi}
+\author[inst2,inst1,inst3]{Hong Zhang\corref{cor1}}
+\ead{zhanghong@radi.ac.cn}
+\author[inst4,inst5]{Yuzhou Liu}
+\author[inst1,inst2,inst3]{Mingyang Song}
+\author[inst1,inst2,inst3]{Yazhe Xie}
+\author[inst1,inst2,inst3]{Yixian Tang}
+
+\cortext[cor1]{Corresponding author}
+
+\affiliation[inst1]{
+  organization={Key Laboratory of Digital Earth Science, Aerospace Information Research Institute, Chinese Academy of Sciences},
+  city={Beijing},
+  postcode={100094},
+  country={China}
+}
+
+\affiliation[inst2]{
+  organization={International Research Center of Big Data for Sustainable Development Goals},
+  city={Beijing},
+  postcode={100094},
+  country={China}
+}
+
+\affiliation[inst3]{
+  organization={University of Chinese Academy of Sciences},
+  city={Beijing},
+  postcode={100049},
+  country={China}
+}
+
+\affiliation[inst4]{
+  organization={Shenzhen Technology Institute of Urban Public Safety},
+  city={Shenzhen},
+  postcode={518000},
+  country={China}
+}
+
+\affiliation[inst5]{
+  organization={Urban Safety Development Institute of Science and Technology (Shenzhen)},
+  city={Shenzhen},
+  state={Guangdong},
+  postcode={518023},
+  country={China}
+}
+
+\begin{abstract}
+Rapid urban flood emergency interpretation requires both flood extent and depth information. Synthetic aperture radar (SAR) can observe newly inundated areas under adverse weather conditions, but strong scattering, shadows, speckle noise, and residual misregistration in complex built-up environments weaken the comparability of pre- and post-event features. Meanwhile, the flood extent derived from change detection mainly describes newly inundated areas and usually excludes permanent water bodies, so its boundary elevation conditions differ from those of a complete flood-period water surface, limiting direct digital elevation model (DEM)-based depth estimation. This paper proposes an extent-to-depth urban flood mapping framework for bi-temporal SAR imagery, consisting of Harmonized Alignment and Change Query Interaction (HA-CQI) and Change-defined Flood Depth Estimation (CFDepth). HA-CQI improves bi-temporal feature comparability through harmonized alignment and aggregates flood-related changes through change query interaction to generate a flood extent map. CFDepth then estimates first-order flood depth within connected components of the change-defined flood support by combining this extent input with DEM constraints. Experiments on public SAR flood datasets and two GF3 urban flood cases, Zhengzhou 2021 and Zhuozhou 2023, show that HA-CQI achieves IoU values of 73.38\% and 86.23\%, respectively, outperforming representative change-detection baselines. Under the same flood support and DEM conditions, CFDepth increases the valid depth ratio from 74.65\% and 65.92\% to 97.83\% and 96.38\%, respectively, and its depth classes around eight field-photo reference points are generally consistent with photo-estimated depth intervals. The results indicate that the proposed framework provides more stable flood extent mapping and DEM-constrained first-order depth estimation for complex urban flood events. The source code is available at \texttt{https://github.com/SAR-Disaster/HA-CQI-CFDepth}.
+\end{abstract}
+
+\begin{keyword}
+Urban flood mapping \sep Bi-temporal SAR \sep Change detection \sep DEM-constrained flood depth estimation 
+\end{keyword}
+
+\end{frontmatter}
+
+\section{Introduction}
+
+Urban flooding is one of the most destructive and high-impact natural hazards worldwide. Increasing extreme rainfall driven by climate change, together with continuing urbanization, further amplifies its impacts on human safety, infrastructure, and socioeconomic systems \citep{balaian2024urbanForm,feng2021urbanizationFloodRisk,li2023urbanFloodRiskReview}. For disaster response and risk management, rapid access to spatial flood information is essential: flood extent maps answer where inundation occurs, whereas flood depth further describes the degree of inundation. Together, these two types of information support disaster interpretation, resource allocation, recovery planning, and long-term floodplain management \citep{mudashiru2021floodHazardReview,liu2025floodDepthReview,brown2016operationalSarLidar}. After a flood, however, ground surveys and field reports often cannot cover large urban areas in time, while optical remote sensing is affected by clouds, rainfall, low illumination, and nighttime conditions, which limits continuous, rapid, and spatially complete disaster observation \citep{zhang2025opticalFloodReview,notti2018potentialLimitations}. By contrast, synthetic aperture radar (SAR) can stably acquire surface scattering information under adverse weather and without solar illumination. It has therefore become an important observation source for rapid urban flood mapping and provides a key data basis for flood extent mapping and depth estimation from bi-temporal SAR imagery \citep{amitrano2024sarFloodReview,brown2016operationalSarLidar}.
+
+Public SAR flood datasets and deep learning models have shifted flood mapping from empirical thresholding and rule-based interpretation toward data-driven methods. Sen1Floods11 provides a standardized training and evaluation basis for Sentinel-1 SAR flood detection, allowing FCN/CNN models to learn backscatter responses of inundated areas systematically \citep{bonafilia2020sen1floods11}. Subsequent studies have further improved contextual representation, boundary delineation, and prior-guided modeling for SAR flood detection. For example, DMCF-Net enhances feature modeling in complex SAR flood regions through multi-scale feature aggregation, cross-scale attention fusion, and deep feature optimization \citep{wang2025dmcf}. Flood-index-enhanced deep models embed priors such as ratio images into the network to improve the recognition of SAR inundation responses \citep{chen2025flood}. Although these methods have substantially improved SAR flood extent extraction, complex urban environments still contain permanent water bodies, low-backscatter land covers, building shadows, layover, road ponding, and strong-scattering backgrounds.
+
+Bi-temporal remote sensing change detection uses both pre- and post-event images and shifts flood identification from post-event appearance segmentation to cross-temporal relationship modeling. Early Siamese FCNs demonstrated the effectiveness of shared or dual-branch encoders for change detection, while BIT further used semantic tokens to model bi-temporal context and moved change detection from local difference responses toward high-level interaction \citep{daudt2018fully,chen2021remote}. For SAR flood scenarios, recent studies have used differential attention and context-aware modeling to improve flood change recognition under noise, similar scattering, and complex backgrounds \citep{saleh2024dam,du2026high}. Vision foundation models and DINO-style self-supervised features have also provided more stable semantic priors for change detection \citep{li2024new,dong2026peftcd}. These advances, however, do not mean that registered bi-temporal SAR features are inherently comparable. Complex urban scenes may still contain shallow-layer scattering-statistic shifts, residual misalignment near building and road edges, and unstable mid- to high-level semantics. If these incomparable factors are directly fed into differencing, attention, or token interaction, the model may still amplify imaging shifts and non-flood disturbances as pseudo changes.
+
+Urban SAR flood changes exhibit complex cross-temporal responses caused by multiple scattering mechanisms. In open water or flat inundated areas, flooding usually reduces backscatter due to specular reflection. In built-up areas, the geometric relationship among building walls, roads, water surfaces, and the radar line of sight further introduces shadowing, layover, and building-water double-bounce scattering, so newly inundated areas may involve both intensity changes and neighborhood scattering reorganization \citep{mason2010urbanFloodTgrs,giustarini2013urbanFloodCd,mason2014doubleScattering}. Accordingly, existing urban flood studies commonly combine multi-temporal intensity, interferometric coherence, and scene priors to improve inundation recognition in built-up areas, showing that urban flood responses are diverse and context dependent \citep{li2019urbanFloodAslcnn,zhao2022urbanAwareUnet}. These observations suggest that urban SAR flood detection depends on recognizing relationship-mismatch patterns in comparable bi-temporal features. A mechanism is therefore needed to adaptively aggregate real change patterns from bi-temporal pair representations and to capture weak, narrow, and fragmented inundation areas more stably.
+
+Flood extent mapping answers where inundation occurs, but urban flood analysis also requires vertical differences within the identified inundation support. Compared with a binary extent map, flood depth is an impact-oriented inundation attribute that provides finer spatial cues for loss estimation, emergency resource allocation, and risk communication \citep{liu2025floodDepthReview}. Therefore, after an urban flood extent has been identified, forming a DEM-constrained depth estimate within the inundation support and using it for rapid emergency interpretation is a key step from flood extent mapping toward depth-aware interpretation.
+
+Depth estimation from flood extent and terrain is an important route for rapidly deriving vertical inundation information from remote sensing maps. These methods usually infer water-surface elevation from flood boundaries, water-surface clues, or topographic relationships, and then subtract a digital elevation model (DEM) or digital terrain model (DTM) to obtain flood depth. \citet{cian2018flood} showed that SAR-derived flood extent can be combined with LiDAR DEM to estimate water-surface elevation from boundary-elevation statistics. FwDET and its extensions further demonstrated that rapid flood depth estimation can be conducted using only remotely sensed inundation extent and DEM \citep{cohen2018estimating,cohen2019floodwater}. Subsequent evaluations and extensions showed that the applicability of simplified models such as HAND, TVD, and FwDET varies with terrain conditions, DEM sources, and boundary quality \citep{teng2022comprehensive}. Depth estimation and extent enhancement for satellite inundation maps also depend on topographic constraints and the reliability of the input support \citep{betterle2024water}. These studies indicate that the key to DEM-constrained depth estimation is to convert a two-dimensional inundation boundary into a stable local water-surface elevation. However, when the input is derived from urban SAR change detection, the detected flood extent describes only newly inundated areas and usually excludes pre-existing permanent water bodies. When existing methods are directly applied to such change-defined flood supports, the outer-boundary elevation may fall on low or unrepresentative terrain locations, leading to non-positive depth, unresolved depth, and local spatial discontinuity after subtracting DEM elevation from the reconstructed surface.
+
+To address depth estimation under change-detection flood extent inputs, this paper proposes an extent-to-depth urban flood mapping framework for bi-temporal SAR imagery. The framework first performs urban flood extent mapping using Harmonized Alignment and Change Query Interaction (HA-CQI): Harmonized Alignment improves pre- and post-event feature comparability before differencing and interaction, Change Query Interaction models flood-related bi-temporal change relationships from comparable features and produces multi-scale change representations, and a Mask2Former prediction head generates the final flood mask. On this basis, we further propose Change-defined Flood Depth Estimation (CFDepth), a DEM-constrained depth estimation method for change-detection flood extent inputs. CFDepth provides a locally consistent first-order depth representation within connected components when the newly inundated support lacks permanent water bodies and low-elevation connections, thereby supporting rapid emergency interpretation. The main contributions are as follows:
+\begin{enumerate}[label=\arabic*)]
+  \item An extent-to-depth urban flood mapping framework is developed, organizing urban flood extent mapping and change-defined depth estimation into a unified workflow with clear task boundaries.
+  \item For urban flood extent mapping, HA-CQI is designed to improve cross-temporal feature comparability through harmonized alignment, model flood-related bi-temporal changes through change query interaction, and predict flood masks from multi-scale change representations using a Mask2Former head.
+  \item We propose CFDepth, a DEM-constrained first-order depth estimation method for change-detection flood extent inputs, to provide locally consistent emergency-interpretation information within connected components when the newly inundated support lacks permanent water bodies and low-elevation connections.
+  \item The framework is evaluated on two real urban flood events, demonstrating its effectiveness in both flood extent mapping and change-defined flood depth estimation.
+
+\end{enumerate}
+
+\section{Related Work}
+
+\subsection{SAR Flood Change Detection}
+
+SAR flood change detection builds on the continuing development of remote sensing change-detection methods. Mainstream deep change-detection approaches use Siamese fully convolutional networks as a basic framework to learn difference representations from registered bi-temporal images \citep{daudt2018fully}. Spatio-temporal attention, semantic token modeling, and hierarchical Transformer architectures have further strengthened long-range bi-temporal interaction and multi-scale change representation \citep{chen2020spatial,chen2021remote,bandara2022changeformer}. In SAR flood mapping, recent methods have gradually moved from generic differencing toward flood-oriented interaction and attention designs. DAM-Net uses a differential attention metric to enhance SAR flood detection \citep{saleh2024dam}; LiST-Net improves boundary delineation with a lightweight SAR Transformer and dimension-wise attention \citep{saleh2024list}; SemT-Former uses semantic tokens to model multi-temporal SAR flood changes \citep{saleh2024high}; and AWCA-Net combines adaptive windows with context-aware attention for complex flood scenarios \citep{du2026high}. In addition, DMCF-Net and flood-index-enhanced SAR flood detection further explore multi-scale contextual fusion and flood-index priors to improve inundation extraction under heterogeneous backscatter conditions \citep{wang2025dmcf,chen2025flood}. These studies show that change detection has evolved from Siamese difference learning to attention-, Transformer-, and token-based bi-temporal representations, while SAR flood detection increasingly emphasizes noise suppression, temporal interaction, semantic abstraction, and generalization across complex scenes.
+
+\subsection{Foundation Models for Change Detection}
+
+Foundation models provide transferable semantic priors for remote sensing change detection. One group of methods uses the latent knowledge of models such as SAM to enhance bi-temporal feature representation. TTP introduces latent knowledge from SAM to promote cross-domain knowledge transfer and multi-temporal feature integration \citep{chen2023ttp}, whereas SAM-CD adapts FastSAM to very-high-resolution remote sensing change detection with lightweight adapters and reduces the imaging-domain gap that appears when visual foundation models are directly applied to remote sensing imagery \citep{ding2024adapting}. Another group emphasizes task-specific injection and bridging after freezing the foundation model. For example, BAN freezes foundation models such as CLIP and designs bi-temporal adaptation branches and bridge modules to select, align, and inject generic semantic representations \citep{li2024new}. ASS-CD further combines SAM/Swin features, adapters, and cross-attention to connect global semantic transfer with local change details \citep{wei2025ass}. Recent work has also focused on stronger foundation models and more efficient adaptation strategies. SAM2-CD uses activation selection gates and global-local context attention to suppress irrelevant semantic interference and enhance fine-grained change representation \citep{qin2025sam2}. PeftCD adapts visual foundation models (VFMs) such as SAM2 and DINOv3 to change-detection frameworks through parameter-efficient fine-tuning \citep{dong2026peftcd}, while SAM-MSCD combines LoRA, multi-scale bi-temporal interaction, and change-feature enhancement to improve multi-scale object awareness \citep{liu2026multi}. Overall, these studies show that foundation features can supplement the semantic representation of conventional change-detection models, but their effectiveness still depends on task-aware adaptation.
+
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth,height=0.52\textheight,keepaspectratio]{figure/figure1.jpg}
+  \caption{Overall framework for urban flood mapping from SAR flood extent to depth. HA-CQI extracts flood extent from paired SAR images, and CFDepth estimates flood depth by combining DEM-based surface initialization with nearest outer-boundary propagation inside the change-defined flood support.}
+  \label{fig:framework}
+\end{figure*}
+
+\subsection{DEM-Constrained Flood Depth Estimation}
+
+DEM-constrained flood depth estimation is an important route for rapidly obtaining vertical inundation information from remote sensing flood extent maps and terrain data. Early studies combined SAR-derived inundation areas, high-accuracy terrain, and discharge-related information for near-real-time flood management \citep{matgen2007integration}. High-resolution SAR flood extents have also been combined with LiDAR DEMs to infer water-surface elevation using boundary-elevation statistics \citep{cian2018flood}. Other studies showed that flood boundaries extracted from multi-frequency SAR can be coupled with DEM data for depth estimation in low-relief or vegetated floodplains \citep{surampudi2023flood}. HAND normalizes DEM elevations by their vertical distance to the nearest drainage channel to represent local drainage potential and hydrologic connectivity controlled by terrain \citep{nobre2011height}. FwDET uses a flood inundation polygon and DEM as its main inputs, assigns the elevation of the nearest flood-boundary cell as the local water-surface elevation for each inundated pixel, and subtracts terrain elevation to estimate depth \citep{cohen2018estimating}. FwDET v2.0 further improves boundary identification for coastal flooding by removing invalid boundaries on the coastline or ocean side and using nearest-boundary elevation assignment to reduce erroneous allocation across permanent water bodies \citep{cohen2019floodwater}. \citet{teng2022comprehensive} also showed through systematic evaluation that HAND, TVD, and FwDET are sensitive to terrain conditions, DEM sources, flood scale, and boundary quality. \citet{betterle2024water} jointly addressed depth estimation and flood extent enhancement for satellite inundation maps. FlDepth proposed an automated GIS workflow that uses near-real-time multi-source satellite inundation extents and DEM/DTM, generates cross-sections on both sides of the centerline of continuous inundation patches, interpolates water-surface elevation from boundary elevations, and subtracts terrain elevation to obtain depth \citep{akkimi2026fldepth}. Overall, DEM-constrained flood depth estimation has formed a rapid and low-data-dependence technical route, but it still largely relies on relatively complete and stable inundation extents or boundary conditions during the flood period.
+
+\section{Methodology}
+
+This study designs a two-stage framework for urban flood mapping from extent to depth using bi-temporal SAR images, as shown in Fig.~\ref{fig:framework}. Given registered pre- and post-event single-polarization grayscale SAR images \(\mathbf{I}_{\mathrm{pre}}, \mathbf{I}_{\mathrm{post}} \in \mathbb{R}^{H \times W}\), the framework first predicts a newly inundated flood extent map \(\hat{\mathbf{M}}\) using HA-CQI. CFDepth then introduces DEM information and generates a DEM-constrained first-order depth estimate \(\hat{\mathbf{d}}\) within the change-defined flood support specified by \(\hat{\mathbf{M}}\).
+
+Specifically, HA-CQI uses a weight-shared encoder and feature pyramid network (FPN) to extract multi-scale features from the pre- and post-event SAR images, denoted by \(\{\mathbf{P}_i^{(\mathrm{pre})}\}_{i=1}^{5}\) and \(\{\mathbf{P}_i^{(\mathrm{post})}\}_{i=1}^{5}\), respectively. In complex urban SAR scenes, directly differencing bi-temporal features is easily affected by scattering-statistic shifts, local misalignment, and urban pseudo changes. Therefore, Harmonized Alignment (HA) first coordinates shallow style statistics, mid-level local geometric positions, and high-level semantic context so that pre- and post-event features lie in a more comparable representation space. On this basis, Change Query Interaction (CQI) constructs pair tokens and uses learnable change queries to aggregate flood-related cross-temporal inconsistencies, producing multi-scale change representations. A Mask2Former prediction head then organizes these representations into set-based mask predictions and outputs the newly inundated flood extent map \(\hat{\mathbf{M}}\). Based on the change-defined flood support from the upstream network, CFDepth takes \(\hat{\mathbf{M}}\) and FABDEM as inputs and combines externally constrained initial surface estimation with nearest reachable boundary propagation to produce a DEM-constrained first-order depth estimate \(\hat{\mathbf{d}}\) within each connected component.
+
+\subsection{HA-CQI for Urban Flood Extent Mapping}
+
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=0.95\linewidth,height=0.56\textheight,keepaspectratio]{figure/figure2.jpg}
+  \caption{HA module with pair-shared style calibration, deformable alignment, and semantic calibration.}
+  \label{fig:ha}
+\end{figure}
+
+\subsubsection{Harmonized Alignment (HA)}\label{sec:ha}
+
+HA aims to establish a comparable bi-temporal feature basis before change interaction rather than directly classifying flood changes. As shown in Fig.~\ref{fig:ha}, HA proceeds through PSC, deformable alignment, and semantic calibration. It first reduces shallow imaging-statistic shifts, then handles local geometric offsets, and finally introduces stable semantic anchors to enhance mid- and high-level context.
+
+PSC operates on \(\mathbf{P}_1/\mathbf{P}_2\). It first estimates channel statistics shared by the pre- and post-event pair, and then maps shallow features from both times into a stable space defined by source-domain prototype statistics. For any shallow scale \(i \in \{1,2\}\), the shared statistics are written as
+\begin{equation}\label{eq:ha_stat}
+  \left[\boldsymbol{\mu}_{\mathrm{pair}}^{(i)}, \boldsymbol{\sigma}_{\mathrm{pair}}^{(i)}\right]
+  =
+  \mathrm{Stat}\!\left(\left[\mathbf{P}_i^{(\mathrm{pre})}, \mathbf{P}_i^{(\mathrm{post})}\right]\right),
+\end{equation}
+and the current feature is remapped to the stable space defined by source-domain prototype statistics:
+\begin{equation}\label{eq:ha_remap}
+  \tilde{\mathbf{P}}_i^{(t)}
+  =
+  \frac{\mathbf{P}_i^{(t)} - \boldsymbol{\mu}_{\mathrm{pair}}^{(i)}}{\boldsymbol{\sigma}_{\mathrm{pair}}^{(i)} + \epsilon}
+  \odot \boldsymbol{\sigma}_{\mathrm{src}}^{(i)}
+  \oplus \boldsymbol{\mu}_{\mathrm{src}}^{(i)},
+  \quad t \in \{\mathrm{pre},\mathrm{post}\},
+\end{equation}
+where \(\boldsymbol{\mu}_{\mathrm{src}}^{(i)}\) and \(\boldsymbol{\sigma}_{\mathrm{src}}^{(i)}\) are the source-domain shallow prototype statistics obtained during training, and \(\epsilon\) is used for numerical stability. To avoid erasing local SAR scattering textures during statistical remapping, a lightweight residual fidelity mapping \(\mathcal{R}_i(\cdot)\) is added after PSC, yielding the shallow harmonized feature \(\hat{\mathbf{P}}_i^{(t)}=\tilde{\mathbf{P}}_i^{(t)}+\mathcal{R}_i(\tilde{\mathbf{P}}_i^{(t)})\). For the subsequent geometric alignment, we denote the base feature by \(\mathbf{B}_i^{(t)}\), where \(\mathbf{B}_i^{(t)}=\hat{\mathbf{P}}_i^{(t)}\) for \(i\in\{1,2\}\), and \(\mathbf{B}_i^{(t)}=\mathbf{P}_i^{(t)}\) for \(i\in\{3,4,5\}\).
+
+Deformable alignment addresses residual local geometric offsets between the two times. For scale \(i \in \{1,2\}\), the post-event feature acts as the query, adaptively searching local neighborhoods in the pre-event feature to obtain a pre-event representation \(\mathbf{A}_i^{(\mathrm{pre})}\) that is locally more consistent with the post-event structure:
+\begin{equation}\label{eq:ha_align}
+  \mathbf{A}_i^{(\mathrm{pre})}(\mathbf{p})
+  =
+  \sum_{k=1}^{K}
+  \alpha_k^{(i)}(\mathbf{p})\,
+  \mathbf{B}_i^{(\mathrm{pre})}\!\left(\mathbf{p} + \Delta\mathbf{o}_k^{(i)}(\mathbf{p})\right),
+\end{equation}
+where \(\mathbf{p}\) is a spatial location, \(\Delta\mathbf{o}_k^{(i)}(\mathbf{p})\) is the learnable offset of the \(k\)-th sampling point, and \(\alpha_k^{(i)}(\mathbf{p})\) is the corresponding normalized weight. The geometrically harmonized feature is denoted by \(\mathbf{C}_i^{(t)}\): for \(i\in\{1,2\}\), \(\mathbf{C}_i^{(\mathrm{pre})}=\mathbf{A}_i^{(\mathrm{pre})}\) and \(\mathbf{C}_i^{(\mathrm{post})}=\mathbf{B}_i^{(\mathrm{post})}\); for \(i\in\{3,4,5\}\), \(\mathbf{C}_i^{(t)}=\mathbf{B}_i^{(t)}\).
+
+Semantic calibration introduces stable semantic anchors into the geometrically harmonized mid- and high-level features. It operates on \(\mathbf{C}_3\)--\(\mathbf{C}_5\), uses frozen DINOv3 features to provide regional context, and avoids letting foundation features directly dominate flood boundary decoding. Let \(\mathbf{V}_i^{(t)}\) denote the DINOv3 semantic representation at the corresponding scale. The semantically calibrated mid- and high-level features are
+\begin{equation}\label{eq:ha_sem}
+  \bar{\mathbf{P}}_i^{(t)} = \mathbf{C}_i^{(t)} + \phi_i\!\left(\mathbf{V}_i^{(t)}\right),
+  \quad i \in \{3,4,5\},\; t \in \{\mathrm{pre},\mathrm{post}\},
+\end{equation}
+where \(\phi_i(\cdot)\) is a scale-adaptive semantic mapping function. This process does not simply add ViT semantics; instead, after statistical harmonization and local alignment, it improves the stability of mid- and high-level regional context so that CQI receives more comparable bi-temporal features around buildings, roads, and water bodies. The final HA output consists of comparable features \(\mathbf{X}_i^{(\mathrm{pre})}\) and \(\mathbf{X}_i^{(\mathrm{post})}\): for \(i\in\{1,2\}\), \(\mathbf{X}_i^{(t)}=\mathbf{C}_i^{(t)}\); for \(i\in\{3,4,5\}\), \(\mathbf{X}_i^{(t)}=\bar{\mathbf{P}}_i^{(t)}\).
+
+\subsubsection{Change Query Interaction (CQI)}\label{sec:cqi}
+
+As shown in Fig.~\ref{fig:cqi}, CQI first constructs bi-temporal pair tokens at each scale. Given the comparable features \(\mathbf{X}_i^{(\mathrm{pre})}\) and \(\mathbf{X}_i^{(\mathrm{post})}\) output by HA, the pair token at layer \(i\) is
+\begin{equation}\label{eq:cqi_pair}
+  \mathbf{Z}_i =
+  \mathrm{MLP}_i\!\left(
+  \left[
+  \mathbf{X}_i^{(\mathrm{pre})},
+  \mathbf{X}_i^{(\mathrm{post})},
+  \mathbf{X}_i^{(\mathrm{post})}-\mathbf{X}_i^{(\mathrm{pre})},
+  \left|\mathbf{X}_i^{(\mathrm{post})}-\mathbf{X}_i^{(\mathrm{pre})}\right|
+  \right]\right).
+\end{equation}
+The first two terms retain the pre- and post-event states, the third term preserves change direction, and the fourth term provides a stable magnitude-difference basis. Compared with a single absolute difference, \(\mathbf{Z}_i\) is an interaction-oriented bi-temporal descriptor that can represent darkening, brightening, and local structural reorganization.
+
+On top of the pair tokens, CQI maintains a set of learnable change queries \(\mathbf{Q}_i\) at each scale. These queries do not correspond to predefined land-cover classes. Instead, they act as change-pattern prototypes that read flood-related cross-temporal inconsistencies from \(\mathbf{Z}_i\):
+\begin{equation}\label{eq:cqi_query}
+  \hat{\mathbf{Q}}_i
+  =
+  \mathbf{Q}_i
+  +
+  \mathrm{Attn}_{q\leftarrow z}^{(i)}(\mathbf{Q}_i,\mathbf{Z}_i).
+\end{equation}
+The updated change queries then write change-aware context back into the dense pair tokens:
+\begin{equation}\label{eq:cqi_token}
+  \tilde{\mathbf{Z}}_i
+  =
+  \mathbf{Z}_i
+  +
+  \mathrm{Attn}_{z\leftarrow q}^{(i)}(\mathbf{Z}_i,\hat{\mathbf{Q}}_i).
+\end{equation}
+This bidirectional interaction first summarizes change patterns at the current scale with a small number of queries and then uses these patterns to modulate all spatial locations. Unlike unconstrained cross-attention directly between pre- and post-event features, CQI performs attention between pair tokens and change queries, reducing the interference of pseudo changes in complex urban scenes.
+
+Finally, CQI maps the change-aware pair tokens into multi-scale change representations:
+\begin{equation}\label{eq:cqi_representation}
+  \mathbf{D}_i
+  =
+  \Phi_i\!\left(\tilde{\mathbf{Z}}_i\right)
+  =
+  \Phi_i\!\left(
+  \mathbf{Z}_i+
+  \mathrm{Attn}_{z\leftarrow q}^{(i)}
+  \left(\mathbf{Z}_i,\mathbf{Q}_i+\mathrm{Attn}_{q\leftarrow z}^{(i)}(\mathbf{Q}_i,\mathbf{Z}_i)\right)
+  \right).
+\end{equation}
+\(\mathbf{D}_i\) represents the bi-temporal inconsistency response interpreted by change queries. Thus, CQI converts the comparable features provided by HA into flood-sensitive multi-scale change representations that are more robust to complex urban pseudo changes, and feeds them into the Mask2Former prediction head for final mask prediction.
+
+\subsubsection{Mask2Former Head for Mask Prediction}
+
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=0.95\linewidth,height=0.56\textheight,keepaspectratio]{figure/figure3.jpg}
+  \caption{CQI module for multi-scale change representation from bi-temporal pair tokens and learnable change queries.}
+  \label{fig:cqi}
+\end{figure}
+
+\begin{figure}[!t]
+  \centering
+  \includegraphics[width=0.95\linewidth,height=0.45\textheight,keepaspectratio]{figure/figure4.jpg}
+  \caption{Mask2Former prediction head for flood mask prediction from CQI-derived multi-scale change representations.}
+  \label{fig:mask2former}
+\end{figure}
+
+As shown in Fig.~\ref{fig:mask2former}, the change representations output by CQI are first adapted in scale and channel to obtain the head input features \(\{\mathbf{F}_i\}_{i=1}^{5}\). The pixel decoder fuses and upsamples these multi-scale features to generate dense mask features \(\mathbf{F}_{\mathrm{mask}}\). Meanwhile, the Transformer decoder takes a set of learnable mask queries \(\mathbf{Q}_{\mathrm{mask}}\) as input and updates query representations layer by layer through interaction with the multi-scale features:
+\begin{equation}\label{eq:mask_decoder}
+  \mathbf{H}
+  =
+  \mathcal{T}_{\mathrm{dec}}
+  \left(
+  \mathbf{Q}_{\mathrm{mask}},\,
+  \mathcal{P}_{\mathrm{dec}}\left(\{\rho_i(\mathbf{D}_i)\}_{i=1}^{5}\right)
+  \right),
+\end{equation}
+where \(\rho_i(\cdot)\) denotes scale and channel adaptation for the \(i\)-th change representation, \(\mathcal{P}_{\mathrm{dec}}(\cdot)\) denotes the pixel decoder, \(\mathcal{T}_{\mathrm{dec}}(\cdot)\) denotes the Transformer decoder, and \(\mathbf{H}\) is the updated mask-query representation.
+
+The classification branch then predicts the class confidence of each learnable mask query, while the mask branch projects the mask-query representation into a mask embedding and generates candidate masks with the dense mask features:
+\begin{equation}\label{eq:mask_pred}
+  \mathbf{s}_q = \mathrm{MLP}_{\mathrm{cls}}(\mathbf{H}_q),
+  \qquad
+  \mathbf{m}_q =
+  \sigma\!\left(
+  \psi(\mathbf{H}_q)^{\top}\mathbf{F}_{\mathrm{mask}}
+  \right),
+\end{equation}
+where \(\mathbf{s}_q\) and \(\mathbf{m}_q\) are the class score and candidate mask of the \(q\)-th mask query, respectively, and \(\psi(\cdot)\) denotes the mask-embedding projection. The final prediction is obtained as a binary flood extent map \(\hat{\mathbf{M}}\) through mask classification.
+
+\subsection{Change-defined Flood Depth Estimation}
+
+CFDepth estimates flood depth by reconstructing a local water-surface elevation over the newly inundated support and subtracting the digital elevation model (DEM) surface. Unlike depth estimation from a complete flood-period water surface, the input support here is produced by change detection and mainly represents newly inundated areas. CFDepth addresses this input condition by combining an externally constrained initial surface with a smoothed outer-boundary surface and nearest reachable boundary propagation inside each connected flood component.
+
+\subsubsection{Change-defined depth formulation}
+
+The first step defines the depth-estimation domain from the HA-CQI flood extent. Let \(\hat{\mathbf{M}}\) be the predicted change-defined flood map and \(\mathbf{Z}\) be the DEM elevation field. CFDepth first places both rasters on a common analysis grid and defines the change-defined flood support as \(\Omega_f=\{\mathbf{p}\mid \hat{\mathbf{M}}(\mathbf{p})=1\}\). The support is decomposed into \(N_c\) connected components \(\{\Omega_f^{(c)}\}_{c=1}^{N_c}\), so that local water-surface construction is performed within each component rather than across background-separated inundation patches. For the \(c\)-th component, the local outer boundary is
+\begin{equation}\label{eq:cfdepth_boundary}
+  \mathcal{B}_{\mathrm{out}}^{(c)}
+  =
+  \left\{\mathbf{q}\mid \mathbf{q}\in \mathrm{Dilate}(\Omega_f^{(c)}),\; \mathbf{q}\notin\Omega_f^{(c)}\right\},
+  \quad c=1,\ldots,N_c,
+\end{equation}
+where \(\mathcal{B}_{\mathrm{out}}^{(c)}\) denotes non-flood pixels immediately outside \(\Omega_f^{(c)}\). The final depth is obtained from a reconstructed water surface \(\mathbf{S}\) as \(\hat{\mathbf{d}}=\max(\mathbf{S}-\mathbf{Z},0)\odot\hat{\mathbf{M}}\). Thus, the core task of CFDepth is to construct a plausible local \(\mathbf{S}\) under the boundary conditions provided by a change-defined, rather than complete, flood support.
+
+\subsubsection{Boundary-constrained water-surface construction}
+
+CFDepth constructs water-surface elevation in two complementary forms. The first form is an initial surface constrained by terrain outside the support. Using non-flood DEM pixels as surface-propagation sources, CFDepth computes a baseline cost, a unit cost, and an elevation-weighted cost, denoted by \(\mathbf{C}_0\), \(\mathbf{C}_1\), and \(\mathbf{C}_z\), respectively. The initial surface \(\mathbf{S}_0\) and its corresponding raw depth \(\mathbf{d}_0\) are
+\begin{equation}\label{eq:wd_init}
+  \mathbf{S}_0
+  =
+  \mathbf{Z}_{\mathrm{out}}
+  +
+  \frac{\mathbf{C}_z-\mathbf{C}_0}{\mathbf{C}_1-\mathbf{C}_0+\epsilon},
+  \qquad
+  \mathbf{d}_0
+  =
+  \max(\mathbf{S}_0-\mathbf{Z},0)\odot\hat{\mathbf{M}},
+\end{equation}
+where \(\mathbf{Z}_{\mathrm{out}}\) denotes DEM elevation outside the support, and \(\epsilon\) avoids division by zero. This surface provides a broad terrain-constrained estimate, but it may still be lower than the internal DEM where the change-defined support excludes permanent water bodies or low-elevation connecting areas. Locations whose initial depth is not greater than the minimum positive-depth threshold are therefore marked as unresolved:
+\begin{equation}\label{eq:wd_unstable}
+  \mathcal{U}_0^{(c)}
+  =
+  \left\{\mathbf{p}\in\Omega_f^{(c)} \mid \mathbf{S}_0(\mathbf{p})-\mathbf{Z}(\mathbf{p}) \le d_{\min}\right\}.
+\end{equation}
+
+The second form is a boundary-constrained surface designed to stabilize these unresolved locations. To reduce the influence of isolated DEM anomalies, CFDepth first applies local median smoothing to the outer-boundary elevations:
+\begin{equation}\label{eq:wd_search}
+  \tilde{z}_{\mathrm{out}}(\mathbf{q})
+  =
+  \mathrm{median}
+  \left\{
+  z(\mathbf{u})\mid
+  \mathbf{u}\in\mathcal{N}_{r_b}(\mathbf{q})\cap\mathcal{B}_{\mathrm{out}}^{(c)}
+  \right\},
+  \quad
+  \mathbf{q}\in\mathcal{B}_{\mathrm{out}}^{(c)}.
+\end{equation}
+For each \(\mathbf{p}\in\Omega_f^{(c)}\), CFDepth then identifies the nearest reachable outer-boundary pixel within \(\Omega_f^{(c)}\cup\mathcal{B}_{\mathrm{out}}^{(c)}\):
+\begin{equation}\label{eq:wd_update_boundary}
+  \mathbf{q}^{*}(\mathbf{p})
+  =
+  \arg\min_{\mathbf{q}\in\mathcal{B}_{\mathrm{out}}^{(c)}}
+  D_{\Omega_f^{(c)}\cup\mathcal{B}_{\mathrm{out}}^{(c)}}(\mathbf{q},\mathbf{p}),
+\end{equation}
+where \(D_{\Omega_f^{(c)}\cup\mathcal{B}_{\mathrm{out}}^{(c)}}\) denotes geographic distance restricted to the current connected flood component and its outer boundary. This restriction prevents a distant, lower boundary from overriding a closer reachable boundary inside the same support component. The boundary-constrained surface is then defined as
+\begin{equation}\label{eq:wd_completion}
+  \mathbf{S}_{\mathrm{nb}}(\mathbf{p})
+  =
+  \max\left\{
+  \tilde{z}_{\mathrm{out}}\!\left(\mathbf{q}^{*}(\mathbf{p})\right),
+  \mathbf{Z}(\mathbf{p})+d_{\min}
+  \right\}.
+\end{equation}
+The term \(\mathbf{Z}(\mathbf{p})+d_{\min}\) enforces a physically interpretable positive depth once a pixel is retained as flooded.
+
+\subsubsection{Depth generation and algorithm summary}
+
+CFDepth generates the final depth by fusing the initial and boundary-constrained surfaces according to their validity. For unresolved locations, the nearest-boundary surface is used to complete the water-surface estimate. For locations with valid initial depth, CFDepth preserves the initial surface while enforcing the same minimum positive-depth constraint:
+\begin{equation}\label{eq:wd_surface_fusion}
+  \mathbf{S}_1(\mathbf{p})
+  =
+  \begin{cases}
+    \mathbf{S}_{\mathrm{nb}}(\mathbf{p}), & \mathbf{p}\in\mathcal{U}_0^{(c)},\\
+    \max\left\{\mathbf{S}_0(\mathbf{p}),\mathbf{Z}(\mathbf{p})+d_{\min}\right\}, & \mathrm{otherwise}.
+  \end{cases}
+\end{equation}
+The final CFDepth estimate is
+\begin{equation}\label{eq:wd_final}
+  \hat{\mathbf{d}}
+  =
+  \max(\mathbf{S}_1-\mathbf{Z},0)\odot\hat{\mathbf{M}}.
+\end{equation}
+The complete procedure is summarized in Algorithm~\ref{alg:cfdepth}. The algorithm remains tied to the predicted change-defined support: it improves depth availability within each connected component, but it does not impose a single water level across disconnected inundation patches.
+
+\begin{algorithm}[!t]
+\footnotesize
+\caption{CFDepth procedure}
+\label{alg:cfdepth}
+\begin{algorithmic}[1]
+\Statex \textbf{Input:}
+\Statex \quad \(\hat{\mathbf{M}}\): change-defined flood map; \(\mathbf{Z}\): DEM.
+\Statex \quad \(d_{\min}\): minimum positive depth; \(r_b\): boundary smoothing radius.
+\Statex \quad \(D_{\max}\): maximum propagation distance.
+\Statex \textbf{Output:} Flood-depth estimate \(\hat{\mathbf{d}}\)
+\State Align \(\hat{\mathbf{M}}\) and \(\mathbf{Z}\) to a common analysis grid.
+\State Define \(\Omega_f=\{\mathbf{p}\mid \hat{\mathbf{M}}(\mathbf{p})=1\}\) and decompose it into connected components \(\{\Omega_f^{(c)}\}_{c=1}^{N_c}\).
+\For{each connected component \(\Omega_f^{(c)}\)}
+  \State Extract the local outer boundary \(\mathcal{B}_{\mathrm{out}}^{(c)}\) using Eq.~\eqref{eq:cfdepth_boundary}.
+  \State Construct the terrain-constrained initial surface \(\mathbf{S}_0\) using Eq.~\eqref{eq:wd_init}.
+  \State Identify unresolved pixels \(\mathcal{U}_0^{(c)}\) using Eq.~\eqref{eq:wd_unstable}.
+  \State Smooth the outer-boundary elevations to obtain \(\tilde{z}_{\mathrm{out}}\) using Eq.~\eqref{eq:wd_search}.
+  \State Find the nearest reachable boundary pixel \(\mathbf{q}^{*}(\mathbf{p})\) within \(D_{\max}\) using Eq.~\eqref{eq:wd_update_boundary}.
+  \State Build the boundary-constrained surface \(\mathbf{S}_{\mathrm{nb}}\) using Eq.~\eqref{eq:wd_completion}.
+  \State Fuse \(\mathbf{S}_0\) and \(\mathbf{S}_{\mathrm{nb}}\) to obtain \(\mathbf{S}_1\) using Eq.~\eqref{eq:wd_surface_fusion}.
+\EndFor
+\State Compute \(\hat{\mathbf{d}}=\max(\mathbf{S}_1-\mathbf{Z},0)\odot\hat{\mathbf{M}}\) using Eq.~\eqref{eq:wd_final}.
+\State \Return \(\hat{\mathbf{d}}\)
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Loss Functions}\label{sec:loss}
+
+The training objective optimizes only the HA-CQI change-detection model. The overall loss is
+\begin{equation}\label{eq:loss}
+  \mathcal{L} = \mathcal{L}_{\mathrm{main}} + \lambda_{\mathrm{aux}}\mathcal{L}_{\mathrm{aux}} + \lambda_{\mathrm{cons}}\mathcal{L}_{\mathrm{cons}},
+\end{equation}
+where \(\mathcal{L}_{\mathrm{main}}\) supervises the final flood extent prediction \(\hat{\mathbf{M}}\) from the Mask2Former prediction head, \(\mathcal{L}_{\mathrm{aux}}\) supervises auxiliary mask predictions derived from the CQI multi-scale change representations, and \(\mathcal{L}_{\mathrm{cons}}\) constrains consistency between high-resolution support regions and coarse-scale responses. Both \(\mathcal{L}_{\mathrm{main}}\) and \(\mathcal{L}_{\mathrm{aux}}\) use a linear combination of Focal loss and foreground-prioritized Tversky loss to balance classification stability, recall preservation, and regional overlap quality under sparse foreground conditions.
+
+\subsection{Implementation Details}
+
+HA-CQI uses EfficientNet-B0 and FPN as the shared encoding structure, and introduces frozen DINOv3 features at mid- and high-level stages as the source of semantic calibration. The bi-temporal pyramid features pass through HA, CQI, and the Mask2Former prediction head to produce the final flood extent mask. The model is trained on one NVIDIA GeForce RTX 4090 GPU with an input size of \(256\times256\), a batch size of 16, and 100 epochs. AdamW is used as the optimizer, with an initial learning rate of \(5\times10^{-4}\), a weight decay of \(5\times10^{-4}\), and cosine annealing to \(1\times10^{-7}\). CFDepth is implemented in Google Earth Engine (GEE).
+
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{figure/Figure5.jpg}
+  \caption{Study areas, land-cover context, and field-photo depth references. The map panels locate Zhengzhou and Zhuozhou and show their land-cover settings. Markers P1--P4 in Zhengzhou and P5--P8 in Zhuozhou indicate field-photo reference locations, with depth intervals estimated from visible objects such as cars, people, and traffic signs.}
+  \label{fig:dataset}
+\end{figure*}
+
+\section{Experiments}
+
+\subsection{Datasets and Study Area}
+
+\subsubsection{Training datasets}
+
+The training data are integrated from two public SAR flood datasets, VarFloods and S1GFloods, and are used to train the HA-CQI network for urban flood extent mapping. These datasets cover different flood morphologies, background land covers, and imaging conditions, providing diverse bi-temporal flood change samples. Their joint use helps the model learn more robust change representations and reduces dependence on a single data source when transferring to the urban evaluation scenes.
+
+\subsubsection{Study areas and evaluation datasets}
+
+The evaluation data consist of two urban flood cases, Zhengzhou 2021 and Zhuozhou 2023. They are used to evaluate flood extent mapping and provide flood supports for generating DEM-constrained first-order depth approximations. Fig.~\ref{fig:dataset} shows the locations, land-cover context, and field-photo depth reference points P1--P8 for the two study areas. Fig.~\ref{fig:gf3_eval_data} presents the pre- and post-event GF3 SAR images, flood labels, and ROI slice locations. Table~\ref{tab:gf3_eval} further summarizes event time, sensor mode, spatial resolution, polarization, and pre- and post-event acquisition dates for the two cases.
+
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth,height=0.70\textheight,keepaspectratio]{figure/Figure6.jpg}
+  \caption{GF3 evaluation data for Zhengzhou and Zhuozhou. The left column shows Zhengzhou and the right column shows Zhuozhou: (a1)/(b1) pre-event SAR images with ROI1--ROI6 used in Figs.~\ref{fig:qual_zhengzhou} and~\ref{fig:qual_zhuozhou}; (a2)/(b2) post-event SAR images; (a3)/(b3) flood labels.}
+  \label{fig:gf3_eval_data}
+\end{figure*}
+
+\input{tables/table_gf3_eval_dataset.tex}
+
+Zhengzhou 2021 corresponds to the extreme urban rainstorm flood event on July 20, 2021. From 20:00 on July 17 to 20:00 on July 20, 2021, the cumulative rainfall in Zhengzhou reached 617.1 mm, close to the local annual average, and an hourly rainfall of 201.9 mm was recorded from 16:00 to 17:00 on July 20, causing widespread urban waterlogging and traffic disruption \citep{xinhua2021henanEmergency,li2023zhengzhou720Flood}. This study area contains dense built-up zones, road networks, urban rivers, and complex SAR scattering backgrounds, and is used to test the model's ability to distinguish extreme urban waterlogging from non-flood disturbances. Zhuozhou 2023 corresponds to an urban flood scenario after heavy rainfall from late July to early August 2023. This study area includes river-adjacent zones, urban-rural transitional land covers, mixed farmland and built-up backgrounds, and large connected inundation patches, making it suitable for evaluating flood detection under mixed urban-farmland structures and complex land-cover transitions.
+
+\subsection{Evaluation metrics}
+
+For flood extent mapping, the flood class is treated as the positive class, and \(TP\), \(FP\), \(FN\), and \(TN\) denote true positive, false positive, false negative, and true negative pixels, respectively. The metrics are defined as
+\begin{equation}\label{eq:precision}
+\mathrm{Precision} = \dfrac{TP}{TP+FP}.
+\end{equation}
+\begin{equation}\label{eq:recall}
+\mathrm{Recall} = \dfrac{TP}{TP+FN}.
+\end{equation}
+\begin{equation}\label{eq:f1}
+\mathrm{F1} = \dfrac{2\,\mathrm{Precision}\,\mathrm{Recall}}{\mathrm{Precision}+\mathrm{Recall}}.
+\end{equation}
+\begin{equation}\label{eq:iou}
+\mathrm{IoU} = \dfrac{TP}{TP+FP+FN}.
+\end{equation}
+\begin{equation}\label{eq:oa}
+\mathrm{OA} = \dfrac{TP+TN}{TP+FP+FN+TN}.
+\end{equation}
+
+For depth assessment, let \(\Omega\) denote the flood support region where depth is evaluated, and let \(d(p)\) be the depth value of an arbitrary depth map at pixel \(p\). With \(d_{\min}=\SI{0.01}{m}\), valid finite positive-depth pixels and the valid depth ratio are defined as
+\begin{equation}\label{eq:valid_depth_ratio}
+\begin{aligned}
+V &= \{p\in\Omega\mid d(p)>d_{\min},\ d(p)\ \mathrm{is\ finite}\},\\
+R_{\mathrm{valid}} &= \frac{|V|}{|\Omega|}\times 100\%.
+\end{aligned}
+\end{equation}
+This metric measures the coverage of valid positive depth estimates within the flood support.
+
+To diagnose local variation in the reconstructed water-surface elevation (WSE) field, we further compute the empirical cumulative distribution function (ECDF) of the WSE gradient. Given DEM elevation \(Z(p)\), the related quantities are
+\begin{equation}\label{eq:wse_gradient_ecdf}
+\begin{aligned}
+S(p) &= Z(p)+d(p), \quad
+G(p)=|\nabla S(p)|, \quad
+G^{\mathrm{permil}}(p)=1000\,G(p),\\
+\mathcal{G} &= \{G^{\mathrm{permil}}(p)\mid p\in V,\ G^{\mathrm{permil}}(p)\ \mathrm{is\ finite}\},\\
+F(g) &= \frac{1}{|\mathcal{G}|}\sum_{x\in\mathcal{G}}\mathbf{1}(x\le g)\times 100\%.
+\end{aligned}
+\end{equation}
+A higher proportion of low WSE-gradient pixels indicates fewer local discontinuities in the reconstructed water-surface elevation field.
+
+\input{tables/table_main_comparison.tex}
+
+\subsection{Urban Flood Extent Mapping Evaluation}
+
+We evaluate the urban flood extent mapping capability of HA-CQI using both quantitative comparison and spatial ROI slices. To assess the effectiveness of the proposed framework in complex urban flood scenarios, we compare it with representative change-detection methods, including FC-Siam-Diff \citep{daudt2018fcsiam}, HANet, SNUNet \citep{fang2022snunet}, BIT \citep{chen2022bit}, ChangeFormer \citep{bandara2022changeformer}, CGNet \citep{han2023change}, TTP \citep{chen2023ttp}, and ChangeDINO \citep{cheng2025changedino}. Table~\ref{tab:main_comparison} reports the quantitative results on the Zhengzhou and Zhuozhou evaluation scenes. HA-CQI achieves the highest IoU, F1, Precision, Recall, and OA in both scenes: 73.38, 84.65, 80.65, 89.06, and 99.57 in Zhengzhou, and 86.23, 92.61, 96.61, 88.92, and 98.74 in Zhuozhou.
+
+Compared with the strongest competing baseline, the advantage of HA-CQI mainly lies in overall recall and region-overlap quality for complex flood boundaries and low-contrast inundated areas. In Zhengzhou, HA-CQI improves IoU, F1, Precision, Recall, and OA over the strongest baseline by 10.62, 7.53, 0.60, 7.48, and 0.16 percentage points, respectively; the gains in IoU, F1, and Recall are more pronounced, while Precision and OA show smaller margins. In Zhuozhou, CGNet is the strongest competing baseline, and HA-CQI still maintains improvements of 4.03, 2.38, 2.38, 2.36, and 0.40 percentage points across the five metrics. These results indicate that the comparable features established by HA, the multi-scale change representations learned by CQI, and the final mask prediction by the Mask2Former head jointly improve the stability of complex urban flood extent mapping.
+
+Fig.~\ref{fig:qual_zhengzhou} shows the qualitative comparison in Zhengzhou, with slice locations corresponding to ROI1--ROI6 marked in Fig.~\ref{fig:gf3_eval_data}(a1). White, blue, red, and black represent TP, FN, FP, and TN, respectively. The Zhengzhou scene contains small isolated waterlogging patches, low-lying areas near roads, circular or regular water-body boundaries, and linear river/road structures. These conditions easily lead to missed detections in low-contrast areas or false alarms along strong-scattering edges. In Fig.~\ref{fig:qual_zhengzhou}, most baselines show many blue FN pixels around small patches and narrow inundated areas, indicating insufficient recall for local weak changes. Some methods also produce red FP pixels near building edges, roads, or permanent water bodies, reflecting unstable suppression of urban pseudo changes. By contrast, HA-CQI forms more continuous white TP regions across multiple slices and reduces both blue missed detections and red false alarms, suggesting that harmonized alignment and change query interaction help preserve flood boundaries and small-scale inundation patterns under complex urban scattering backgrounds.
+
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{figure/Figure7.jpg}
+  \caption{Qualitative comparison in Zhengzhou using the ROI slices marked in Fig.~\ref{fig:gf3_eval_data}. (a) pre-event SAR; (b) post-event SAR; (c) ground truth; (d) FC-Siam-Diff; (e) HANet; (f) SNUNet; (g) BIT; (h) ChangeFormer; (i) CGNet; (j) TTP; (k) ChangeDINO; (l) Ours (HA-CQI). For (d)--(l), white, blue, red, and black denote TP, FN, FP, and TN, respectively.}
+  \label{fig:qual_zhengzhou}
+\end{figure*}
+
+Fig.~\ref{fig:qual_zhuozhou} presents the spatial slice comparison in Zhuozhou, with slice locations corresponding to ROI1--ROI6 marked in Fig.~\ref{fig:gf3_eval_data}(b1). This scene contains more connected inundation areas, river-adjacent zones, mixed farmland/built-up backgrounds, and fragmented boundaries. In Fig.~\ref{fig:qual_zhuozhou}, some baselines retain evident blue FN pixels inside large inundation patches, splitting connected water bodies. Other methods generate red FP pixels along field boundaries, roads, and river edges, indicating over-expansion or pseudo-change responses. HA-CQI preserves a higher proportion of white TP pixels within connected inundated areas and reduces both red FP and blue FN pixels in boundary transition zones, making its prediction closer to the spatial morphology of the labels. This shows that HA-CQI not only improves overall quantitative metrics but also enhances inundation connectivity and boundary consistency in complex urban-rural flood structures.
+
+\subsection{DEM-constrained Depth Assessment}
+
+After flood extent extraction, we further compare the ability of CFDepth and FwDET to generate DEM-constrained depth estimates within the change-defined flood support. Both methods use the newly inundated flood support extracted by HA-CQI and FABDEM as inputs. To provide a complete assessment of the depth results, this section evaluates three aspects: spatial depth distribution and valid depth ratio in Zhengzhou and Zhuozhou, interval consistency with the field-photo reference points P1--P8 marked in Fig.~\ref{fig:dataset}, and local WSE consistency diagnosed by the WSE-gradient ECDF.
+
+\subsubsection{Spatial comparison of depth estimates}
+
+Figs.~\ref{fig:depth_zhengzhou} and~\ref{fig:depth_zhuozhou} show the first-order depth estimates in Zhengzhou and Zhuozhou, respectively. In each figure, panel (a) is FwDET and panel (b) is CFDepth; white pixels indicate locations inside the flood support where no valid positive depth is returned. Both methods use the newly inundated flood support extracted by HA-CQI and FABDEM. Under this input condition, the change-defined flood support represents only newly inundated areas and usually lacks permanent water bodies and some low-elevation connections. Therefore, FwDET more easily produces missed or unresolved pixels near permanent water bodies, river edges, and local low-lying connections. By contrast, CFDepth improves valid depth coverage within connected components through a smoothed outer-boundary surface and nearest reachable boundary propagation, while avoiding forced connections across background areas between disconnected inundation patches.
+
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{figure/Figure8.jpg}
+  \caption{Qualitative comparison in Zhuozhou using the ROI slices marked in Fig.~\ref{fig:gf3_eval_data}. (a) pre-event SAR; (b) post-event SAR; (c) ground truth; (d) FC-Siam-Diff; (e) HANet; (f) SNUNet; (g) BIT; (h) ChangeFormer; (i) CGNet; (j) TTP; (k) ChangeDINO; (l) Ours (HA-CQI). For (d)--(l), white, blue, red, and black denote TP, FN, FP, and TN, respectively.}
+  \label{fig:qual_zhuozhou}
+\end{figure*}
+
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figure/Figure9.jpg}
+  \caption{Flood-depth comparison in Zhengzhou within the HA-CQI-derived flood support. (a) FwDET; (b) CFDepth. Insets p1--p4 correspond to the field-photo reference points P1--P4 in Fig.~\ref{fig:dataset}; white pixels indicate missed or unresolved locations without valid positive depth.}
+  \label{fig:depth_zhengzhou}
+\end{figure*}
+
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figure/Figure10.jpg}
+  \caption{Flood-depth comparison in Zhuozhou within the HA-CQI-derived flood support. (a) FwDET; (b) CFDepth. Insets p5--p8 correspond to the field-photo reference points P5--P8 in Fig.~\ref{fig:dataset}; white pixels indicate missed or unresolved locations without valid positive depth.}
+  \label{fig:depth_zhuozhou}
+\end{figure*}
+
+Table~\ref{tab:valid_depth_ratio} further quantifies the valid depth coverage of the two methods within the same flood support. Because the change-defined flood support represents only newly inundated areas and lacks permanent water bodies and some low-elevation connections, directly using conventional boundary-elevation propagation more easily produces depth-coverage gaps. CFDepth mitigates this issue through a smoothed outer-boundary surface and nearest reachable boundary propagation. In Zhengzhou, the valid depth ratio increases from 74.65\% for FwDET to 97.83\% for CFDepth. In Zhuozhou, it increases from 65.92\% to 96.38\%. These results show that CFDepth provides more complete valid depth coverage under change-defined flood extent inputs.
+
+\input{tables/table_valid_depth_ratio.tex}
+
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth,height=0.45\textheight,keepaspectratio]{figure/Figure11.jpg}
+  \caption{Empirical cumulative distribution functions of WSE gradient for FwDET and CFDepth. WSE was reconstructed as \(S=Z+d\), where \(Z\) is DEM elevation and \(d\) is the estimated depth. WSE gradient is expressed in permille. The ECDFs were computed over valid WSE-gradient pixels of each method to diagnose local WSE variation within connected flood-support components, while valid-depth coverage was evaluated separately in Table~\ref{tab:valid_depth_ratio}.}
+  \label{fig:wse_gradient_cdf}
+\end{figure*}
+
+\subsubsection{Field-photo reference validation}
+
+The field-photo reference points P1--P8 marked in Fig.~\ref{fig:dataset} provide interval references independent of the DEM computation process and are used to examine whether the estimated depth classes are consistent with observed inundation phenomena. The depth intervals are estimated from identifiable objects in the photos, such as vehicles, pedestrians, and traffic signs, and are compared with the depth classes in the neighborhoods of the corresponding points in Figs.~\ref{fig:depth_zhengzhou} and~\ref{fig:depth_zhuozhou}.
+
+The comparison shows that the estimated depths of P1--P4 in Zhengzhou are 0.4--1.0 m, 0.7--1.0 m, 0.4--0.8 m, and 0.6--1.0 m, respectively. The estimated depths of P5--P8 in Zhuozhou are 1.8--2.0 m, 1.8--2.0 m, 1.8--2.0 m, and 1.5--1.8 m, respectively. The CFDepth depth classes around these points generally fall within the corresponding intervals or adjacent classes, reflecting both shallow-to-moderate inundation in Zhengzhou and connected deep-water inundation in Zhuozhou. FwDET, in contrast, still retains missed or unresolved pixels near some points, reducing point-scale depth readability. These results indicate that P1--P8 provide an independent interval-consistency check for the CFDepth depth classes.
+
+\subsubsection{WSE consistency diagnostics}
+
+Fig.~\ref{fig:wse_gradient_cdf} further compares the WSE-gradient distributions of the reconstructed water-surface elevation fields from the two methods. The WSE-gradient ECDF is computed from the valid WSE-gradient pixels of each method and reflects local surface discontinuity within connected flood-support components. In both study areas, the CFDepth curve shifts clearly toward the upper left relative to FwDET, indicating a higher proportion of pixels in low WSE-gradient intervals. Specifically, the median WSE gradient in Zhengzhou decreases from 30.44 permille for FwDET to 5.98 permille for CFDepth, a reduction of 80.4\%. In Zhuozhou, it decreases from 33.63 permille to 3.23 permille, a reduction of 90.4\%. These results indicate that CFDepth reduces excessive local gradients caused by the propagation of boundary-elevation mismatch into the interior of the change-defined support.
+
+\section{Discussion}
+
+The experiments show that bi-temporal SAR flood extent mapping and DEM-constrained first-order depth estimation can support continuous emergency interpretation of urban flooding. HA-CQI outperforms representative change-detection baselines in both the Zhengzhou and Zhuozhou urban cases. On this basis, CFDepth combines the change-defined flood support extracted by HA-CQI with DEM constraints, enabling the binary flood extent map to further express vertical differences within the identified newly inundated areas. The eight field-photo reference points provide interval references for depth classes and improve the interpretability of the depth results. At the same time, SAR flood extent change detection in complex urban environments is still affected by building shadows, layover, proximity to permanent water bodies, and residual misregistration. CFDepth also depends on how well the DEM represents urban terrain and whether the change-defined flood extent fully expresses newly inundated areas and their low-elevation connections. FABDEM vertical errors, complex urban topography, and stormwater drainage details may all influence local water-surface approximation. Therefore, the field-photo comparison in this study should be interpreted as interval-consistency validation based on visual reference objects, rather than independent accuracy validation from gauges, water-level stations, or in situ depth measurements. The valid depth ratio and WSE-gradient ECDF mainly diagnose valid depth coverage and local water-surface consistency within connected components.
+
+Future work can further improve the practicality of this extent-to-depth framework from three aspects: data quality, model robustness, and validation. Higher-quality UAV/LiDAR DTM, local elevation correction, or information on urban roads, culverts, and bridges can be incorporated to improve the DEM representation of complex urban microtopography and boundary transition zones \citep{trepekli2022uavLidarUrbanFlood}. In addition, post-disaster crowdsourced photos, limited field depth measurements, water-level records, and multi-city multi-event samples can be used for cross-validation and uncertainty analysis \citep{hultquist2020crowdsourcedFloodDepth,teng2017floodInundationUncertainty}. With these extensions, future studies may provide more robust spatial flood information for emergency interpretation across different urban forms, imaging conditions, and flood events while preserving the advantage of rapid mapping.
+
+\section{Conclusion}
+
+This study proposes an extent-to-depth urban flood mapping framework for bi-temporal SAR imagery to address the difficulty of SAR flood extent recognition in complex urban environments and the instability of depth estimation under change-detection flood extent inputs. The framework first performs urban flood extent mapping through HA-CQI, where harmonized alignment improves pre- and post-event feature comparability and change query interaction models flood-related cross-temporal changes. CFDepth then combines the change-defined flood support output by HA-CQI with DEM constraints to generate a first-order depth approximation for rapid emergency interpretation within connected components. Experiments show that HA-CQI outperforms representative change-detection baselines in the Zhengzhou and Zhuozhou urban flood cases, achieving IoU values of 73.38\% and 86.23\%, respectively, while more stably preserving fragmented, narrow, and complex-boundary inundation patterns. The depth diagnostics further show that, under the same newly inundated flood support and DEM constraint, CFDepth provides more complete depth coverage and fewer local WSE discontinuities within connected components than FwDET. The valid depth ratios in Zhengzhou and Zhuozhou increase by 23.18 and 30.46 percentage points, respectively, the median WSE gradients decrease by 80.4\% and 90.4\%, respectively, and the depth classes around eight field-photo reference points are generally consistent with photo-estimated depth intervals. Future work will integrate high-accuracy DTM, field observations, and uncertainty analysis to improve the hydrological interpretability of the framework across different urban flood scenarios.
+
+\section*{Acknowledgements}
+
+This work was supported by the National Key R\&D Program of China (Grant No. 2024YFC3808602). The authors thank Prof. Shuliang Zhang from Nanjing Normal University for his valuable assistance with this research.
+
+\bibliographystyle{elsarticle-harv}
+\bibliography{reference}
+
+\end{document}

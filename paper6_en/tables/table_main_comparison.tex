@@ -1,0 +1,27 @@
+\begin{table*}[htbp]
+  \centering
+  \caption{Quantitative comparison of urban flood extent delineation on the Zhengzhou and Zhuozhou evaluation scenes.}
+  \label{tab:main_comparison}
+  \scriptsize
+  \setlength{\tabcolsep}{4pt}
+  \begin{adjustbox}{width=\textwidth}
+    \begin{tabular}{lcccccccccc}
+      \toprule
+      \multirow{2}{*}{Methodology} & \multicolumn{5}{c}{Zhengzhou} & \multicolumn{5}{c}{Zhuozhou} \\
+      \cmidrule(lr){2-6}\cmidrule(lr){7-11}
+      & IoU$\uparrow$ & F1$\uparrow$ & Precision$\uparrow$ & Recall$\uparrow$ & OA$\uparrow$
+      & IoU$\uparrow$ & F1$\uparrow$ & Precision$\uparrow$ & Recall$\uparrow$ & OA$\uparrow$ \\
+      \midrule
+      FC-Siam-Diff & 62.59 & 76.99 & 80.05 & 74.16 & 99.41 & 70.87 & 82.95 & 86.95 & 79.30 & 97.11 \\
+      HANet & 49.10 & 65.86 & 61.86 & 70.41 & 99.03 & 62.95 & 77.26 & 81.26 & 73.63 & 96.15 \\
+      SNUNet & 50.39 & 67.01 & 71.01 & 63.44 & 99.17 & 70.09 & 82.41 & 86.41 & 78.77 & 97.02 \\
+      BIT & 54.72 & 70.73 & 74.73 & 67.14 & 99.26 & 72.23 & 83.88 & 87.88 & 80.23 & 97.26 \\
+      ChangeFormer & 50.99 & 67.54 & 71.54 & 63.97 & 99.18 & 67.21 & 80.39 & 84.39 & 76.75 & 96.68 \\
+      CGNet & 62.76 & 77.12 & 73.12 & 81.58 & 99.35 & 82.20 & 90.23 & 94.23 & 86.56 & 98.34 \\
+      TTP & 54.44 & 70.50 & 74.50 & 66.91 & 99.25 & 79.59 & 88.63 & 92.63 & 84.96 & 98.07 \\
+      ChangeDINO & 33.65 & 50.35 & 54.17 & 47.03 & 98.76 & 71.72 & 83.53 & 87.53 & 79.88 & 97.20 \\
+      \textbf{Ours (HA-CQI)} & \textbf{73.38} & \textbf{84.65} & \textbf{80.65} & \textbf{89.06} & \textbf{99.57} & \textbf{86.23} & \textbf{92.61} & \textbf{96.61} & \textbf{88.92} & \textbf{98.74} \\
+      \bottomrule
+    \end{tabular}
+  \end{adjustbox}
+\end{table*}
