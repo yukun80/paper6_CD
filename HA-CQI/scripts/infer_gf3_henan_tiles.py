@@ -33,6 +33,15 @@ python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --batch_size 6 \
   --threshold 0.40 \
   --output-dir HA-CQI/outputs/gf3_zhuozhou_ha_cqi_0427_epoch80
+  
+python HA-CQI/scripts/infer_gf3_henan_tiles.py \
+--tiles-root datasets/LT1_Guangxi_CD_infer \
+--checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-vits16-20260427/S1GFloods-HA-CQI-vits16-20260427_efficientnet_b0_best_iou.pth \
+--stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+--gpu_ids 0 \
+--batch_size 6 \
+--threshold 0.40 \
+--output-dir HA-CQI/outputs/lt1_guangxi
 """
 
 
