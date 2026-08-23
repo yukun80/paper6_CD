@@ -28,7 +28,8 @@ Keep these artifact boundaries explicit. Do not mix manuscript prose, patent cla
   - `datasets/train_set/`: packaged training split manifests and stats.
 - `datasets/`: source data and prepared SAR change-detection data.
   - `S1GFloods/`: raw S1GFloods data.
-  - `S1GFloods_CD_DINO/`: main prepared binary SAR change-detection dataset.
+  - `S1GFloods_CD_DINO_BG_75_25/`: active prepared binary SAR change-detection dataset.
+  - `S1GFloods_CD_DINO/`: archived pre-correction dataset; select explicitly only for historical analysis.
   - `S1GFloods_CD_DINO_/`: experiment-specific variant; select explicitly.
   - `GF3_Henan/`, `GF3_Henan_CD_infer/`: Zhengzhou/GF3 source and tiled inference inputs.
   - `GF3_Zhuozhou/`, `GF3_Zhuozhou_CD_infer/`: Zhuozhou/GF3 source and tiled inference inputs.
@@ -52,7 +53,8 @@ Keep these artifact boundaries explicit. Do not mix manuscript prose, patent cla
   - Mask2Former-style binary flood-change decoder;
   - size-aware auxiliary supervision for small waterlogging and large inundation regions.
 - Preserve HA-CQI's own architecture story. Do not back-port ChangeDINO Risk-Aware, HybridRefiner, topo-router, or micro-gate modules unless the user explicitly requests that experiment.
-- Default HA-CQI training behavior uses `tiny_safe_combo` as the best-metric policy and `0.40` as the foreground evaluation threshold.
+- HA-CQI selects `best_primary` by validation Flood IoU while jointly calibrating threshold on the configured grid. `0.40` is only a validation diagnostic threshold.
+- Active code accepts checkpoint v2 only. The 20260427 checkpoints are disk archives and are intentionally unsupported.
 - CFDepth is the depth-estimation method. Change detection provides an upstream flood extent/support-region input; it is not the patent core unless the user changes the invention scope.
 
 ## Build, Train, and Inference Commands
@@ -68,11 +70,10 @@ Useful overrides:
 
 ```bash
 cd HA-CQI
-DATASET_NAME=S1GFloods_CD_DINO \
+DATASET_NAME=S1GFloods_CD_DINO_BG_75_25 \
 DATA_ROOT=../datasets \
 RUN_NAME=S1GFloods-HA-CQI-vits16 \
 BATCH_SIZE=6 \
-BEST_METRIC=tiny_safe_combo \
 EVAL_FG_THRESHOLD=0.40 \
 bash trainval_s1gfloods.sh
 ```
@@ -88,11 +89,9 @@ SOFT_ALIGNMENT=0 RUN_NAME=S1GFloods-HA-CQI-noalign bash trainval_s1gfloods.sh
 ```bash
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint HA-CQI/checkpoints/<resolved_run_name>/<checkpoint>.pth \
-  --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
   --gpu_ids 0 \
   --batch_size 6 \
-  --threshold 0.40 \
   --output-dir HA-CQI/outputs/gf3_henan
 ```
 
@@ -101,11 +100,9 @@ For Zhuozhou, switch `--tiles-root` and `--output-dir`:
 ```bash
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Zhuozhou_CD_infer \
-  --checkpoint HA-CQI/checkpoints/<resolved_run_name>/<checkpoint>.pth \
-  --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
   --gpu_ids 0 \
   --batch_size 6 \
-  --threshold 0.40 \
   --output-dir HA-CQI/outputs/gf3_zhuozhou
 ```
 
@@ -113,11 +110,7 @@ python HA-CQI/scripts/infer_gf3_henan_tiles.py \
 ```bash
 cd HA-CQI
 python run.py \
-  --name <resolved_run_name> \
-  --dataset S1GFloods_CD_DINO \
-  --dataroot ../datasets \
-  --dataset_mode sar \
-  --stats_file ../datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+  --checkpoint checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
   --img_A /path/to/pre_image.tif \
   --img_B /path/to/post_image.tif \
   --output outputs/run_pred.png \
@@ -183,7 +176,7 @@ If `latexmk` is unavailable, use the local LaTeX toolchain available in the envi
 - Prefer runtime arguments such as `--data-root`, `--tiles-root`, `--checkpoint`, `--stats_file`, and `--output-dir` over hard-coded absolute paths.
 - Keep script names descriptive and task-specific.
 - Use structured readers for CSV, JSON, raster, and LaTeX/BibTeX content where practical.
-- Preserve checkpoint compatibility: inspect `meta.model_config` and actual state-dict keys before changing inference reconstruction logic.
+- Preserve the checkpoint v2 contract: require `meta.format_version == 2`, `network`, `meta.model_config`, and an explicit or selected inference threshold.
 
 ## Validation Guidelines
 - For modified Python files, run `python -m py_compile` on the touched files.

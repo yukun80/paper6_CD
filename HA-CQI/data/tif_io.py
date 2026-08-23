@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 import rasterio
-import torch
+
+if TYPE_CHECKING:
+    import torch
 
 
 TIFF_SUFFIXES = {".tif", ".tiff"}
@@ -54,6 +57,8 @@ def read_sar_tif(
     replicate_channels: int = 3,
 ) -> torch.Tensor:
     """读取单波段 SAR tif，并复制为模型所需的 3 通道张量。"""
+    import torch
+
     with rasterio.open(path) as ds:
         arr = ds.read(1).astype(np.float32, copy=False)
         valid_mask = build_valid_mask(arr, ds.nodata)
@@ -63,8 +68,20 @@ def read_sar_tif(
     return torch.from_numpy(stacked.copy())
 
 
-def read_binary_label_tif(path: str | Path) -> np.ndarray:
-    """读取 tif 标签并转成 0/1 二值。"""
+def read_binary_label_tif_with_valid_mask(
+    path: str | Path,
+) -> tuple[np.ndarray, np.ndarray]:
+    """读取 0/1 标签并返回有效掩膜；兼容历史 nodata=3。"""
     with rasterio.open(path) as ds:
         arr = ds.read(1)
-    return (arr > 0).astype(np.uint8)
+        valid = build_valid_mask(arr, ds.nodata)
+    # 历史 GF-3 标签使用 3 表示无效区，但部分文件未写入 nodata metadata。
+    valid &= arr != 3
+    label = ((arr > 0) & valid).astype(np.uint8)
+    return label, valid
+
+
+def read_binary_label_tif(path: str | Path) -> np.ndarray:
+    """读取 tif 标签并安全转成 0/1；无效像素返回背景值 0。"""
+    label, _ = read_binary_label_tif_with_valid_mask(path)
+    return label

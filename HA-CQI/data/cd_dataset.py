@@ -1,4 +1,5 @@
 from pathlib import Path
+import random
 
 import numpy as np
 import torch
@@ -11,6 +12,14 @@ from .tif_io import is_tiff_path, read_binary_label_tif, read_sar_tif
 
 
 VALID_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
+
+
+def seed_worker(worker_id: int) -> None:
+    """把 PyTorch worker seed 同步给 Python 与 NumPy 增强随机源。"""
+    del worker_id
+    worker_seed = torch.initial_seed() % (2**32)
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
 
 
 def _scan_split_dir(split_dir: Path) -> dict[str, Path]:
@@ -71,8 +80,10 @@ class Load_Dataset(Dataset):
     def __init__(self, opt):
         super().__init__()
         self.opt = opt
+        # train/val loader 共用同一 argparse Namespace；冻结 phase，避免后续切换污染验证增强。
+        self.phase = str(opt.phase)
 
-        split_root = Path(opt.dataroot) / opt.dataset / opt.phase
+        split_root = Path(opt.dataroot) / opt.dataset / self.phase
         dir1 = split_root / "A"
         dir2 = split_root / "B"
         dir_label = _resolve_label_dir(split_root)
@@ -101,7 +112,7 @@ class Load_Dataset(Dataset):
         img2 = _load_image(self.t2_map[fname])
         cd_label = _load_label(self.label_map[fname])
 
-        if self.opt.phase == "train":
+        if self.phase == "train":
             data = self.transform({"img1": img1, "img2": img2, "cd_label": cd_label})
             img1, img2, cd_label = data["img1"], data["img2"], data["cd_label"]
 
@@ -115,6 +126,9 @@ class Load_Dataset(Dataset):
 class DataLoader(torch.utils.data.Dataset):
     def __init__(self, opt):
         self.dataset = Load_Dataset(opt)
+        self.generator = torch.Generator()
+        phase_offset = 0 if opt.phase == "train" else 100_000
+        self.generator.manual_seed(int(getattr(opt, "seed", 1)) + phase_offset)
         self.dataloader = torch.utils.data.DataLoader(
             self.dataset,
             batch_size=opt.batch_size,
@@ -122,6 +136,8 @@ class DataLoader(torch.utils.data.Dataset):
             pin_memory=True,
             drop_last=opt.phase == "train",
             num_workers=int(opt.num_workers),
+            worker_init_fn=seed_worker,
+            generator=self.generator,
         )
 
     def load_data(self):
@@ -129,3 +145,9 @@ class DataLoader(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.dataset)
+
+    def get_generator_state(self) -> torch.Tensor:
+        return self.generator.get_state()
+
+    def set_generator_state(self, state: torch.Tensor) -> None:
+        self.generator.set_state(state)

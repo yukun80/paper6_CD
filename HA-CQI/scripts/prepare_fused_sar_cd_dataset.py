@@ -5,10 +5,12 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import random
 import shutil
+import sys
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass
@@ -19,19 +21,32 @@ import rasterio
 from PIL import Image
 from rasterio.windows import Window
 
+CURRENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = CURRENT_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from data.tif_io import build_valid_mask, stretch_sar_array  # noqa: E402
+from utils.provenance import sha256_file  # noqa: E402
+
 """
 python HA-CQI/scripts/prepare_fused_sar_cd_dataset.py \
   --s1gfloods-root datasets/S1GFloods \
   --varfloods-root datasets/VarFloods \
-  --out-root datasets/S1GFloods_CD_DINO \
+  --out-root datasets/S1GFloods_CD_DINO_BG_75_25 \
   --tile-size 256 \
   --stride 128 \
-  --train-ratio 0.8 \
-  --seed 42 \
-  --overwrite
+  --train-ratio 0.75 \
+  --seed 42
 """
 
 VALID_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
+PROTECTED_REPORT_FILES = (
+    "split_report.json",
+    "manifest_train.csv",
+    "manifest_val.csv",
+    "channel_stats_s1gfloods_train.json",
+)
 
 
 @dataclass(frozen=True)
@@ -49,20 +64,43 @@ class SampleRecord:
     width: int | None = None
     height: int | None = None
     valid_ratio: float | None = None
+    valid_pixels: int | None = None
+    foreground_pixels: int | None = None
 
     @property
     def is_tiled(self) -> bool:
         return self.row_off is not None and self.col_off is not None
+
+    @property
+    def is_background(self) -> bool:
+        return int(self.foreground_pixels or 0) == 0
+
+    @property
+    def foreground_ratio(self) -> float:
+        valid_pixels = int(self.valid_pixels or 0)
+        if valid_pixels <= 0:
+            return 0.0
+        return float(self.foreground_pixels or 0) / valid_pixels
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser("Prepare fused S1GFloods + VarFloods CD dataset")
     parser.add_argument("--s1gfloods-root", type=Path, default=Path("datasets/S1GFloods"))
     parser.add_argument("--varfloods-root", type=Path, default=Path("datasets/VarFloods"))
-    parser.add_argument("--out-root", type=Path, default=Path("datasets/S1GFloods_CD_DINO"))
+    parser.add_argument(
+        "--out-root",
+        type=Path,
+        default=Path("datasets/S1GFloods_CD_DINO_BG_75_25"),
+    )
+    parser.add_argument(
+        "--protected-dataset-root",
+        type=Path,
+        default=Path("datasets/S1GFloods_CD_DINO"),
+        help="构建前后校验关键报告 SHA256，保证旧数据集不被改动。",
+    )
     parser.add_argument("--tile-size", type=int, default=256)
     parser.add_argument("--stride", type=int, default=128)
-    parser.add_argument("--train-ratio", type=float, default=0.9)
+    parser.add_argument("--train-ratio", type=float, default=0.75)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--stretch-low", type=float, default=2.0)
     parser.add_argument("--stretch-high", type=float, default=98.0)
@@ -104,6 +142,19 @@ def scan_files(folder: Path) -> dict[str, Path]:
     return {p.name: p for p in files}
 
 
+def protected_dataset_hashes(root: Path) -> dict[str, str]:
+    """记录旧数据集关键控制文件，不读取或哈希大体量影像。"""
+    if not root.is_dir():
+        raise FileNotFoundError(f"Protected dataset root not found: {root}")
+    result: dict[str, str] = {}
+    for filename in PROTECTED_REPORT_FILES:
+        path = root / filename
+        if not path.is_file():
+            raise FileNotFoundError(f"Protected dataset control file missing: {path}")
+        result[filename] = sha256_file(path)
+    return result
+
+
 def build_s1gfloods_records(src_root: Path, strict: bool) -> list[SampleRecord]:
     """读取扁平 S1GFloods 目录，并给样本增加统一前缀避免与 VarFloods 重名。"""
     a_map = scan_files(src_root / "A")
@@ -122,6 +173,9 @@ def build_s1gfloods_records(src_root: Path, strict: bool) -> list[SampleRecord]:
             raise ValueError(f"S1GFloods strict mode expects PNG only, got: {name}")
         stem = Path(name).stem
         sample_id = f"s1gfloods_{stem}"
+        label_arr = np.asarray(Image.open(label_map[name]).convert("L"), dtype=np.uint8)
+        valid_pixels = int(label_arr.size)
+        foreground_pixels = int(np.count_nonzero(label_arr > 0))
         records.append(
             SampleRecord(
                 sample_id=sample_id,
@@ -130,6 +184,9 @@ def build_s1gfloods_records(src_root: Path, strict: bool) -> list[SampleRecord]:
                 a_path=a_map[name],
                 b_path=b_map[name],
                 label_path=label_map[name],
+                valid_ratio=1.0,
+                valid_pixels=valid_pixels,
+                foreground_pixels=foreground_pixels,
             )
         )
     return records
@@ -154,49 +211,18 @@ def iter_windows(height: int, width: int, tile_size: int, stride: int) -> list[W
     return windows
 
 
-def build_valid_mask(
-    arr_pre: np.ndarray,
-    nodata_pre: float | int | None,
-    arr_post: np.ndarray,
-    nodata_post: float | int | None,
-) -> np.ndarray:
-    valid = np.isfinite(arr_pre) & np.isfinite(arr_post)
-    if nodata_pre is not None:
-        valid &= np.not_equal(arr_pre, nodata_pre)
-    if nodata_post is not None:
-        valid &= np.not_equal(arr_post, nodata_post)
-    return valid
-
-
 def stretch_to_uint8(arr: np.ndarray, valid_mask: np.ndarray, low: float, high: float) -> np.ndarray:
     """按有效像素百分位做稳定拉伸，保持与现有 SAR 推理脚本一致。"""
-    out = np.zeros(arr.shape, dtype=np.uint8)
-    if not np.any(valid_mask):
-        return out
-
-    values = arr[valid_mask].astype(np.float32, copy=False)
-    lo = float(np.percentile(values, low))
-    hi = float(np.percentile(values, high))
-    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
-        lo = float(values.min())
-        hi = float(values.max())
-    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
-        return out
-
-    scaled = np.zeros(arr.shape, dtype=np.float32)
-    scaled[valid_mask] = np.clip((arr[valid_mask].astype(np.float32, copy=False) - lo) / (hi - lo), 0.0, 1.0)
-    out[valid_mask] = np.rint(scaled[valid_mask] * 255.0).astype(np.uint8)
-    return out
+    stretched = stretch_sar_array(arr, valid_mask, low=low, high=high)
+    return np.rint(stretched * 255.0).astype(np.uint8)
 
 
-def label_to_uint8(arr: np.ndarray) -> np.ndarray:
+def label_to_uint8(arr: np.ndarray, valid_mask: np.ndarray | None = None) -> np.ndarray:
     """统一把标签转成 0/255，便于训练阶段沿用现有二值读取逻辑。"""
-    return np.where(arr > 0, 255, 0).astype(np.uint8)
-
-
-def has_foreground_pixels(arr: np.ndarray) -> bool:
-    """判断切片标签中是否存在前景像素，用于剔除全背景样本。"""
-    return bool(np.any(arr > 0))
+    foreground = arr > 0
+    if valid_mask is not None:
+        foreground &= valid_mask
+    return np.where(foreground, 255, 0).astype(np.uint8)
 
 
 def find_single_tif(folder: Path) -> Path:
@@ -245,25 +271,30 @@ def build_varfloods_records(args: argparse.Namespace) -> tuple[list[SampleRecord
 
             windows = iter_windows(ds_a.height, ds_a.width, args.tile_size, args.stride)
             kept = 0
+            kept_foreground = 0
+            kept_background = 0
             skipped_invalid = 0
-            skipped_background_only = 0
             for window in windows:
                 top = int(window.row_off)
                 left = int(window.col_off)
                 arr_a = ds_a.read(1, window=window).astype(np.float32, copy=False)
                 arr_b = ds_b.read(1, window=window).astype(np.float32, copy=False)
-                valid_mask = build_valid_mask(arr_a, ds_a.nodata, arr_b, ds_b.nodata)
+                valid_mask = build_valid_mask(arr_a, ds_a.nodata)
+                valid_mask &= build_valid_mask(arr_b, ds_b.nodata)
                 valid_ratio = float(valid_mask.mean())
                 if valid_ratio <= 0.0 or valid_ratio < args.min_valid_ratio:
                     skipped_invalid += 1
                     continue
 
                 arr_l = ds_l.read(1, window=window)
-                if not has_foreground_pixels(arr_l):
-                    skipped_background_only += 1
-                    continue
+                foreground_pixels = int(np.count_nonzero((arr_l > 0) & valid_mask))
+                valid_pixels = int(np.count_nonzero(valid_mask))
 
                 kept += 1
+                if foreground_pixels > 0:
+                    kept_foreground += 1
+                else:
+                    kept_background += 1
                 sample_id = f"varfloods_{region_dir.name.lower()}_pro_r{top:05d}_c{left:05d}"
                 records.append(
                     SampleRecord(
@@ -278,6 +309,8 @@ def build_varfloods_records(args: argparse.Namespace) -> tuple[list[SampleRecord
                         width=int(window.width),
                         height=int(window.height),
                         valid_ratio=valid_ratio,
+                        valid_pixels=valid_pixels,
+                        foreground_pixels=foreground_pixels,
                     )
                 )
 
@@ -286,9 +319,11 @@ def build_varfloods_records(args: argparse.Namespace) -> tuple[list[SampleRecord
                     "region": region_dir.name,
                     "candidate_tiles": len(windows),
                     "kept_tiles": kept,
-                    "skipped_tiles": skipped_invalid + skipped_background_only,
+                    "kept_foreground_tiles": kept_foreground,
+                    "kept_background_only_tiles": kept_background,
+                    "skipped_tiles": skipped_invalid,
                     "skipped_invalid_tiles": skipped_invalid,
-                    "skipped_background_only_tiles": skipped_background_only,
+                    "skipped_background_only_tiles": 0,
                     "a_meta": region_transform_summary(ds_a),
                     "b_meta": region_transform_summary(ds_b),
                     "label_meta": region_transform_summary(ds_l),
@@ -311,6 +346,77 @@ def assign_splits(records: list[SampleRecord], train_ratio: float, seed: int) ->
     if min(n_train, n_val) <= 0:
         raise ValueError("Split produces an empty subset; adjust --train-ratio")
     return {"train": shuffled[:n_train], "val": shuffled[n_train:]}
+
+
+def compute_cross_split_overlap(splits: dict[str, list[SampleRecord]]) -> dict[str, object]:
+    """报告重叠切片跨 split 泄漏；仅诊断，不改变用户锁定的随机划分。"""
+    train_records = [record for record in splits["train"] if record.is_tiled]
+    val_records = [record for record in splits["val"] if record.is_tiled]
+    overlap_by_region: Counter[str] = Counter()
+    train_with_overlap: set[str] = set()
+    val_with_overlap: set[str] = set()
+    max_window_iou = 0.0
+
+    for train_record in train_records:
+        for val_record in val_records:
+            if train_record.region != val_record.region:
+                continue
+            row_overlap = max(
+                0,
+                min(
+                    int(train_record.row_off) + int(train_record.height),
+                    int(val_record.row_off) + int(val_record.height),
+                )
+                - max(int(train_record.row_off), int(val_record.row_off)),
+            )
+            col_overlap = max(
+                0,
+                min(
+                    int(train_record.col_off) + int(train_record.width),
+                    int(val_record.col_off) + int(val_record.width),
+                )
+                - max(int(train_record.col_off), int(val_record.col_off)),
+            )
+            intersection = row_overlap * col_overlap
+            if intersection <= 0:
+                continue
+            train_area = int(train_record.height) * int(train_record.width)
+            val_area = int(val_record.height) * int(val_record.width)
+            union = train_area + val_area - intersection
+            max_window_iou = max(max_window_iou, intersection / max(union, 1))
+            overlap_by_region[train_record.region] += 1
+            train_with_overlap.add(train_record.sample_id)
+            val_with_overlap.add(val_record.sample_id)
+
+    return {
+        "policy": "diagnostic_only_split_unchanged",
+        "overlap_pairs": int(sum(overlap_by_region.values())),
+        "overlap_pairs_by_region": dict(overlap_by_region),
+        "train_var_tiles_with_overlap": len(train_with_overlap),
+        "val_var_tiles_with_overlap": len(val_with_overlap),
+        "max_window_iou": float(max_window_iou),
+    }
+
+
+def compute_dataset_fingerprint(splits: dict[str, list[SampleRecord]]) -> str:
+    """对 split 成员及标签统计生成与绝对路径无关的稳定指纹。"""
+    digest = hashlib.sha256()
+    for split in ("train", "val"):
+        for record in sorted(splits[split], key=lambda item: item.sample_id):
+            payload = (
+                split,
+                record.sample_id,
+                record.source,
+                record.region,
+                record.row_off,
+                record.col_off,
+                record.height,
+                record.width,
+                record.valid_pixels,
+                record.foreground_pixels,
+            )
+            digest.update((json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8"))
+    return digest.hexdigest()
 
 
 def clean_output_root(out_root: Path, overwrite: bool, dry_run: bool) -> None:
@@ -414,6 +520,10 @@ def manifest_row(record: SampleRecord, split: str, out_root: Path, write_tif: bo
         "height": "" if record.height is None else record.height,
         "width": "" if record.width is None else record.width,
         "valid_ratio": "" if record.valid_ratio is None else f"{record.valid_ratio:.6f}",
+        "valid_pixels": "" if record.valid_pixels is None else record.valid_pixels,
+        "foreground_pixels": "" if record.foreground_pixels is None else record.foreground_pixels,
+        "foreground_ratio": f"{record.foreground_ratio:.8f}",
+        "is_background": int(record.is_background),
     }
     return row
 
@@ -439,10 +549,11 @@ def write_var_records(records: list[SampleRecord], out_root: Path, split: str, a
                 arr_b = ds_b.read(1, window=window).astype(np.float32, copy=False)
                 arr_l = ds_l.read(1, window=window)
 
-                valid_mask = build_valid_mask(arr_a, ds_a.nodata, arr_b, ds_b.nodata)
+                valid_mask = build_valid_mask(arr_a, ds_a.nodata)
+                valid_mask &= build_valid_mask(arr_b, ds_b.nodata)
                 a_png = stretch_to_uint8(arr_a, valid_mask, args.stretch_low, args.stretch_high)
                 b_png = stretch_to_uint8(arr_b, valid_mask, args.stretch_low, args.stretch_high)
-                label_png = label_to_uint8(arr_l)
+                label_png = label_to_uint8(arr_l, valid_mask=valid_mask)
 
                 write_png_rgb(a_png, out_root / split / "A" / f"{record.sample_id}.png")
                 write_png_rgb(b_png, out_root / split / "B" / f"{record.sample_id}.png")
@@ -513,6 +624,10 @@ def write_manifest(path: Path, rows: list[dict[str, object]]) -> None:
         "height",
         "width",
         "valid_ratio",
+        "valid_pixels",
+        "foreground_pixels",
+        "foreground_ratio",
+        "is_background",
     ]
     with path.open("w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -525,12 +640,21 @@ def write_report(
     splits: dict[str, list[SampleRecord]],
     split_rows: dict[str, list[dict[str, object]]],
     region_reports: list[dict[str, object]],
+    protected_hashes: dict[str, str],
 ) -> None:
+    dataset_fingerprint = compute_dataset_fingerprint(splits)
     payload = {
+        "format_version": 2,
+        "dataset_fingerprint": dataset_fingerprint,
         "source_roots": {
             "s1gfloods_root": str(args.s1gfloods_root),
             "varfloods_root": str(args.varfloods_root),
             "out_root": str(args.out_root),
+        },
+        "protected_existing_dataset": {
+            "root": str(args.protected_dataset_root),
+            "sha256_before_after_equal": True,
+            "files": protected_hashes,
         },
         "params": {
             "tile_size": args.tile_size,
@@ -548,6 +672,25 @@ def write_report(
         "counts_by_source": {
             split: dict(Counter(record.source for record in items)) for split, items in splits.items()
         },
+        "counts_by_label_presence": {
+            split: {
+                "foreground": int(sum(not record.is_background for record in items)),
+                "background": int(sum(record.is_background for record in items)),
+            }
+            for split, items in splits.items()
+        },
+        "background_counts_by_source": {
+            split: dict(Counter(record.source for record in items if record.is_background))
+            for split, items in splits.items()
+        },
+        "counts_by_region": {
+            split: dict(Counter(record.region for record in items)) for split, items in splits.items()
+        },
+        "background_counts_by_region": {
+            split: dict(Counter(record.region for record in items if record.is_background))
+            for split, items in splits.items()
+        },
+        "cross_split_overlap": compute_cross_split_overlap(splits),
         "examples": {
             split: [record.sample_id for record in items[:5]] for split, items in splits.items()
         },
@@ -569,6 +712,7 @@ def main() -> None:
     args = parse_args()
     ensure_args(args)
 
+    protected_before = protected_dataset_hashes(args.protected_dataset_root)
     s1_records = build_s1gfloods_records(args.s1gfloods_root, args.strict)
     var_records, region_reports = build_varfloods_records(args)
     all_records = s1_records + var_records
@@ -581,7 +725,12 @@ def main() -> None:
     for split, records in splits.items():
         split_rows[split] = write_split_outputs(args.out_root, split, records, args)
 
-    write_report(args, splits, split_rows, region_reports)
+    protected_after = protected_dataset_hashes(args.protected_dataset_root)
+    if protected_after != protected_before:
+        raise RuntimeError(
+            f"Protected dataset changed during build: {args.protected_dataset_root}"
+        )
+    write_report(args, splits, split_rows, region_reports, protected_before)
     counts = {split: len(items) for split, items in splits.items()}
     print(
         "[DONE] total={total} train={train} val={val} s1gfloods={s1} varfloods={var}".format(

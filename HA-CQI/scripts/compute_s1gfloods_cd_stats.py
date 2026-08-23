@@ -1,32 +1,47 @@
 #!/usr/bin/env python3
-"""统计 S1GFloods_CD_DINO 训练集输入图像的三通道 mean/std。"""
+"""统计 HA-CQI SAR 变化检测数据集的三通道 mean/std。"""
 
 from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 from PIL import Image
 import rasterio
 
+CURRENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = CURRENT_DIR.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from data.tif_io import build_valid_mask, stretch_sar_array  # noqa: E402
+from utils.provenance import sha256_file  # noqa: E402
+
 """
 python HA-CQI/scripts/compute_s1gfloods_cd_stats.py \
-  --data-root datasets/S1GFloods_CD_DINO \
+  --data-root datasets/S1GFloods_CD_DINO_BG_75_25 \
   --split train \
-  --output datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json
+  --output datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json
 """
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser("Compute channel stats for S1GFloods_CD_DINO")
-    parser.add_argument("--data-root", type=Path, default=Path("datasets/S1GFloods_CD_DINO"))
+    parser.add_argument(
+        "--data-root",
+        type=Path,
+        default=Path("datasets/S1GFloods_CD_DINO_BG_75_25"),
+    )
     parser.add_argument("--split", type=str, default="train", choices=["train", "val", "test"])
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path("datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json"),
+        default=Path(
+            "datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json"
+        ),
     )
     parser.add_argument("--max-samples", type=int, default=-1, help="仅处理前 N 个样本；-1 表示全部。")
     return parser.parse_args()
@@ -35,38 +50,6 @@ def parse_args() -> argparse.Namespace:
 def load_png_rgb(path: Path) -> np.ndarray:
     arr = np.array(Image.open(path).convert("RGB"), dtype=np.float64) / 255.0
     return arr.reshape(-1, 3)
-
-
-def build_valid_mask(arr: np.ndarray, nodata: float | int | None) -> np.ndarray:
-    """与训练阶段 tif 读取保持一致，只基于有效像素做统计。"""
-    valid = np.isfinite(arr)
-    if nodata is not None:
-        valid &= arr != nodata
-    return valid
-
-
-def stretch_sar_array(
-    arr: np.ndarray,
-    valid_mask: np.ndarray,
-    low: float = 2.0,
-    high: float = 98.0,
-) -> np.ndarray:
-    out = np.zeros(arr.shape, dtype=np.float32)
-    if not np.any(valid_mask):
-        return out
-
-    values = arr[valid_mask].astype(np.float32, copy=False)
-    lo = float(np.percentile(values, low))
-    hi = float(np.percentile(values, high))
-    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
-        lo = float(values.min())
-        hi = float(values.max())
-    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
-        return out
-
-    scaled = (arr[valid_mask].astype(np.float32, copy=False) - lo) / (hi - lo)
-    out[valid_mask] = np.clip(scaled, 0.0, 1.0)
-    return out
 
 
 def load_tif_rgb(path: Path) -> np.ndarray:
@@ -83,6 +66,15 @@ def load_image_rgb(path: Path) -> np.ndarray:
     if path.suffix.lower() in {".tif", ".tiff"}:
         return load_tif_rgb(path)
     return load_png_rgb(path)
+
+
+def load_dataset_fingerprint(data_root: Path) -> str | None:
+    report_path = data_root / "split_report.json"
+    if not report_path.is_file():
+        return None
+    payload = json.loads(report_path.read_text(encoding="utf-8"))
+    value = payload.get("dataset_fingerprint")
+    return str(value) if value else None
 
 
 def main() -> None:
@@ -119,8 +111,15 @@ def main() -> None:
     std = np.maximum(std, 1e-6)
 
     payload = {
+        "format_version": 2,
         "data_root": str(args.data_root),
         "split": args.split,
+        "dataset_fingerprint": load_dataset_fingerprint(args.data_root),
+        "manifest_sha256": (
+            sha256_file(args.data_root / f"manifest_{args.split}.csv")
+            if (args.data_root / f"manifest_{args.split}.csv").is_file()
+            else None
+        ),
         "num_images": len(paths),
         "pixel_count": int(pixel_count),
         "recommended_config_fields": {

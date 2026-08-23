@@ -1,5 +1,7 @@
 import os
+import sys
 from argparse import ArgumentParser
+from pathlib import Path
 
 import torch
 from PIL import Image
@@ -7,6 +9,14 @@ from torchvision import transforms
 
 from data.tif_io import is_tiff_path, read_sar_tif
 from model.engine import build_hacqi_engine
+from model.checkpointing import (
+    apply_checkpoint_model_config,
+    checkpoint_data_config,
+    checkpoint_model_config,
+    extract_network_state,
+    load_checkpoint_payload,
+    resolve_inference_threshold,
+)
 from option import (
     Options,
     _resolve_existing_project_path,
@@ -14,6 +24,7 @@ from option import (
     _resolve_repo_relative_path,
     _validate_backbone_weight_path,
     resolve_norm_stats,
+    validate_stats_provenance,
 )
 from model.modules.dino_meta import resolve_dino_arch, resolve_extract_ids
 
@@ -38,9 +49,31 @@ def build_parser() -> ArgumentParser:
     return parser
 
 
-def parse_and_prepare() -> object:
+def parse_and_prepare() -> tuple[object, dict]:
     parser = build_parser()
     opt = parser.parse_args()
+    if not opt.checkpoint:
+        parser.error("--checkpoint is required for pair inference")
+    explicit_arguments = {
+        token[2:].split("=", 1)[0].replace("-", "_")
+        for token in sys.argv[1:]
+        if token.startswith("--")
+    }
+    opt.checkpoint = _resolve_existing_project_path(opt.checkpoint)
+    payload = load_checkpoint_payload(opt.checkpoint, map_location="cpu")
+    checkpoint_config = checkpoint_model_config(payload)
+    opt = apply_checkpoint_model_config(opt, checkpoint_config, explicit_arguments)
+    data_config = checkpoint_data_config(payload) or {}
+    if "stats_file" not in explicit_arguments and data_config.get("stats_file"):
+        opt.stats_file = data_config["stats_file"]
+    if "dataset" not in explicit_arguments and data_config.get("dataset"):
+        opt.dataset = data_config["dataset"]
+    if "dataroot" not in explicit_arguments and data_config.get("dataroot"):
+        opt.dataroot = data_config["dataroot"]
+    opt.threshold, opt.threshold_source = resolve_inference_threshold(
+        payload,
+        explicit_threshold=opt.threshold,
+    )
 
     if opt.dataset_mode == "auto":
         if str(opt.dataset).startswith("S1GFloods"):
@@ -58,7 +91,6 @@ def parse_and_prepare() -> object:
         torch.cuda.set_device(opt.gpu_ids[0])
 
     opt.phase = "test"
-    opt.load_pretrain = True
     opt.batch_size = 1
     opt.num_workers = 0
     opt.dataroot = _resolve_existing_project_path(opt.dataroot)
@@ -73,13 +105,14 @@ def parse_and_prepare() -> object:
     opt.dino_arch = resolve_dino_arch(opt.dino_arch, opt.dino_weight)
     opt.extract_ids = resolve_extract_ids(opt.dino_arch, opt.extract_ids)
     opt.mean, opt.std = resolve_norm_stats(opt)
+    validate_stats_provenance(opt)
 
     print("------------ Options -------------")
     for k, v in sorted(vars(opt).items()):
         print(f"{k}: {v}")
     print("-------------- End ----------------")
 
-    return opt
+    return opt, payload
 
 
 def load_image(path, to_tensor, normalize):
@@ -94,7 +127,7 @@ def load_image(path, to_tensor, normalize):
 
 
 def main():
-    opt = parse_and_prepare()
+    opt, payload = parse_and_prepare()
 
     os.makedirs(os.path.dirname(opt.output) or ".", exist_ok=True)
     to_tensor = transforms.ToTensor()
@@ -104,6 +137,7 @@ def main():
     _, img_B = load_image(opt.img_B, to_tensor, normalize)
 
     model = build_hacqi_engine(opt)
+    model.model.load_state_dict(extract_network_state(payload), strict=True)
     model.eval()
     img_A = img_A.to(model.device)
     img_B = img_B.to(model.device)
@@ -111,12 +145,15 @@ def main():
     with torch.no_grad():
         pred = model.inference(img_A, img_B)
         pred_prob = torch.softmax(pred, dim=1)[:, 1]
-        pred = (pred_prob >= float(getattr(opt, "eval_fg_threshold", 0.5))).long()
+        pred = (pred_prob >= float(opt.threshold)).long()
         pred_img = Image.fromarray(
             (pred[0].cpu().detach().numpy() * 255).astype("uint8")
         )
         pred_img.save(opt.output)
-        print(f"Saved prediction to {opt.output}")
+        print(
+            f"Saved prediction to {opt.output} "
+            f"(threshold={opt.threshold:.2f}, source={opt.threshold_source})"
+        )
 
 
 if __name__ == "__main__":

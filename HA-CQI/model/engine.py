@@ -1,6 +1,8 @@
 from datetime import datetime
 import os
 from contextlib import nullcontext
+from pathlib import Path
+from typing import Any
 
 import torch
 from torch import nn
@@ -8,13 +10,25 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from .architectures import HACQIModel
+from .checkpointing import (
+    CHECKPOINT_FORMAT_VERSION,
+    atomic_torch_save,
+    cpu_state_dict,
+    load_checkpoint_payload,
+    load_network_state,
+)
 from .losses.dice import DICELoss
 from .losses.focal import FocalLoss
+from utils.provenance import portable_repo_path
 
 
-def build_hacqi_model(backbone_name="efficientnet_b0", fpn_channels=128, n_layers=None, **kwargs):
+PROJECT_DIR = Path(__file__).resolve().parents[1]
+REPO_ROOT = PROJECT_DIR.parent
+
+
+def build_hacqi_model(backbone_name="efficientnet_b0", fpn_channels=128, **kwargs):
     """构建 HA-CQI 网络主体。"""
-    return HACQIModel(backbone=backbone_name, fpn_channels=fpn_channels, n_layers=n_layers, **kwargs)
+    return HACQIModel(backbone=backbone_name, fpn_channels=fpn_channels, **kwargs)
 
 
 def resolve_unique_run_name(checkpoint_dir: str, base_name: str) -> str:
@@ -44,14 +58,20 @@ class HACQIEngine(nn.Module):
         use_cuda = torch.cuda.is_available() and len(getattr(opt, "gpu_ids", [])) > 0
         self.device = torch.device("cuda:%s" % opt.gpu_ids[0] if use_cuda else "cpu")
         self.opt = opt
-        self.base_lr = opt.lr
 
         resolved_name = opt.name
-        if getattr(opt, "phase", "train") == "train":
+        resume_path = str(getattr(opt, "resume", "") or "")
+        if getattr(opt, "phase", "train") == "train" and resume_path:
+            self.save_dir = str(Path(resume_path).resolve().parent)
+            resolved_name = Path(self.save_dir).name
+        elif getattr(opt, "phase", "train") == "train":
             resolved_name = resolve_unique_run_name(opt.checkpoint_dir, opt.name)
+            self.save_dir = os.path.join(opt.checkpoint_dir, resolved_name)
+        else:
+            self.save_dir = os.path.join(opt.checkpoint_dir, resolved_name)
         self.opt.name = resolved_name
-        self.save_dir = os.path.join(opt.checkpoint_dir, resolved_name)
-        os.makedirs(self.save_dir, exist_ok=True)
+        if getattr(opt, "phase", "train") == "train":
+            os.makedirs(self.save_dir, exist_ok=True)
         print(f"save_dir resolved to: {self.save_dir}")
 
         self.model = build_hacqi_model(
@@ -61,7 +81,6 @@ class HACQIEngine(nn.Module):
             deform_groups=opt.deform_groups,
             gamma_mode=opt.gamma_mode,
             beta_mode=opt.beta_mode,
-            n_layers=getattr(opt, "n_layers", None),
             disable_soft_alignment=bool(getattr(opt, "disable_soft_alignment", False)),
             align_window=opt.align_window,
             align_points=opt.align_points,
@@ -78,21 +97,27 @@ class HACQIEngine(nn.Module):
             dino_arch=opt.dino_arch,
             extract_ids=opt.extract_ids,
             dino_weight=opt.dino_weight,
+            input_mean=[float(value) for value in opt.mean],
+            input_std=[float(value) for value in opt.std],
+            dino_input_norm=str(getattr(opt, "dino_input_norm", "shared")),
             device=self.device,
         )
         self.aux_base_weights = [
             weight / sum(self.AUX_BASE_WEIGHTS) for weight in self.AUX_BASE_WEIGHTS
         ]
-        self.focal = FocalLoss(alpha=opt.alpha, gamma=opt.gamma)
+        self.focal = FocalLoss(
+            class_weights=opt.focal_class_weights,
+            gamma=opt.gamma,
+        )
         self.dice = DICELoss()
         self.last_loss_stats = {}
         self.optimizer = self._build_optimizer(opt)
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
             self.optimizer, opt.num_epochs, eta_min=1e-7
         )
-        self.schedular = self.scheduler
-        if opt.load_pretrain:
-            self.load_ckpt(self.model, self.optimizer, opt.name, opt.backbone)
+        if getattr(opt, "init_checkpoint", ""):
+            load_network_state(self.model, opt.init_checkpoint, strict=True, map_location="cpu")
+            print(f"initialized network from: {opt.init_checkpoint}")
         self.model.to(self.device)
         print("---------- HA-CQI network initialized -------------")
 
@@ -312,123 +337,206 @@ class HACQIEngine(nn.Module):
         with self._amp_autocast_context():
             return self.model.predict_logits(x1, x2)
 
-    def load_ckpt(self, network, optimizer, name, backbone):
-        save_filename = "%s_%s_best.pth" % (name, backbone)
-        save_path = os.path.join(self.save_dir, save_filename)
-        if not os.path.isfile(save_path):
-            print("%s not exists yet!" % save_path)
-            raise FileNotFoundError(f"{save_filename} must exist")
-
-        checkpoint = torch.load(save_path, map_location=self.device, weights_only=True)
-        state_dict = checkpoint["network"]
-        current_state = network.state_dict()
-        filtered_state = {}
-        skipped = []
-        for key, value in state_dict.items():
-            if key not in current_state:
-                continue
-            if current_state[key].shape != value.shape:
-                skipped.append((key, tuple(value.shape), tuple(current_state[key].shape)))
-                continue
-            filtered_state[key] = value
-        network.load_state_dict(filtered_state, strict=False)
-        if skipped:
-            print(
-                "skip incompatible pretrain keys:",
-                [f"{key}:{src}->{dst}" for key, src, dst in skipped[:5]],
-            )
-        print("load HA-CQI checkpoint")
-
-    def _build_checkpoint_meta(self):
-        """保存推理重建 HA-CQI 所需的最小结构配置。"""
+    def _build_checkpoint_meta(
+        self,
+        *,
+        epoch: int,
+        global_step: int,
+        checkpoint_role: str,
+        selection: dict[str, Any] | None,
+        data_provenance: dict[str, Any],
+    ) -> dict[str, Any]:
+        """保存结构、训练、数据和阈值选择契约。"""
+        portable_data_provenance = dict(data_provenance)
+        for path_key in ("dataset_dir", "split_report"):
+            if portable_data_provenance.get(path_key):
+                portable_data_provenance[path_key] = portable_repo_path(
+                    portable_data_provenance[path_key], REPO_ROOT
+                )
+        model_config = {
+            "architecture": "HA-CQI",
+            "backbone": self.opt.backbone,
+            "backbone_weight": portable_repo_path(self.opt.backbone_weight, REPO_ROOT),
+            "fpn_channels": int(self.opt.fpn_channels),
+            "deform_groups": int(self.opt.deform_groups),
+            "gamma_mode": self.opt.gamma_mode,
+            "beta_mode": self.opt.beta_mode,
+            "disable_soft_alignment": bool(getattr(self.opt, "disable_soft_alignment", False)),
+            "align_window": int(self.opt.align_window),
+            "align_points": int(self.opt.align_points),
+            "align_heads": int(self.opt.align_heads),
+            "align_on_levels": [int(v) for v in self.opt.align_on_levels],
+            "align_qkv_bias": bool(self.opt.align_qkv_bias),
+            "align_offset_groups": int(self.opt.align_offset_groups),
+            "num_change_queries": int(getattr(self.opt, "num_change_queries", 16)),
+            "cqi_heads": int(getattr(self.opt, "cqi_heads", 4)),
+            "mask_dim": int(getattr(self.opt, "mask_dim", 128)),
+            "mask_queries": int(getattr(self.opt, "mask_queries", 32)),
+            "mask_decoder_layers": int(getattr(self.opt, "mask_decoder_layers", 3)),
+            "mask_heads": int(getattr(self.opt, "mask_heads", 4)),
+            "dino_arch": self.opt.dino_arch,
+            "dino_weight": portable_repo_path(self.opt.dino_weight, REPO_ROOT),
+            "extract_ids": [int(v) for v in self.opt.extract_ids],
+            "dino_input_norm": str(getattr(self.opt, "dino_input_norm", "shared")),
+            "input_mean": [float(v) for v in self.opt.mean],
+            "input_std": [float(v) for v in self.opt.std],
+        }
+        loss_config = {
+            "focal_class_weights": [float(v) for v in self.opt.focal_class_weights],
+            "focal_gamma": float(getattr(self.opt, "gamma", 2.0)),
+            "aux_loss_weight": float(getattr(self.opt, "aux_loss_weight", 1.0)),
+            "aux_loss_weight_end": float(getattr(self.opt, "aux_loss_weight_end", 0.5)),
+            "aux_decay_start_epoch": int(getattr(self.opt, "aux_decay_start_epoch", 5)),
+            "tversky_beta_start": float(getattr(self.opt, "tversky_beta_start", 0.70)),
+            "tversky_beta_end": float(getattr(self.opt, "tversky_beta_end", 0.55)),
+            "loss_anneal_epochs": int(getattr(self.opt, "loss_anneal_epochs", 20)),
+            "support_consistency_weight": float(
+                getattr(self.opt, "support_consistency_weight", 0.03)
+            ),
+            "coarse_consistency_weight": float(
+                getattr(self.opt, "coarse_consistency_weight", 0.02)
+            ),
+            "consistency_warmup_epochs": int(
+                getattr(self.opt, "consistency_warmup_epochs", 5)
+            ),
+            "consistency_ramp_epochs": int(getattr(self.opt, "consistency_ramp_epochs", 10)),
+        }
         return {
-            "model_config": {
-                "architecture": "HA-CQI",
-                "backbone": self.opt.backbone,
-                "backbone_weight": self.opt.backbone_weight,
-                "fpn_channels": int(self.opt.fpn_channels),
-                "deform_groups": int(self.opt.deform_groups),
-                "gamma_mode": self.opt.gamma_mode,
-                "beta_mode": self.opt.beta_mode,
-                "disable_soft_alignment": bool(getattr(self.opt, "disable_soft_alignment", False)),
-                "align_window": int(self.opt.align_window),
-                "align_points": int(self.opt.align_points),
-                "align_heads": int(self.opt.align_heads),
-                "align_on_levels": [int(v) for v in self.opt.align_on_levels],
-                "align_qkv_bias": bool(self.opt.align_qkv_bias),
-                "align_offset_groups": int(self.opt.align_offset_groups),
-                "num_change_queries": int(getattr(self.opt, "num_change_queries", 16)),
-                "cqi_heads": int(getattr(self.opt, "cqi_heads", 4)),
-                "mask_dim": int(getattr(self.opt, "mask_dim", 128)),
-                "mask_queries": int(getattr(self.opt, "mask_queries", 32)),
-                "mask_decoder_layers": int(getattr(self.opt, "mask_decoder_layers", 3)),
-                "mask_heads": int(getattr(self.opt, "mask_heads", 4)),
-                "head_lr_mult": float(getattr(self.opt, "head_lr_mult", 3.0)),
-                "aux_loss_weight": float(getattr(self.opt, "aux_loss_weight", 1.0)),
-                "aux_loss_weight_end": float(getattr(self.opt, "aux_loss_weight_end", 0.5)),
-                "aux_decay_start_epoch": int(getattr(self.opt, "aux_decay_start_epoch", 5)),
-                "tversky_beta_start": float(getattr(self.opt, "tversky_beta_start", 0.70)),
-                "tversky_beta_end": float(getattr(self.opt, "tversky_beta_end", 0.55)),
-                "loss_anneal_epochs": int(getattr(self.opt, "loss_anneal_epochs", 20)),
-                "support_consistency_weight": float(
-                    getattr(self.opt, "support_consistency_weight", 0.03)
-                ),
-                "coarse_consistency_weight": float(
-                    getattr(self.opt, "coarse_consistency_weight", 0.02)
-                ),
-                "consistency_warmup_epochs": int(
-                    getattr(self.opt, "consistency_warmup_epochs", 5)
-                ),
-                "consistency_ramp_epochs": int(getattr(self.opt, "consistency_ramp_epochs", 10)),
-                "focal_gamma": float(getattr(self.opt, "gamma", 2.0)),
+            "format_version": CHECKPOINT_FORMAT_VERSION,
+            "run_name": self.opt.name,
+            "epoch": int(epoch),
+            "global_step": int(global_step),
+            "checkpoint_role": checkpoint_role,
+            "model_config": model_config,
+            "loss_config": loss_config,
+            "training_config": {
+                "optimizer": "AdamW",
+                "lr": float(self.opt.lr),
+                "weight_decay": float(self.opt.weight_decay),
+                "head_lr_mult": float(getattr(self.opt, "head_lr_mult", 2.0)),
+                "batch_size": int(self.opt.batch_size),
+                "num_epochs": int(self.opt.num_epochs),
+                "num_workers": int(self.opt.num_workers),
+                "input_size": int(self.opt.input_size),
+                "dataset_mode": str(self.opt.dataset_mode),
+                "max_train_steps": int(getattr(self.opt, "max_train_steps", -1)),
+                "max_val_steps": int(getattr(self.opt, "max_val_steps", -1)),
+                "seed": int(getattr(self.opt, "seed", 1)),
+                "deterministic": bool(getattr(self.opt, "deterministic", True)),
                 "amp": bool(getattr(self.opt, "amp", False)),
                 "amp_dtype": str(getattr(self.opt, "amp_dtype", "fp16")),
-                "dino_arch": self.opt.dino_arch,
-                "dino_weight": self.opt.dino_weight,
-                "extract_ids": [int(v) for v in self.opt.extract_ids],
-                "best_metric": getattr(self.opt, "best_metric", "iou_1"),
-                "eval_fg_threshold": float(getattr(self.opt, "eval_fg_threshold", 0.5)),
-                "eval_thresholds": [float(v) for v in getattr(self.opt, "eval_thresholds", [])],
-            }
+                "grad_scaler_init_scale": float(
+                    getattr(self.opt, "grad_scaler_init_scale", 4096.0)
+                ),
+                "eval_fg_threshold": float(self.opt.eval_fg_threshold),
+                "threshold_min": float(getattr(self.opt, "threshold_min", 0.05)),
+                "threshold_max": float(getattr(self.opt, "threshold_max", 0.95)),
+                "threshold_step": float(getattr(self.opt, "threshold_step", 0.01)),
+            },
+            "data_config": {
+                **portable_data_provenance,
+                "dataroot": portable_repo_path(self.opt.dataroot, REPO_ROOT),
+                "stats_file": portable_repo_path(self.opt.stats_file, REPO_ROOT),
+            },
+            "selection": dict(selection or {}),
         }
 
-    def save_ckpt(self, network, optimizer, model_name, backbone, tag: str = "best"):
-        if tag == "best":
-            save_filename = "%s_%s_best.pth" % (model_name, backbone)
+    def save_training_checkpoint(
+        self,
+        *,
+        tag: str,
+        epoch: int,
+        global_step: int,
+        selection: dict[str, Any] | None,
+        data_provenance: dict[str, Any],
+        scaler_state: dict[str, Any] | None,
+        data_loader_generator_state: torch.Tensor | None,
+    ) -> Path:
+        if tag == "periodic":
+            filename = f"{self.opt.name}_{self.opt.backbone}_epoch{epoch}.pth"
+        elif tag in {"best_primary", "last"}:
+            filename = f"{self.opt.name}_{self.opt.backbone}_{tag}.pth"
         else:
-            save_filename = f"{model_name}_{backbone}_{tag}.pth"
-        save_path = os.path.join(self.save_dir, save_filename)
-        if os.path.exists(save_path):
-            os.remove(save_path)
-        torch.save(
-            {
-                "network": network.cpu().state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "meta": self._build_checkpoint_meta(),
-            },
-            save_path,
+            raise ValueError(f"Unsupported checkpoint tag: {tag}")
+        meta = self._build_checkpoint_meta(
+            epoch=epoch,
+            global_step=global_step,
+            checkpoint_role=tag,
+            selection=selection,
+            data_provenance=data_provenance,
         )
-        network.to(self.device)
+        payload: dict[str, Any] = {
+            "network": cpu_state_dict(self.model),
+            "optimizer": self.optimizer.state_dict(),
+            "scheduler": self.scheduler.state_dict(),
+            "scaler": scaler_state,
+            "epoch": int(epoch),
+            "global_step": int(global_step),
+            "torch_rng_state": torch.get_rng_state(),
+            "cuda_rng_state_all": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [],
+            "data_loader_generator_state": data_loader_generator_state,
+            "meta": meta,
+        }
+        return atomic_torch_save(payload, Path(self.save_dir) / filename)
 
-    def save(self, model_name, backbone, tag: str = "best"):
-        self.save_ckpt(self.model, self.optimizer, model_name, backbone, tag=tag)
-
-    def save_epoch_ckpt(self, network, optimizer, model_name, backbone, epoch):
-        save_filename = f"{model_name}_{backbone}_epoch{epoch}.pth"
-        save_path = os.path.join(self.save_dir, save_filename)
-        torch.save(
-            {
-                "network": network.cpu().state_dict(),
-                "optimizer": optimizer.state_dict(),
-                "meta": self._build_checkpoint_meta(),
-                "epoch": epoch,
-            },
-            save_path,
+    def restore_training_checkpoint(
+        self,
+        checkpoint_path: str | Path,
+        *,
+        expected_dataset_fingerprint: str | None,
+        scaler,
+        data_loader_generator=None,
+    ) -> tuple[int, int, dict[str, Any]]:
+        payload = load_checkpoint_payload(checkpoint_path, map_location="cpu")
+        meta = payload.get("meta")
+        if not isinstance(meta, dict):
+            raise ValueError("--resume requires checkpoint v2 metadata")
+        data_config = meta.get("data_config", {})
+        actual_fingerprint = data_config.get("dataset_fingerprint") if isinstance(data_config, dict) else None
+        if expected_dataset_fingerprint and actual_fingerprint != expected_dataset_fingerprint:
+            raise ValueError(
+                "Resume dataset fingerprint mismatch: "
+                f"checkpoint={actual_fingerprint}, current={expected_dataset_fingerprint}"
+            )
+        expected_meta = self._build_checkpoint_meta(
+            epoch=0,
+            global_step=0,
+            checkpoint_role="resume_validation",
+            selection=None,
+            data_provenance={"dataset_fingerprint": expected_dataset_fingerprint},
         )
-        network.to(self.device)
-
-    def save_periodic(self, model_name, backbone, epoch):
-        self.save_epoch_ckpt(self.model, self.optimizer, model_name, backbone, epoch)
+        mismatches: list[str] = []
+        for section_name in ("model_config", "loss_config", "training_config"):
+            checkpoint_section = meta.get(section_name)
+            expected_section = expected_meta[section_name]
+            if not isinstance(checkpoint_section, dict):
+                mismatches.append(f"{section_name}=missing")
+                continue
+            for key, expected_value in expected_section.items():
+                actual_value = checkpoint_section.get(key)
+                if actual_value != expected_value:
+                    mismatches.append(
+                        f"{section_name}.{key}: checkpoint={actual_value!r}, current={expected_value!r}"
+                    )
+        if mismatches:
+            details = "\n  - ".join(mismatches)
+            raise ValueError(f"Resume configuration mismatch:\n  - {details}")
+        self.model.load_state_dict(payload["network"], strict=True)
+        if "optimizer" not in payload or "scheduler" not in payload:
+            raise ValueError("Resume checkpoint lacks optimizer or scheduler state")
+        self.optimizer.load_state_dict(payload["optimizer"])
+        self.scheduler.load_state_dict(payload["scheduler"])
+        if scaler is not None and payload.get("scaler") is not None:
+            scaler.load_state_dict(payload["scaler"])
+        if payload.get("torch_rng_state") is not None:
+            torch.set_rng_state(payload["torch_rng_state"])
+        if torch.cuda.is_available() and payload.get("cuda_rng_state_all"):
+            torch.cuda.set_rng_state_all(payload["cuda_rng_state_all"])
+        if data_loader_generator is not None and payload.get("data_loader_generator_state") is not None:
+            data_loader_generator.set_state(payload["data_loader_generator_state"])
+        epoch = int(payload.get("epoch", meta.get("epoch", 0)))
+        global_step = int(payload.get("global_step", meta.get("global_step", 0)))
+        return epoch + 1, global_step, payload
 
     def name(self):
         return self.opt.name

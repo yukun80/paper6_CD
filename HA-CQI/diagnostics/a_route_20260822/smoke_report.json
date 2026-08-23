@@ -1,0 +1,50 @@
+{
+  "date": "2026-08-22",
+  "scope": "A-route short smoke only; no full training",
+  "environment": {
+    "gpu": "NVIDIA GeForce RTX 4090 D",
+    "memory_total_mib": 24564,
+    "memory_free_before_smoke_mib": 18535,
+    "amp": "fp16",
+    "batch_size": 6,
+    "grad_scaler_init_scale": 4096.0
+  },
+  "dataset": {
+    "name": "S1GFloods_CD_DINO_BG_75_25",
+    "fingerprint": "4eb84568d9e0f7dacadfe29637584e3c07e8e913f585cd40c9589d0fd968438b"
+  },
+  "limits": {
+    "max_train_steps": 2,
+    "max_val_steps": 2,
+    "num_epochs": 1
+  },
+  "result": {
+    "train_steps": 2,
+    "optimizer_steps": 2,
+    "global_step": 2,
+    "mean_train_loss": 2.1186646819114685,
+    "val_steps": 2,
+    "selected_threshold": 0.46,
+    "selected_iou": 0.44110361735026044,
+    "selected_f1": 0.6121747416904167,
+    "selected_precision": 0.44110361735026044,
+    "selected_recall": 1.0,
+    "checkpoint_roles": [
+      "best_primary",
+      "last"
+    ]
+  },
+  "resume_check": {
+    "status": "passed",
+    "restored_start_epoch": 2,
+    "restored_global_step": 2,
+    "restored_optimizer_parameter_states": 749
+  },
+  "inference_contracts": {
+    "test_py_one_batch": "passed; checkpoint selection threshold 0.46; JSON written",
+    "v2_pair_inference": "passed; checkpoint selection threshold 0.46",
+    "legacy_best_iou_pair_inference": "passed with strict state_dict load; stale /home/yukun paths relocated; legacy threshold 0.40"
+  },
+  "temporary_artifacts": "/tmp/hacqi-smoke-final-5fAOeI/smoke-hacqi-a-route-final-20260822",
+  "reproducibility_note": "Seeds, cuDNN flags, DataLoader generator and worker seeds are fixed. PyTorch warned that Flash Attention, adaptive pooling and grid_sampler backward have no deterministic CUDA implementation; warn_only mode therefore does not promise bit-exact reruns."
+}

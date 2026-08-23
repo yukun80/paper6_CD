@@ -45,11 +45,43 @@ class HierarchicalCnnDinoEncoder(nn.Module):
         backbone_weight: str = DEFAULT_BACKBONE_WEIGHT,
         device: str = "cuda",
         extract_ids: list[int] | None = None,
+        input_mean: list[float] | None = None,
+        input_std: list[float] | None = None,
+        dino_input_norm: str = "shared",
         **kwargs,
     ):
         super().__init__()
         del kwargs
         self.backbone_name = backbone
+        if dino_input_norm not in {"shared", "imagenet"}:
+            raise ValueError(f"Unsupported dino_input_norm: {dino_input_norm}")
+        input_mean = input_mean or [0.5, 0.5, 0.5]
+        input_std = input_std or [0.5, 0.5, 0.5]
+        if len(input_mean) != 3 or len(input_std) != 3:
+            raise ValueError("input_mean/input_std must contain exactly three values")
+        if any(float(value) <= 0.0 for value in input_std):
+            raise ValueError("input_std values must be positive")
+        self.dino_input_norm = dino_input_norm
+        self.register_buffer(
+            "input_mean",
+            torch.tensor(input_mean, dtype=torch.float32).view(1, 3, 1, 1),
+            persistent=False,
+        )
+        self.register_buffer(
+            "input_std",
+            torch.tensor(input_std, dtype=torch.float32).view(1, 3, 1, 1),
+            persistent=False,
+        )
+        self.register_buffer(
+            "dino_mean",
+            torch.tensor([0.485, 0.456, 0.406], dtype=torch.float32).view(1, 3, 1, 1),
+            persistent=False,
+        )
+        self.register_buffer(
+            "dino_std",
+            torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(1, 3, 1, 1),
+            persistent=False,
+        )
         self.backbone = build_feature_backbone(backbone, backbone_weight=backbone_weight)
         self.has_native_p1 = len(self.backbone.channels) == 5
         self.neck = FPN(
@@ -79,7 +111,12 @@ class HierarchicalCnnDinoEncoder(nn.Module):
         cnn_stages = self.backbone.forward(x)
         pyramid = self.neck(cnn_stages if self.has_native_p1 else cnn_stages[-4:])
 
-        dino_raw = self.dino_extractor(x)
+        dino_input = x
+        if self.dino_input_norm == "imagenet":
+            # 数据层输出已经按 SAR 统计归一化；先恢复 [0,1]，再遵循 DINO LVD 契约。
+            dino_input = torch.clamp(x * self.input_std + self.input_mean, 0.0, 1.0)
+            dino_input = (dino_input - self.dino_mean) / self.dino_std
+        dino_raw = self.dino_extractor(dino_input)
         dino_features = self.dino_adapter(dino_raw[1:])
 
         if len(pyramid) == 5:

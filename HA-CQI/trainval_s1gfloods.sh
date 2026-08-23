@@ -8,7 +8,7 @@ DINO_WEIGHT="${DINO_WEIGHT:-dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60
 BACKBONE="${BACKBONE:-efficientnet_b0}"
 BACKBONE_WEIGHT="${BACKBONE_WEIGHT:-pretrained/efficientnet_b0_ra-3dd342df.pth}"
 RUN_NAME="${RUN_NAME:-S1GFloods-HA-CQI-${DINO_ARCH#dinov3_}}"
-DATASET_NAME="${DATASET_NAME:-S1GFloods_CD_DINO}"
+DATASET_NAME="${DATASET_NAME:-S1GFloods_CD_DINO_BG_75_25}"
 DATA_ROOT="${DATA_ROOT:-../datasets}"
 STATS_FILE="${STATS_FILE:-${DATA_ROOT}/${DATASET_NAME}/channel_stats_s1gfloods_train.json}"
 BATCH_SIZE="${BATCH_SIZE:-6}"
@@ -19,9 +19,15 @@ MASK_DIM="${MASK_DIM:-128}"
 MASK_QUERIES="${MASK_QUERIES:-32}"
 MASK_DECODER_LAYERS="${MASK_DECODER_LAYERS:-3}"
 MASK_HEADS="${MASK_HEADS:-4}"
-BEST_METRIC="${BEST_METRIC:-tiny_safe_combo}"
 EVAL_FG_THRESHOLD="${EVAL_FG_THRESHOLD:-0.40}"
-EVAL_THRESHOLDS="${EVAL_THRESHOLDS:-0.25 0.30 0.35 0.40 0.45 0.50}"
+THRESHOLD_MIN="${THRESHOLD_MIN:-0.05}"
+THRESHOLD_MAX="${THRESHOLD_MAX:-0.95}"
+THRESHOLD_STEP="${THRESHOLD_STEP:-0.01}"
+SEED="${SEED:-1}"
+FOCAL_BG_WEIGHT="${FOCAL_BG_WEIGHT:-0.25}"
+FOCAL_FG_WEIGHT="${FOCAL_FG_WEIGHT:-0.75}"
+DINO_INPUT_NORM="${DINO_INPUT_NORM:-shared}"
+RESUME="${RESUME:-}"
 HEAD_LR_MULT="${HEAD_LR_MULT:-2.0}"
 AUX_LOSS_WEIGHT="${AUX_LOSS_WEIGHT:-1.0}"
 AUX_LOSS_WEIGHT_END="${AUX_LOSS_WEIGHT_END:-0.5}"
@@ -66,6 +72,7 @@ python trainval.py \
   --backbone "${BACKBONE}" \
   --dino_arch "${DINO_ARCH}" \
   --dino_weight "${DINO_WEIGHT}" \
+  --dino_input_norm "${DINO_INPUT_NORM}" \
   --num_change_queries "${NUM_CHANGE_QUERIES}" \
   --cqi_heads "${CQI_HEADS}" \
   --mask_dim "${MASK_DIM}" \
@@ -83,8 +90,12 @@ python trainval.py \
   --coarse_consistency_weight "${COARSE_CONSISTENCY_WEIGHT}" \
   --consistency_warmup_epochs "${CONSISTENCY_WARMUP_EPOCHS}" \
   --consistency_ramp_epochs "${CONSISTENCY_RAMP_EPOCHS}" \
-  --best_metric "${BEST_METRIC}" \
+  --focal_class_weights "${FOCAL_BG_WEIGHT}" "${FOCAL_FG_WEIGHT}" \
   --eval_fg_threshold "${EVAL_FG_THRESHOLD}" \
+  --threshold_min "${THRESHOLD_MIN}" \
+  --threshold_max "${THRESHOLD_MAX}" \
+  --threshold_step "${THRESHOLD_STEP}" \
+  --seed "${SEED}" \
   --gpu_ids 0 \
   --batch_size "${BATCH_SIZE}" \
   --num_epochs 80 \
@@ -103,10 +114,8 @@ if [[ "${AMP}" == "1" ]]; then
   cmd+=(--amp --amp_dtype "${AMP_DTYPE}")
 fi
 
-if [[ -n "${EVAL_THRESHOLDS}" ]]; then
-  # shellcheck disable=SC2206
-  threshold_args=(${EVAL_THRESHOLDS})
-  cmd+=(--eval_thresholds "${threshold_args[@]}")
+if [[ -n "${RESUME}" ]]; then
+  cmd+=(--resume "${RESUME}")
 fi
 
 cmd+=("$@")

@@ -44,6 +44,12 @@ class DinoV3FeatureExtractor(nn.Module):
         for p in self.model.parameters():
             p.requires_grad = False
 
+    def train(self, mode: bool = True):
+        """任务适配器可训练，但冻结的 DINO 主体始终保持 eval 行为。"""
+        super().train(mode)
+        self.model.eval()
+        return self
+
     def forward(self, x):
         scale_factor = 2 / (512 / x.shape[-1])
         x = F.interpolate(

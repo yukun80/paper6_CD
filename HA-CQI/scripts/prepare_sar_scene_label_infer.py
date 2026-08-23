@@ -173,9 +173,17 @@ def prepare_dirs(tiles_root: Path, dry_run: bool) -> None:
         (tiles_root / rel_dir).mkdir(parents=True, exist_ok=True)
 
 
-def label_to_uint8(arr: np.ndarray) -> np.ndarray:
-    """统一把标签转成 0/255，兼顾可视化和现有二值读取逻辑。"""
-    return np.where(arr > 0, 255, 0).astype(np.uint8)
+def decode_binary_label(
+    arr: np.ndarray,
+    nodata: float | int | None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """将源标签解码为 0/1，并显式排除 metadata nodata 与历史值 3。"""
+    valid = np.isfinite(arr)
+    if nodata is not None:
+        valid &= arr != nodata
+    valid &= arr != 3
+    binary = ((arr > 0) & valid).astype(np.uint8)
+    return binary, valid
 
 
 def write_png_label(arr: np.ndarray, out_path: Path, dry_run: bool) -> None:
@@ -204,7 +212,7 @@ def write_tif_from_window(
             "dtype": "uint8",
             "transform": rasterio.windows.transform(window, src_ds.transform),
             "compress": "LZW",
-            "nodata": 0,
+            "nodata": 255,
         }
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -217,9 +225,10 @@ def write_outputs(
     label_path: Path,
     rows: list[dict[str, str]],
     dry_run: bool,
-) -> list[dict[str, str]]:
+) -> tuple[list[dict[str, str]], dict[str, int]]:
     """按 manifest 中已有 tile_id 与窗口信息回切标签，不重算切片规则。"""
     updated_rows: list[dict[str, str]] = []
+    stats = {"valid_pixels": 0, "foreground_pixels": 0, "nodata_pixels": 0}
 
     with rasterio.open(label_path) as ds_label:
         for row in rows:
@@ -231,19 +240,25 @@ def write_outputs(
 
             window = Window(col_off=left, row_off=top, width=width, height=height)
             arr = ds_label.read(1, window=window)
-            label_uint8 = label_to_uint8(arr)
+            label_binary, valid = decode_binary_label(arr, ds_label.nodata)
+            label_png = (label_binary * 255).astype(np.uint8)
+            label_tif = label_binary.copy()
+            label_tif[~valid] = 255
+            stats["valid_pixels"] += int(np.count_nonzero(valid))
+            stats["foreground_pixels"] += int(np.count_nonzero(label_binary))
+            stats["nodata_pixels"] += int(valid.size - np.count_nonzero(valid))
 
             label_png_rel = Path("test/label") / f"{tile_id}.png"
             label_tif_rel = Path("test/label_tif") / f"{tile_id}.tif"
-            write_png_label(label_uint8, tiles_root / label_png_rel, dry_run)
-            write_tif_from_window(ds_label, label_uint8, tiles_root / label_tif_rel, window, dry_run)
+            write_png_label(label_png, tiles_root / label_png_rel, dry_run)
+            write_tif_from_window(ds_label, label_tif, tiles_root / label_tif_rel, window, dry_run)
 
             new_row = dict(row)
             new_row["label_png"] = str(label_png_rel)
             new_row["label_tif"] = str(label_tif_rel)
             updated_rows.append(new_row)
 
-    return updated_rows
+    return updated_rows, stats
 
 
 def write_manifest(
@@ -270,6 +285,7 @@ def write_report(
     tiles_root: Path,
     label: LabelMeta,
     row_count: int,
+    pixel_stats: dict[str, int],
     dry_run: bool,
 ) -> None:
     payload = {
@@ -287,6 +303,8 @@ def write_report(
             "label_tif_dir": "test/label_tif",
         },
         "tile_count": row_count,
+        "label_encoding": {"background": 0, "foreground": 1, "nodata": 255},
+        "tile_pixel_stats": pixel_stats,
     }
     if dry_run:
         print(json.dumps(payload, indent=2, ensure_ascii=False))
@@ -313,9 +331,15 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     clean_output_dirs(args.tiles_root, args.overwrite, args.dry_run)
     prepare_dirs(args.tiles_root, args.dry_run)
-    updated_rows = write_outputs(args.tiles_root, label_path, rows, args.dry_run)
+    updated_rows, pixel_stats = write_outputs(args.tiles_root, label_path, rows, args.dry_run)
     write_manifest(manifest_path, updated_rows, fieldnames, args.dry_run)
-    write_report(args.tiles_root, label, row_count=len(updated_rows), dry_run=args.dry_run)
+    write_report(
+        args.tiles_root,
+        label,
+        row_count=len(updated_rows),
+        pixel_stats=pixel_stats,
+        dry_run=args.dry_run,
+    )
 
     print(f"[DONE] label_tiles={len(updated_rows)} manifest={manifest_path}")
 

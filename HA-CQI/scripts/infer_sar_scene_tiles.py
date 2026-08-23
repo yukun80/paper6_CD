@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""使用 HA-CQI checkpoint 对整景 SAR 切片做无标签拼接推理。"""
+"""
+使用 HA-CQI checkpoint 对整景 SAR 切片做无标签拼接推理。
+
+
+
+"""
 
 from __future__ import annotations
 
@@ -26,8 +31,15 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from model.engine import build_hacqi_engine  # noqa: E402
+from model.checkpointing import (  # noqa: E402
+    apply_checkpoint_model_config,
+    checkpoint_data_config,
+    checkpoint_model_config,
+    extract_network_state,
+    load_checkpoint_payload,
+    resolve_inference_threshold,
+)
 from model.modules.dino_meta import (  # noqa: E402
-    get_dino_arch_spec,
     resolve_dino_arch,
     resolve_extract_ids,
 )
@@ -36,51 +48,13 @@ from option import (  # noqa: E402
     Options,
     _validate_backbone_weight_path,
     resolve_norm_stats,
+    validate_stats_provenance,
 )
 
 
 PROB_NODATA = -1.0
 BINARY_NODATA = 255
 SUPPORTED_BACKBONES = {"mobilenetv2", "efficientnet_b0"}
-INFER_MODEL_CONFIG_FIELDS = {
-    "backbone",
-    "backbone_weight",
-    "fpn_channels",
-    "deform_groups",
-    "gamma_mode",
-    "beta_mode",
-    "disable_soft_alignment",
-    "align_window",
-    "align_points",
-    "align_heads",
-    "align_on_levels",
-    "align_qkv_bias",
-    "align_offset_groups",
-    "num_change_queries",
-    "cqi_heads",
-    "mask_dim",
-    "mask_queries",
-    "mask_decoder_layers",
-    "mask_heads",
-    "head_lr_mult",
-    "aux_loss_weight",
-    "aux_loss_weight_end",
-    "aux_decay_start_epoch",
-    "tversky_beta_start",
-    "tversky_beta_end",
-    "loss_anneal_epochs",
-    "support_consistency_weight",
-    "coarse_consistency_weight",
-    "consistency_warmup_epochs",
-    "consistency_ramp_epochs",
-    "focal_gamma",
-    "dino_arch",
-    "dino_weight",
-    "extract_ids",
-    "eval_fg_threshold",
-    "eval_thresholds",
-}
-LIST_MODEL_CONFIG_FIELDS = {"align_on_levels", "extract_ids", "eval_thresholds"}
 
 
 class TileDataset(Dataset):
@@ -172,35 +146,19 @@ def build_parser(
     parser = opt_builder.parser
     parser.set_defaults(
         name="HA-CQI",
-        dataset="S1GFloods_CD_DINO",
+        dataset="S1GFloods_CD_DINO_BG_75_25",
         batch_size=8,
         num_workers=4,
         backbone="efficientnet_b0",
         backbone_weight=DEFAULT_BACKBONE_WEIGHT,
-        stats_file="datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json",
-        eval_fg_threshold=0.40,
+        stats_file="datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json",
     )
     parser.description = description
     parser.add_argument("--tiles-root", type=Path, default=Path("datasets/SAR_Scene_CD_infer"))
     parser.add_argument(
-        "--checkpoint",
-        type=Path,
-        default=PROJECT_ROOT
-        / "checkpoints"
-        / "S1GFloods-HA-CQI"
-        / "S1GFloods-HA-CQI_efficientnet_b0_best.pth",
-        help="trainval_s1gfloods.sh 训练得到的 HA-CQI checkpoint 路径。",
-    )
-    parser.add_argument(
         "--output-dir",
         type=Path,
         default=PROJECT_ROOT / "outputs" / "sar_scene",
-    )
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        default=None,
-        help="前景概率阈值；默认复用 --eval_fg_threshold。",
     )
     parser.add_argument(
         "--skip-tiles",
@@ -229,133 +187,14 @@ def parse_args(
     return build_parser(description=description, defaults=defaults).parse_args(argv)
 
 
-def collect_explicit_overrides(argv: Sequence[str] | None) -> set[str]:
-    """记录用户显式传入的结构参数，保证 CLI 覆盖优先级高于 checkpoint 元数据。"""
+def collect_explicit_arguments(argv: Sequence[str] | None) -> set[str]:
+    """收集全部显式 CLI 字段，用于 threshold/stats 的确定性优先级。"""
     args = list(sys.argv[1:] if argv is None else argv)
-    explicit: set[str] = set()
-    for token in args:
-        if not token.startswith("--"):
-            continue
-        key = token[2:].split("=", 1)[0]
-        if key == "gamma":
-            explicit.add("focal_gamma")
-        if key in INFER_MODEL_CONFIG_FIELDS:
-            explicit.add(key)
-    return explicit
-
-
-def _extract_state_dict(checkpoint_path: Path) -> dict[str, torch.Tensor]:
-    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-    if isinstance(checkpoint, dict) and "network" in checkpoint:
-        state_dict = checkpoint["network"]
-    elif isinstance(checkpoint, dict):
-        state_dict = checkpoint
-    else:
-        raise ValueError(f"Unsupported checkpoint payload type: {type(checkpoint)}")
-    if not isinstance(state_dict, dict):
-        raise ValueError(f"Unsupported checkpoint state_dict type: {type(state_dict)}")
-    return state_dict
-
-
-def load_checkpoint_model_config(checkpoint_path: Path) -> dict[str, object] | None:
-    """读取 HA-CQI checkpoint 中保存的模型结构元数据。"""
-    checkpoint = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
-    if not isinstance(checkpoint, dict):
-        return None
-    meta = checkpoint.get("meta")
-    if not isinstance(meta, dict):
-        return None
-    model_config = meta.get("model_config")
-    return model_config if isinstance(model_config, dict) else None
-
-
-def infer_local_dino_weight_for_arch(dino_arch: str) -> str | None:
-    weight_dir = PROJECT_ROOT / "dinov3" / "weights"
-    matches = sorted(weight_dir.glob(f"{dino_arch}*.pth"))
-    if len(matches) == 1:
-        return str(matches[0].resolve())
-    return None
-
-
-def infer_checkpoint_model_config_from_state_dict(
-    state_dict: dict[str, torch.Tensor],
-) -> dict[str, object] | None:
-    """兼容缺失 meta 的 HA-CQI checkpoint：从参数形状反推关键结构。"""
-    cfg: dict[str, object] = {}
-
-    query_key = "cqi.blocks.0.change_queries"
-    if query_key in state_dict:
-        cfg["num_change_queries"] = int(state_dict[query_key].shape[0])
-        cfg["fpn_channels"] = int(state_dict[query_key].shape[1])
-
-    mask_query_key = "mask_head.mask_queries"
-    if mask_query_key in state_dict:
-        cfg["mask_queries"] = int(state_dict[mask_query_key].shape[0])
-        cfg["mask_dim"] = int(state_dict[mask_query_key].shape[1])
-
-    if "mask_head.decoder_layers.0.self_attn.in_proj_weight" in state_dict:
-        cfg["mask_decoder_layers"] = len(
-            {
-                int(key.split(".")[2])
-                for key in state_dict
-                if key.startswith("mask_head.decoder_layers.")
-            }
-        )
-
-    cls_key = "encoder.dino_extractor.model.cls_token"
-    if cls_key in state_dict:
-        embed_dim = int(state_dict[cls_key].shape[-1])
-        arch_by_dim = {384: "dinov3_vits16", 768: "dinov3_vitb16", 1024: "dinov3_vitl16"}
-        dino_arch = arch_by_dim.get(embed_dim)
-        if dino_arch:
-            cfg["dino_arch"] = dino_arch
-            cfg["extract_ids"] = list(get_dino_arch_spec(dino_arch)["default_extract_ids"])
-            inferred_weight = infer_local_dino_weight_for_arch(dino_arch)
-            if inferred_weight:
-                cfg["dino_weight"] = inferred_weight
-
-    cfg["disable_soft_alignment"] = not any(key.startswith("ha.align_p") for key in state_dict)
-    if not cfg["disable_soft_alignment"]:
-        cfg["align_on_levels"] = [
-            level
-            for level, prefix in (
-                (1, "ha.align_p1"),
-                (2, "ha.align_p2"),
-                (3, "ha.align_p3"),
-            )
-            if any(key.startswith(prefix) for key in state_dict)
-        ]
-
-    if "backbone" not in cfg:
-        cfg["backbone"] = "efficientnet_b0"
-    if "gamma_mode" not in cfg:
-        cfg["gamma_mode"] = "SE"
-    if "beta_mode" not in cfg:
-        cfg["beta_mode"] = "contextgatedconv"
-    return cfg or None
-
-
-def apply_checkpoint_model_config(
-    opt: argparse.Namespace,
-    checkpoint_model_config: dict[str, object] | None,
-    explicit_overrides: set[str],
-) -> tuple[argparse.Namespace, bool]:
-    """用 checkpoint 结构参数补全推理配置，但不覆盖用户显式传参。"""
-    if not checkpoint_model_config:
-        return opt, False
-
-    for field in INFER_MODEL_CONFIG_FIELDS:
-        if field in explicit_overrides or field not in checkpoint_model_config:
-            continue
-        value = checkpoint_model_config[field]
-        if field in LIST_MODEL_CONFIG_FIELDS and value is not None:
-            cast_type = float if field == "eval_thresholds" else int
-            value = [cast_type(v) for v in value]
-        if field == "focal_gamma":
-            setattr(opt, "gamma", float(value))
-        else:
-            setattr(opt, field, value)
-    return opt, True
+    return {
+        token[2:].split("=", 1)[0].replace("-", "_")
+        for token in args
+        if token.startswith("--")
+    }
 
 
 def _resolve_model_weight_path(path_like: str | Path) -> str:
@@ -371,11 +210,13 @@ def parse_and_prepare(
     *,
     defaults: dict[str, object] | None = None,
     description: str = "Infer HA-CQI on SAR scene tiles",
-) -> argparse.Namespace:
-    explicit_overrides = collect_explicit_overrides(argv)
+) -> tuple[argparse.Namespace, dict[str, object]]:
+    explicit_arguments = collect_explicit_arguments(argv)
     opt = parse_args(argv=argv, defaults=defaults, description=description)
 
     opt.tiles_root = resolve_existing_path(opt.tiles_root, expect_file=False)
+    if not opt.checkpoint:
+        raise ValueError("--checkpoint is required for scene inference")
     opt.checkpoint = resolve_existing_path(opt.checkpoint, expect_file=True)
     opt.output_dir = resolve_output_path(opt.output_dir)
     if not opt.tiles_root.is_dir():
@@ -383,20 +224,26 @@ def parse_and_prepare(
     if not opt.checkpoint.is_file():
         raise FileNotFoundError(f"Checkpoint not found: {opt.checkpoint}")
 
-    checkpoint_model_config = load_checkpoint_model_config(opt.checkpoint)
-    inferred_checkpoint_model_config = None
-    if checkpoint_model_config is None:
-        inferred_checkpoint_model_config = infer_checkpoint_model_config_from_state_dict(
-            _extract_state_dict(opt.checkpoint)
-        )
-        checkpoint_model_config = inferred_checkpoint_model_config
-    opt, used_checkpoint_model_config = apply_checkpoint_model_config(
-        opt, checkpoint_model_config, explicit_overrides
+    checkpoint_payload = load_checkpoint_payload(opt.checkpoint, map_location="cpu")
+    model_config = checkpoint_model_config(checkpoint_payload)
+    opt = apply_checkpoint_model_config(
+        opt,
+        model_config,
+        explicit_arguments,
     )
 
-    opt.threshold = float(opt.eval_fg_threshold if opt.threshold is None else opt.threshold)
-    if not 0.0 <= opt.threshold <= 1.0:
-        raise ValueError("--threshold must be within [0, 1]")
+    data_config = checkpoint_data_config(checkpoint_payload) or {}
+    if "stats_file" not in explicit_arguments and data_config.get("stats_file"):
+        opt.stats_file = data_config["stats_file"]
+    if "dataset" not in explicit_arguments and data_config.get("dataset"):
+        opt.dataset = data_config["dataset"]
+    if "dataroot" not in explicit_arguments and data_config.get("dataroot"):
+        opt.dataroot = data_config["dataroot"]
+
+    opt.threshold, opt.threshold_source = resolve_inference_threshold(
+        checkpoint_payload,
+        explicit_threshold=opt.threshold,
+    )
     if opt.blob_filter_area_thresh < 1:
         raise ValueError("--blob_filter_area_thresh must be >= 1")
     for name in ("blob_filter_fill_thresh", "blob_filter_std_thresh", "blob_filter_vote_thresh"):
@@ -444,10 +291,10 @@ def parse_and_prepare(
         print("[WARN] CUDA is unavailable or gpu_ids is empty; inference will run on CPU")
 
     opt.phase = "test"
-    opt.load_pretrain = False
     opt.dino_arch = resolve_dino_arch(opt.dino_arch, opt.dino_weight)
     opt.extract_ids = resolve_extract_ids(opt.dino_arch, opt.extract_ids)
     opt.mean, opt.std = resolve_norm_stats(opt)
+    validate_stats_provenance(opt)
     opt.output_dir.mkdir(parents=True, exist_ok=True)
     opt.mosaic_dir = opt.output_dir / "mosaic"
     opt.mosaic_dir.mkdir(parents=True, exist_ok=True)
@@ -460,52 +307,17 @@ def parse_and_prepare(
         opt.tile_png_dir.mkdir(parents=True, exist_ok=True)
         opt.tile_tif_dir.mkdir(parents=True, exist_ok=True)
 
-    if inferred_checkpoint_model_config is not None:
-        print(
-            "[WARN] Checkpoint does not contain model_config metadata. "
-            "Inference inferred available HA-CQI structure from tensor shapes."
-        )
-    elif not used_checkpoint_model_config:
-        print(
-            "[WARN] Checkpoint does not contain model_config metadata. "
-            "Inference will rely on CLI/default HA-CQI settings."
-        )
-
     print("------------ Options -------------")
     for key, value in sorted(vars(opt).items()):
         print(f"{key}: {value}")
     print("-------------- End ----------------")
-    return opt
+    return opt, checkpoint_payload
 
 
-def load_model(opt: argparse.Namespace):
+def load_model(opt: argparse.Namespace, checkpoint_payload: dict[str, object]):
     """构建 HA-CQI 并显式加载用户指定的 checkpoint。"""
     model = build_hacqi_engine(opt)
-    checkpoint = torch.load(opt.checkpoint, map_location=model.device, weights_only=True)
-    state_dict = checkpoint["network"] if isinstance(checkpoint, dict) and "network" in checkpoint else checkpoint
-    if not isinstance(state_dict, dict):
-        raise ValueError(f"Unsupported checkpoint state_dict type: {type(state_dict)}")
-
-    current_state = model.model.state_dict()
-    filtered_state = {}
-    skipped = []
-    for key, value in state_dict.items():
-        if key not in current_state:
-            continue
-        if current_state[key].shape != value.shape:
-            skipped.append((key, tuple(value.shape), tuple(current_state[key].shape)))
-            continue
-        filtered_state[key] = value
-    missing, unexpected = model.model.load_state_dict(filtered_state, strict=False)
-    if missing:
-        print(f"[WARN] Missing keys when loading checkpoint: {len(missing)}")
-    if unexpected:
-        print(f"[WARN] Unexpected keys when loading checkpoint: {len(unexpected)}")
-    if skipped:
-        print(
-            "[WARN] Skipped incompatible checkpoint keys:",
-            [f"{key}:{src}->{dst}" for key, src, dst in skipped[:8]],
-        )
+    model.model.load_state_dict(extract_network_state(checkpoint_payload), strict=True)
     model.eval()
     return model
 
@@ -686,7 +498,11 @@ def main(
     defaults: dict[str, object] | None = None,
     description: str = "Infer HA-CQI on SAR scene tiles",
 ) -> None:
-    opt = parse_and_prepare(argv=argv, defaults=defaults, description=description)
+    opt, checkpoint_payload = parse_and_prepare(
+        argv=argv,
+        defaults=defaults,
+        description=description,
+    )
     prepare_report = load_prepare_report(opt.tiles_root)
     dataset = TileDataset(opt.tiles_root, opt.mean, opt.std)
     dataloader = DataLoader(
@@ -709,7 +525,7 @@ def main(
     accum_weight = np.zeros((full_height, full_width), dtype=np.float32)
     base_weight = build_blend_weight(tile_size)
 
-    model = load_model(opt)
+    model = load_model(opt, checkpoint_payload)
 
     total_tiles_saved = 0
     with torch.no_grad():
@@ -811,6 +627,7 @@ def main(
         "checkpoint": str(opt.checkpoint),
         "stats_file": str(opt.stats_file) if opt.stats_file else "",
         "threshold": float(opt.threshold),
+        "threshold_source": str(opt.threshold_source),
         "batch_size": int(opt.batch_size),
         "num_workers": int(opt.num_workers),
         "total_tiles": len(dataset),

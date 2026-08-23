@@ -47,7 +47,8 @@ datasets/<DATASET_NAME>/
 └── channel_stats_s1gfloods_train.json
 ```
 
-默认训练数据集为 `datasets/S1GFloods_CD_DINO`。
+默认训练数据集为 `datasets/S1GFloods_CD_DINO_BG_75_25`。该版本保留全部 581 个有效
+全背景 tile，并沿用确定性的全局随机 `75/25` 划分；旧数据集不会被覆盖。
 
 若尚未构建融合后的 S1GFloods 数据集，请从仓库根目录运行 HA-CQI 的数据预处理工具，并计算
 训练集通道统计量：
@@ -56,21 +57,31 @@ datasets/<DATASET_NAME>/
 python HA-CQI/scripts/prepare_fused_sar_cd_dataset.py \
   --s1gfloods-root datasets/S1GFloods \
   --varfloods-root datasets/VarFloods \
-  --out-root datasets/S1GFloods_CD_DINO \
+  --out-root datasets/S1GFloods_CD_DINO_BG_75_25 \
   --tile-size 256 \
   --stride 128 \
-  --train-ratio 0.8 \
+  --train-ratio 0.75 \
   --seed 42 \
-  --overwrite
+  --dry-run
+
+python HA-CQI/scripts/prepare_fused_sar_cd_dataset.py \
+  --s1gfloods-root datasets/S1GFloods \
+  --varfloods-root datasets/VarFloods \
+  --out-root datasets/S1GFloods_CD_DINO_BG_75_25 \
+  --tile-size 256 \
+  --stride 128 \
+  --train-ratio 0.75 \
+  --seed 42
 
 python HA-CQI/scripts/compute_s1gfloods_cd_stats.py \
-  --data-root datasets/S1GFloods_CD_DINO \
+  --data-root datasets/S1GFloods_CD_DINO_BG_75_25 \
   --split train \
-  --output datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json
+  --output datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json
 ```
 
-上述命令复现当前主数据集的 `0.8/0.2` 训练/验证划分。`--overwrite` 会删除并重建
-`datasets/S1GFloods_CD_DINO`，请确认该目录中没有需要保留的用户产物。
+预期计数为 train/val `5064/1688`、全背景 `437/144`。构建报告会记录数据指纹、来源/区域/
+背景分布、2,044 对跨 split 重叠窗口，以及旧数据集四个控制文件的构建前后 SHA256。
+默认不允许覆盖已存在的新目录。
 
 ## 预训练权重
 
@@ -108,20 +119,19 @@ bash trainval_s1gfloods.sh
 
 ```bash
 cd HA-CQI
-DATASET_NAME=S1GFloods_CD_DINO \
+DATASET_NAME=S1GFloods_CD_DINO_BG_75_25 \
 DATA_ROOT=../datasets \
 RUN_NAME=S1GFloods-HA-CQI-vits16 \
 BATCH_SIZE=6 \
-BEST_METRIC=tiny_safe_combo \
 EVAL_FG_THRESHOLD=0.40 \
 bash trainval_s1gfloods.sh
 ```
 
 默认训练脚本使用以下关键配置：
 
-- `DATASET_NAME=S1GFloods_CD_DINO`
+- `DATASET_NAME=S1GFloods_CD_DINO_BG_75_25`
 - `DATA_ROOT=../datasets`
-- `STATS_FILE=../datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json`
+- `STATS_FILE=../datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json`
 - `DINO_ARCH=dinov3_vits16`
 - `DINO_WEIGHT=dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth`
 - `BACKBONE=efficientnet_b0`
@@ -129,8 +139,27 @@ bash trainval_s1gfloods.sh
 - `NUM_CHANGE_QUERIES=16`
 - `MASK_QUERIES=32`
 - `MASK_DECODER_LAYERS=3`
-- `BEST_METRIC=tiny_safe_combo`
-- `EVAL_FG_THRESHOLD=0.40`
+- `EVAL_FG_THRESHOLD=0.40`（仅用于 validation 细粒度诊断）
+- `SEED=1`
+- `FOCAL_BG_WEIGHT=0.25`、`FOCAL_FG_WEIGHT=0.75`
+- `DINO_INPUT_NORM=shared`
+
+新训练在 validation 的 `0.05–0.95`（步长 `0.01`）阈值网格上按
+`Flood IoU → Precision → 较高 threshold` 联合选择，只生成：
+
+```text
+<run>_<backbone>_best_primary.pth
+<run>_<backbone>_last.pth
+<run>_<backbone>_epoch10.pth ...
+selection.json
+metrics.jsonl
+options.json
+```
+
+完整续训使用 `RESUME=/path/to/*_last.pth`；仅初始化网络使用
+`python trainval.py ... --init_checkpoint /path/to/checkpoint.pth`。resume 会校验数据指纹和
+训练/loss/模型配置。`--resume`、`--init_checkpoint`、测试和推理入口均只接受 checkpoint v2。
+`S1GFloods-HA-CQI-vits16-20260427/` 及其结果保留为磁盘归档，当前代码不支持加载。
 
 训练结果写入：
 
@@ -153,11 +182,7 @@ SOFT_ALIGNMENT=0 RUN_NAME=S1GFloods-HA-CQI-noalign bash trainval_s1gfloods.sh
 ```bash
 cd HA-CQI
 python test.py \
-  --name <resolved_run_name> \
-  --dataset S1GFloods_CD_DINO \
-  --dataroot ../datasets \
-  --dataset_mode sar \
-  --stats_file ../datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+  --checkpoint checkpoints/<resolved_run_name>/<run>_efficientnet_b0_best_primary.pth \
   --gpu_ids 0 \
   --save_test
 ```
@@ -175,11 +200,7 @@ HA-CQI/checkpoints/<resolved_run_name>/pred/
 ```bash
 cd HA-CQI
 python run.py \
-  --name <resolved_run_name> \
-  --dataset S1GFloods_CD_DINO \
-  --dataroot ../datasets \
-  --dataset_mode sar \
-  --stats_file ../datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+  --checkpoint checkpoints/<resolved_run_name>/<run>_efficientnet_b0_best_primary.pth \
   --img_A /path/to/pre_image.tif \
   --img_B /path/to/post_image.tif \
   --output outputs/run_pred.png \
@@ -196,51 +217,37 @@ python run.py \
 ```bash
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint HA-CQI/checkpoints/<resolved_run_name>/<checkpoint>.pth \
-  --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
   --gpu_ids 0 \
-  --batch_size 6 \
-  --threshold 0.40 \
-  --output-dir HA-CQI/outputs/gf3_henan
+  --batch_size 8 \
+  --output-dir HA-CQI/outputs/gf3_henan_corrected
 ```
+
+stats 默认从 checkpoint v2 metadata 解析。推理阈值只允许两种来源：显式
+`--threshold`，或 checkpoint 的 `meta.selection.threshold`；两者都缺失时直接失败。
 
 涿州 GF3 场景使用同一入口，仅替换瓦片根目录和输出目录：
 
 ```bash
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Zhuozhou_CD_infer \
-  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-vits16-20260427/S1GFloods-HA-CQI-vits16-20260427_efficientnet_b0_best_iou.pth \
-  --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
   --gpu_ids 0 \
-  --batch_size 6 \
-  --threshold 0.40 \
-  --output-dir HA-CQI/outputs/gf3_zhuozhou
+  --batch_size 8 \
+  --output-dir HA-CQI/outputs/gf3_zhuozhou_corrected
 ```
 
-广西 LT-1场景测试：
+广西 LT-1 场景测试：
 
 ```bash
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/LT1_Guangxi_CD_infer \
-  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-vits16-20260427/S1GFloods-HA-CQI-vits16-20260427_efficientnet_b0_best_iou.pth \
-  --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
+  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
   --gpu_ids 0 \
-  --batch_size 6 \
-  --threshold 0.40 \
-  --output-dir HA-CQI/outputs/lt1_guangxi_best_iou
-```
-
-python HA-CQI/scripts/infer_gf3_henan_tiles.py \
-  --tiles-root datasets/LT1_Guangxi_CD_infer \
-  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-vits16-20260427/S1GFloods-HA-CQI-vits16-20260427_efficientnet_b0_best_iou.pth \
-  --backbone_weight HA-CQI/pretrained/efficientnet_b0_ra-3dd342df.pth \
-  --dino_weight HA-CQI/dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth \
-  --stats_file datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json \
-  --gpu_ids 0 \
-  --batch_size 6 \
-  --threshold 0.40 \
+  --batch_size 8 \
   --skip-tiles \
-  --output-dir HA-CQI/outputs/lt1_guangxi_best_iou
+  --output-dir HA-CQI/outputs/lt1_guangxi_corrected
+```
 
 默认会保存切片级结果和整景拼接结果。整景输出位于 `<output-dir>/mosaic/`，包括：
 
@@ -254,6 +261,18 @@ change_binary.tif/png      # 一致性伪斑过滤后的二值结果
 如需只保留原始拼接结果，可传入 `--disable_blob_filter`；如需跳过切片级 PNG/TIF 保存，可传入
 `--skip-tiles`。
 
+## 整景评估
+
+```bash
+python HA-CQI/scripts/evaluate_sar_scene.py \
+  --prediction-dir HA-CQI/outputs/gf3_zhuozhou \
+  --ground-truth datasets/GF3_Zhuozhou/GF3_Zhuozhou_label.tif
+```
+
+评估器排除 metadata nodata 和历史标签值 `3`，并同时报告 raw/filtered 的 IoU、F1、P/R、
+PR-AUC、Brier、ECE、背景 tile FP、FP 像素比例、最大/P95 FP 连通域及 tiny/small/large
+coverage recall。河南只用于外部校准/诊断，涿州作为锁定测试，不参与训练 epoch 选择。
+
 ## 代码校验
 
 修改核心代码后，在 `HA-CQI` 目录执行：
@@ -266,9 +285,12 @@ python -m py_compile \
   model/modules/*.py \
   model/decode_heads/*.py \
   model/engine.py \
+  model/checkpointing.py \
   trainval.py \
   test.py \
   run.py
+
+python -m unittest tests/test_pipeline_contracts.py
 
 bash -n trainval_s1gfloods.sh trainval.sh
 ```

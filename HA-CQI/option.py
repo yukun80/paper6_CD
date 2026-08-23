@@ -6,6 +6,7 @@ from typing import List
 import torch
 
 from model.modules.dino_meta import DINO_ARCH_CHOICES, resolve_dino_arch, resolve_extract_ids
+from utils.provenance import sha256_file
 
 
 OPTICAL_MEAN = [0.430, 0.411, 0.296]
@@ -13,8 +14,8 @@ OPTICAL_STD = [0.213, 0.156, 0.143]
 PROJECT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PROJECT_DIR.parent
 DEFAULT_DATA_ROOT = "../datasets"
-DEFAULT_DATASET = "S1GFloods_CD_DINO"
-DEFAULT_STATS_FILE = "../datasets/S1GFloods_CD_DINO/channel_stats_s1gfloods_train.json"
+DEFAULT_DATASET = "S1GFloods_CD_DINO_BG_75_25"
+DEFAULT_STATS_FILE = "../datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json"
 DEFAULT_DINO_WEIGHT = "dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth"
 DEFAULT_BACKBONE_WEIGHT = "pretrained/efficientnet_b0_ra-3dd342df.pth"
 
@@ -25,9 +26,10 @@ def _resolve_repo_relative_path(path_str: str) -> str:
     if path.is_absolute():
         return str(path)
 
-    candidate = (PROJECT_DIR / path).resolve()
-    if candidate.exists():
-        return str(candidate)
+    for base_dir in (PROJECT_DIR, REPO_ROOT):
+        candidate = (base_dir / path).resolve()
+        if candidate.exists():
+            return str(candidate)
     return path_str
 
 
@@ -50,6 +52,7 @@ def _resolve_project_output_path(path_str: str) -> str:
     if path.is_absolute():
         return str(path)
     return str((PROJECT_DIR / path).resolve())
+
 
 def _parse_float_list(values: List[str] | None, field_name: str) -> List[float] | None:
     if values is None:
@@ -111,6 +114,43 @@ def resolve_norm_stats(opt) -> tuple[List[float], List[float]]:
     return OPTICAL_MEAN.copy(), OPTICAL_STD.copy()
 
 
+def validate_stats_provenance(opt) -> None:
+    """新格式数据必须使用同一 dataset fingerprint 计算的统计量。"""
+    if not opt.stats_file:
+        return
+    report_path = Path(opt.dataroot) / str(opt.dataset) / "split_report.json"
+    stats_path = Path(opt.stats_file)
+    if not report_path.is_file() or not stats_path.is_file():
+        return
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    stats = json.loads(stats_path.read_text(encoding="utf-8"))
+    expected = report.get("dataset_fingerprint")
+    observed = stats.get("dataset_fingerprint")
+    if expected and not observed:
+        raise ValueError(
+            f"Stats file lacks dataset_fingerprint required by {report_path}: {stats_path}"
+        )
+    if expected and str(observed) != str(expected):
+        raise ValueError(
+            "Dataset/stats fingerprint mismatch: "
+            f"dataset={expected}, stats={observed}, stats_file={stats_path}"
+        )
+    stats_split = str(stats.get("split", "train"))
+    if stats_split != "train":
+        raise ValueError(f"HA-CQI normalization stats must use train split, got: {stats_split}")
+    manifest_path = report_path.parent / f"manifest_{stats_split}.csv"
+    expected_manifest_sha = stats.get("manifest_sha256")
+    if expected_manifest_sha:
+        if not manifest_path.is_file():
+            raise FileNotFoundError(f"Stats manifest not found: {manifest_path}")
+        actual_manifest_sha = sha256_file(manifest_path)
+        if str(expected_manifest_sha) != actual_manifest_sha:
+            raise ValueError(
+                "Stats/split manifest mismatch: "
+                f"stats={expected_manifest_sha}, manifest={actual_manifest_sha}, path={manifest_path}"
+            )
+
+
 class Options:
     def __init__(self):
         self.parser = argparse.ArgumentParser()
@@ -137,17 +177,25 @@ class Options:
             default="./checkpoints",
             help="models are saved here",
         )
-        
+        self.parser.add_argument(
+            "--checkpoint",
+            type=str,
+            default="",
+            help="测试/推理使用的显式 checkpoint 路径；训练保存目录仍由 checkpoint_dir 控制。",
+        )
+        self.parser.add_argument(
+            "--threshold",
+            type=float,
+            default=None,
+            help="测试/推理显式阈值；为空时从 checkpoint metadata 自动解析。",
+        )
+
         self.parser.add_argument(
             "--save_test", action="store_true"
         )
         self.parser.add_argument(
-            "--result_dir", type=str, default="./results", help="results are saved here"
-        )
-        self.parser.add_argument(
             "--vis_path", type=str, default="vis", help="results are saved here"
         )
-        self.parser.add_argument("--load_pretrain", action='store_true')
 
         self.parser.add_argument("--phase", type=str, default="train")
         self.parser.add_argument(
@@ -175,7 +223,6 @@ class Options:
             default=DEFAULT_DINO_WEIGHT,
             help="DINOv3 预训练权重路径（相对当前工作目录或绝对路径）。",
         )
-        self.parser.add_argument("--fpn", type=str, default="fpn")
         self.parser.add_argument("--fpn_channels", type=int, default=128)
         self.parser.add_argument("--deform_groups", type=int, default=4)
         self.parser.add_argument("--gamma_mode", type=str, default="SE")
@@ -257,7 +304,6 @@ class Options:
             default=4,
             help="Mask2Former-style transformer decoder 注意力头数。",
         )
-        self.parser.add_argument('--n_layers', nargs='+', type=int, default=[1, 1, 1, 1])
         self.parser.add_argument(
             '--extract_ids',
             nargs='+',
@@ -265,10 +311,24 @@ class Options:
             default=None,
             help="从 DINO 主干抽取的层号；默认按 --dino_arch 自动选择。",
         )
-        self.parser.add_argument("--alpha", type=float, default=0.25)
+        self.parser.add_argument(
+            "--dino_input_norm",
+            type=str,
+            default="shared",
+            choices=["shared", "imagenet"],
+            help="DINO 输入归一化；shared 保持旧行为，imagenet 使用预训练统计。",
+        )
+        self.parser.add_argument(
+            "--focal_class_weights",
+            nargs=2,
+            type=float,
+            default=[0.25, 0.75],
+            metavar=("BACKGROUND", "FOREGROUND"),
+            help="Focal loss 的背景/前景权重，解析后归一化为和 1。",
+        )
         self.parser.add_argument("--gamma", type=float, default=2.0, help="gamma for Focal loss")
 
-        self.parser.add_argument("--batch_size", type=int, default=16)
+        self.parser.add_argument("--batch_size", type=int, default=6)
         self.parser.add_argument("--num_epochs", type=int, default=100)
         self.parser.add_argument("--input_size", type=int, default=256, help="训练/推理默认输入尺寸")
         self.parser.add_argument("--num_workers", type=int, default=4, help="#threads for loading data")
@@ -353,7 +413,41 @@ class Options:
             help="AMP autocast 精度类型；默认 fp16，数值不稳定时可切换 bf16。",
         )
         self.parser.add_argument(
-            "--split_seed", type=int, default=42, help="S1GFloods 划分脚本与实验配置的默认随机种子"
+            "--grad_scaler_init_scale",
+            type=float,
+            default=4096.0,
+            help="fp16 GradScaler 初始 scale；较低默认值避免复杂 HA-CQI 首步连续溢出。",
+        )
+        self.parser.add_argument("--seed", type=int, default=1, help="模型、训练与 DataLoader 随机种子")
+        self.parser.add_argument(
+            "--deterministic",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help="启用可复现的 cuDNN/DataLoader 配置。",
+        )
+        self.parser.add_argument(
+            "--max_train_steps",
+            type=int,
+            default=-1,
+            help="每个 epoch 最多训练 step；-1 表示完整 epoch，仅用于冒烟诊断。",
+        )
+        self.parser.add_argument(
+            "--max_val_steps",
+            type=int,
+            default=-1,
+            help="每个 epoch 最多验证 step；-1 表示完整验证，仅用于冒烟诊断。",
+        )
+        self.parser.add_argument(
+            "--resume",
+            type=str,
+            default="",
+            help="checkpoint v2 路径；恢复完整训练状态。",
+        )
+        self.parser.add_argument(
+            "--init_checkpoint",
+            type=str,
+            default="",
+            help="仅加载显式 checkpoint 的网络参数。",
         )
         self.parser.add_argument(
             "--stats_file",
@@ -388,26 +482,34 @@ class Options:
         self.parser.add_argument(
             "--eval_fg_threshold",
             type=float,
-            default=0.5,
-            help="验证/测试时前景概率阈值，替代硬编码 argmax 以提升 tiny flood 召回调节能力。",
+            default=0.40,
+            help="仅用于 validation 细粒度诊断，不参与 checkpoint 选择或推理阈值回退。",
         )
         self.parser.add_argument(
-            "--eval_thresholds",
-            nargs="+",
+            "--threshold_min",
             type=float,
-            default=[],
-            help="可选验证阈值扫描列表，仅用于日志诊断，不影响 best checkpoint 选择。",
+            default=0.05,
+            help="联合选择的最小验证阈值。",
         )
         self.parser.add_argument(
-            "--best_metric",
-            type=str,
-            default="tiny_safe_combo",
-            choices=["iou_1", "tiny_recall", "tiny_combo", "tiny_safe_combo"],
-            help="标准 best 权重保存依据；tiny-heavy 场景建议使用 tiny_safe_combo。",
+            "--threshold_max",
+            type=float,
+            default=0.95,
+            help="联合选择的最大验证阈值。",
+        )
+        self.parser.add_argument(
+            "--threshold_step",
+            type=float,
+            default=0.01,
+            help="联合选择的验证阈值步长。",
         )
     def parse(self):
         self.init()
-        self.opt = self.parser.parse_args()
+        return self.prepare(self.parser.parse_args())
+
+    def prepare(self, opt):
+        """校验并解析已由 HA-CQI 参数解析器产生的 Namespace。"""
+        self.opt = opt
 
         if self.opt.dataset_mode == "auto":
             if str(self.opt.dataset).startswith("S1GFloods"):
@@ -430,6 +532,12 @@ class Options:
         if self.opt.stats_file:
             self.opt.stats_file = _resolve_existing_project_path(self.opt.stats_file)
         self.opt.checkpoint_dir = _resolve_project_output_path(self.opt.checkpoint_dir)
+        if self.opt.checkpoint:
+            self.opt.checkpoint = _resolve_existing_project_path(self.opt.checkpoint)
+        if self.opt.resume:
+            self.opt.resume = _resolve_existing_project_path(self.opt.resume)
+        if self.opt.init_checkpoint:
+            self.opt.init_checkpoint = _resolve_existing_project_path(self.opt.init_checkpoint)
 
         self.opt.dino_weight = _resolve_repo_relative_path(self.opt.dino_weight)
         if self.opt.backbone_weight:
@@ -460,6 +568,11 @@ class Options:
             raise ValueError("--mask_heads must be a positive integer")
         if self.opt.head_lr_mult <= 0.0:
             raise ValueError("--head_lr_mult must be positive")
+        focal_weights = [float(value) for value in self.opt.focal_class_weights]
+        if any(value < 0.0 for value in focal_weights) or sum(focal_weights) <= 0.0:
+            raise ValueError("--focal_class_weights must be non-negative with a positive sum")
+        focal_weight_sum = sum(focal_weights)
+        self.opt.focal_class_weights = [value / focal_weight_sum for value in focal_weights]
         if self.opt.aux_loss_weight < 0.0:
             raise ValueError("--aux_loss_weight must be non-negative")
         if self.opt.aux_loss_weight_end < 0.0:
@@ -480,15 +593,32 @@ class Options:
             raise ValueError("--consistency_warmup_epochs must be >= 0")
         if self.opt.consistency_ramp_epochs < 1:
             raise ValueError("--consistency_ramp_epochs must be >= 1")
+        if self.opt.grad_scaler_init_scale <= 0.0:
+            raise ValueError("--grad_scaler_init_scale must be positive")
         if not 0.0 <= self.opt.eval_fg_threshold <= 1.0:
             raise ValueError("--eval_fg_threshold must be within [0, 1]")
-        self.opt.eval_thresholds = [float(v) for v in self.opt.eval_thresholds]
-        invalid_eval_thresholds = [v for v in self.opt.eval_thresholds if not 0.0 <= v <= 1.0]
-        if invalid_eval_thresholds:
-            raise ValueError(f"--eval_thresholds must be within [0, 1], got {invalid_eval_thresholds}")
+        if not 0.0 <= self.opt.threshold_min <= self.opt.threshold_max <= 1.0:
+            raise ValueError("threshold range must satisfy 0 <= min <= max <= 1")
+        if self.opt.threshold_step <= 0.0:
+            raise ValueError("--threshold_step must be positive")
+        if self.opt.max_train_steps == 0 or self.opt.max_train_steps < -1:
+            raise ValueError("--max_train_steps must be -1 or positive")
+        if self.opt.max_val_steps == 0 or self.opt.max_val_steps < -1:
+            raise ValueError("--max_val_steps must be -1 or positive")
+        if self.opt.resume and self.opt.init_checkpoint:
+            raise ValueError("--resume and --init_checkpoint are mutually exclusive")
+        if self.opt.resume and not Path(self.opt.resume).is_file():
+            raise FileNotFoundError(f"Resume checkpoint not found: {self.opt.resume}")
+        if self.opt.init_checkpoint and not Path(self.opt.init_checkpoint).is_file():
+            raise FileNotFoundError(f"Initialization checkpoint not found: {self.opt.init_checkpoint}")
+        if self.opt.checkpoint and not Path(self.opt.checkpoint).is_file():
+            raise FileNotFoundError(f"Checkpoint not found: {self.opt.checkpoint}")
+        if self.opt.threshold is not None and not 0.0 <= self.opt.threshold <= 1.0:
+            raise ValueError("--threshold must be within [0, 1]")
         if self.opt.small_area_thresh < self.opt.tiny_area_thresh:
             raise ValueError("--small_area_thresh must be >= --tiny_area_thresh")
         self.opt.mean, self.opt.std = resolve_norm_stats(self.opt)
+        validate_stats_provenance(self.opt)
 
         args = vars(self.opt)
 

@@ -1,0 +1,196 @@
+"""HA-CQI checkpoint v2 的严格加载、配置解析与原子保存。"""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+from typing import Any
+
+import torch
+from torch import nn
+
+
+CHECKPOINT_FORMAT_VERSION = 2
+
+# 仅这些字段会改变推理网络的构建方式。Loss、optimizer 和验证参数不属于模型结构。
+INFERENCE_MODEL_CONFIG_FIELDS = frozenset(
+    {
+        "backbone",
+        "backbone_weight",
+        "fpn_channels",
+        "deform_groups",
+        "gamma_mode",
+        "beta_mode",
+        "disable_soft_alignment",
+        "align_window",
+        "align_points",
+        "align_heads",
+        "align_on_levels",
+        "align_qkv_bias",
+        "align_offset_groups",
+        "num_change_queries",
+        "cqi_heads",
+        "mask_dim",
+        "mask_queries",
+        "mask_decoder_layers",
+        "mask_heads",
+        "dino_arch",
+        "dino_weight",
+        "extract_ids",
+        "dino_input_norm",
+        "input_mean",
+        "input_std",
+    }
+)
+LIST_MODEL_CONFIG_FIELDS = frozenset(
+    {"align_on_levels", "extract_ids", "input_mean", "input_std"}
+)
+MODEL_CONFIG_OPTION_FIELDS = {
+    "input_mean": "mean",
+    "input_std": "std",
+}
+
+
+def validate_checkpoint_v2(payload: dict[str, Any]) -> dict[str, Any]:
+    """验证 checkpoint v2 顶层契约并返回 metadata。"""
+    meta = payload.get("meta")
+    if (
+        not isinstance(meta, dict)
+        or int(meta.get("format_version", 0)) != CHECKPOINT_FORMAT_VERSION
+    ):
+        raise ValueError(
+            "HA-CQI only supports checkpoint format v2; legacy/raw checkpoints are unsupported"
+        )
+    state = payload.get("network")
+    if (
+        not isinstance(state, dict)
+        or not state
+        or not all(
+            isinstance(key, str) and torch.is_tensor(value)
+            for key, value in state.items()
+        )
+    ):
+        raise ValueError("Checkpoint v2 must contain a non-empty tensor network state_dict")
+    return meta
+
+
+def load_checkpoint_payload(
+    checkpoint_path: str | Path,
+    map_location: str | torch.device = "cpu",
+) -> dict[str, Any]:
+    path = Path(checkpoint_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"Checkpoint not found: {path}")
+    payload = torch.load(path, map_location=map_location, weights_only=True)
+    if not isinstance(payload, dict):
+        raise ValueError(f"Unsupported checkpoint payload type: {type(payload)}")
+    validate_checkpoint_v2(payload)
+    return payload
+
+
+def extract_network_state(payload: dict[str, Any]) -> dict[str, torch.Tensor]:
+    validate_checkpoint_v2(payload)
+    return payload["network"]
+
+
+def load_network_state(
+    network: nn.Module,
+    checkpoint_path: str | Path,
+    *,
+    strict: bool = True,
+    map_location: str | torch.device = "cpu",
+) -> dict[str, Any]:
+    payload = load_checkpoint_payload(checkpoint_path, map_location=map_location)
+    state = extract_network_state(payload)
+    missing, unexpected = network.load_state_dict(state, strict=strict)
+    if strict and (missing or unexpected):
+        raise RuntimeError(
+            f"Strict checkpoint load failed: missing={missing}, unexpected={unexpected}"
+        )
+    return payload
+
+
+def checkpoint_model_config(payload: dict[str, Any]) -> dict[str, Any]:
+    meta = validate_checkpoint_v2(payload)
+    model_config = meta.get("model_config")
+    if not isinstance(model_config, dict) or not model_config:
+        raise ValueError("Checkpoint v2 inference requires non-empty meta.model_config")
+    if model_config.get("architecture") != "HA-CQI":
+        raise ValueError("Checkpoint v2 meta.model_config.architecture must be 'HA-CQI'")
+    missing = sorted(INFERENCE_MODEL_CONFIG_FIELDS.difference(model_config))
+    if missing:
+        raise ValueError(
+            "Checkpoint v2 meta.model_config lacks required inference fields: "
+            + ", ".join(missing)
+        )
+    return model_config
+
+
+def checkpoint_data_config(payload: dict[str, Any]) -> dict[str, Any] | None:
+    meta = validate_checkpoint_v2(payload)
+    data_config = meta.get("data_config")
+    return data_config if isinstance(data_config, dict) else None
+
+
+def resolve_inference_threshold(
+    payload: dict[str, Any],
+    explicit_threshold: float | None = None,
+) -> tuple[float, str]:
+    """按“显式 CLI → checkpoint selection”解析推理阈值，不提供隐式回退。"""
+    meta = validate_checkpoint_v2(payload)
+    if explicit_threshold is not None:
+        threshold = float(explicit_threshold)
+        source = "explicit_cli"
+    else:
+        selection = meta.get("selection")
+        if not isinstance(selection, dict) or selection.get("threshold") is None:
+            raise ValueError(
+                "Inference requires --threshold or checkpoint v2 meta.selection.threshold"
+            )
+        threshold = float(selection["threshold"])
+        source = "checkpoint_selection"
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError(f"Inference threshold must be within [0, 1], got {threshold}")
+    return threshold, source
+
+
+def apply_checkpoint_model_config(
+    opt: Any,
+    model_config: dict[str, Any],
+    explicit_overrides: set[str],
+) -> Any:
+    """用 v2 结构配置补全推理参数，不覆盖用户显式 CLI。"""
+    for field in INFERENCE_MODEL_CONFIG_FIELDS:
+        option_field = MODEL_CONFIG_OPTION_FIELDS.get(field, field)
+        if option_field in explicit_overrides or field not in model_config:
+            continue
+        value = model_config[field]
+        if field in LIST_MODEL_CONFIG_FIELDS and value is not None:
+            converter = float if field in {"input_mean", "input_std"} else int
+            value = [converter(item) for item in value]
+        setattr(opt, option_field, value)
+    return opt
+
+
+def cpu_state_dict(network: nn.Module) -> dict[str, torch.Tensor]:
+    """复制 CPU state_dict，不改变在线网络设备。"""
+    return {key: value.detach().cpu() for key, value in network.state_dict().items()}
+
+
+def atomic_torch_save(payload: dict[str, Any], path_like: str | Path) -> Path:
+    path = Path(path_like)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    torch.save(payload, temporary)
+    os.replace(temporary, path)
+    return path
+
+
+def atomic_json_save(payload: dict[str, Any], path_like: str | Path) -> Path:
+    path = Path(path_like)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(temporary, path)
+    return path

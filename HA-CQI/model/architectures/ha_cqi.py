@@ -12,7 +12,6 @@ class HACQIModel(nn.Module):
         self,
         backbone: str = "efficientnet_b0",
         fpn_channels: int = 128,
-        n_layers=None,
         disable_soft_alignment: bool = False,
         align_window: int = 5,
         align_points: int = 9,
@@ -29,7 +28,6 @@ class HACQIModel(nn.Module):
         **kwargs,
     ):
         super().__init__()
-        del n_layers
         self.encoder = HierarchicalCnnDinoEncoder(backbone=backbone, fpn_channels=fpn_channels, **kwargs)
         self.ha = HarmonizedAlignment(
             channels=fpn_channels,
