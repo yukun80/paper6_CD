@@ -1,6 +1,13 @@
 %% Elsevier manuscript translated and adapted from paper6/jstar.tex
-% \documentclass[preprint,12pt,authoryear]{elsarticle}
-\documentclass[final,5p,times,twocolumn,authoryear]{elsarticle}
+\documentclass[authoryear,preprint,12pt]{elsarticle}
+
+\usepackage[
+  a4paper,
+  left=20mm,
+  right=20mm,
+  top=20mm,
+  bottom=20mm
+]{geometry}
 
 \usepackage{amssymb}
 \usepackage{amsmath}
@@ -15,6 +22,8 @@
 \usepackage{adjustbox}
 \usepackage[table]{xcolor}
 \usepackage{lineno}
+\modulolinenumbers[1]
+\usepackage{setspace}
 \usepackage{threeparttable}
 \usepackage{threeparttablex}
 \usepackage{tikz}
@@ -55,13 +64,16 @@
 
 \makeatletter
 \setlength{\@fptop}{0pt}
+\let\ps@pprintTitle\ps@plain
 \makeatother
 \setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
 
-\linenumbers
 \journal{Journal of Hydrology}
 
 \begin{document}
+\doublespacing
+\pagenumbering{arabic}
+\pagestyle{plain}
 
 \begin{frontmatter}
 
@@ -114,15 +126,15 @@
   country={China}
 }
 
-\begin{abstract}
-Rapid urban flood emergency interpretation requires both flood extent and depth information. Synthetic aperture radar (SAR) can observe newly inundated areas under adverse weather conditions, but strong scattering, shadows, speckle noise, and residual misregistration in complex built-up environments weaken the comparability of pre- and post-event features. Meanwhile, the flood extent derived from change detection mainly describes newly inundated areas and usually excludes permanent water bodies, so its boundary elevation conditions differ from those of a complete flood-period water surface, limiting direct digital elevation model (DEM)-based depth estimation. This paper proposes an extent-to-depth urban flood mapping framework for bi-temporal SAR imagery, consisting of Harmonized Alignment and Change Query Interaction (HA-CQI) and Change-defined Flood Depth Estimation (CFDepth). HA-CQI improves bi-temporal feature comparability through harmonized alignment and aggregates flood-related changes through change query interaction to generate a flood extent map. CFDepth then estimates first-order flood depth within connected components of the change-defined flood support by combining this extent input with DEM constraints. Experiments on public SAR flood datasets and two GF3 urban flood cases, Zhengzhou 2021 and Zhuozhou 2023, show that HA-CQI achieves IoU values of 73.38\% and 86.23\%, respectively, outperforming representative change-detection baselines. Under the same flood support and DEM conditions, CFDepth increases the valid depth ratio from 74.65\% and 65.92\% to 97.83\% and 96.38\%, respectively, and its depth classes around eight field-photo reference points are generally consistent with photo-estimated depth intervals. The results indicate that the proposed framework provides more stable flood extent mapping and DEM-constrained first-order depth estimation for complex urban flood events. The source code is available at \texttt{https://github.com/SAR-Disaster/HA-CQI-CFDepth}.
-\end{abstract}
-
-\begin{keyword}
-Urban flood mapping \sep Bi-temporal SAR \sep Change detection \sep DEM-constrained flood depth estimation 
-\end{keyword}
-
 \end{frontmatter}
+\linenumbers
+
+\noindent\textbf{Abstract}\par
+\medskip
+Rapid urban flood emergency interpretation requires both flood extent and depth information. Synthetic aperture radar (SAR) can observe newly inundated areas under adverse weather conditions, but strong scattering, shadows, speckle noise, and residual misregistration in complex built-up environments weaken the comparability of pre- and post-event features. Meanwhile, the flood extent derived from change detection mainly describes newly inundated areas and usually excludes permanent water bodies, so its boundary elevation conditions differ from those of a complete flood-period water surface, limiting direct digital elevation model (DEM)-based depth estimation. This paper proposes an extent-to-depth urban flood mapping framework for bi-temporal SAR imagery, consisting of Harmonized Alignment and Change Query Interaction (HA-CQI) and Change-defined Flood Depth Estimation (CFDepth). HA-CQI improves bi-temporal feature comparability through harmonized alignment and aggregates flood-related changes through change query interaction to generate a flood extent map. CFDepth then estimates first-order flood depth within connected components of the change-defined flood support by combining this extent input with DEM constraints. Experiments on public SAR flood datasets and two GF3 urban flood cases, Zhengzhou 2021 and Zhuozhou 2023, show that HA-CQI achieves IoU values of 73.38\% and 86.23\%, respectively, outperforming representative change-detection baselines. Under the same flood support and DEM conditions, CFDepth increases the valid depth ratio from 74.65\% and 65.92\% to 97.83\% and 96.38\%, respectively, and its depth classes around eight field-photo reference points are generally consistent with photo-estimated depth intervals. The results indicate that the proposed framework provides more stable flood extent mapping and DEM-constrained first-order depth estimation for complex urban flood events. The source code is available at \texttt{https://github.com/SAR-Disaster/HA-CQI-CFDepth}.
+\par
+\medskip
+\noindent\textit{Keywords: }Urban flood mapping, Bi-temporal SAR, Change detection, DEM-constrained flood depth estimation
 
 \section{Introduction}
 
@@ -581,7 +593,9 @@ This study proposes an extent-to-depth urban flood mapping framework for bi-temp
 
 \section*{Acknowledgements}
 
+\begin{sloppypar}
 This work was supported by the National Key R\&D Program of China (Grant No. 2024YFC3808602). The authors thank Prof. Shuliang Zhang from Nanjing Normal University for his valuable assistance with this research.
+\end{sloppypar}
 
 \bibliographystyle{elsarticle-harv}
 \bibliography{reference}
