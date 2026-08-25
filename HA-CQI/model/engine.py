@@ -10,9 +10,11 @@ import torch.nn.functional as F
 import torch.optim as optim
 
 from .architectures import HACQIModel
+from .backbones import DEFAULT_BACKBONE_NAME
 from .checkpointing import (
     CHECKPOINT_FORMAT_VERSION,
     atomic_torch_save,
+    checkpoint_model_config,
     cpu_state_dict,
     load_checkpoint_payload,
     load_network_state,
@@ -26,9 +28,9 @@ PROJECT_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = PROJECT_DIR.parent
 
 
-def build_hacqi_model(backbone_name="efficientnet_b0", fpn_channels=128, **kwargs):
+def build_hacqi_model(fpn_channels=128, **kwargs):
     """构建 HA-CQI 网络主体。"""
-    return HACQIModel(backbone=backbone_name, fpn_channels=fpn_channels, **kwargs)
+    return HACQIModel(fpn_channels=fpn_channels, **kwargs)
 
 
 def resolve_unique_run_name(checkpoint_dir: str, base_name: str) -> str:
@@ -75,7 +77,6 @@ class HACQIEngine(nn.Module):
         print(f"save_dir resolved to: {self.save_dir}")
 
         self.model = build_hacqi_model(
-            backbone_name=opt.backbone,
             backbone_weight=opt.backbone_weight,
             fpn_channels=opt.fpn_channels,
             deform_groups=opt.deform_groups,
@@ -90,16 +91,11 @@ class HACQIEngine(nn.Module):
             align_offset_groups=opt.align_offset_groups,
             num_change_queries=int(getattr(opt, "num_change_queries", 16)),
             cqi_heads=int(getattr(opt, "cqi_heads", 4)),
-            mask_dim=int(getattr(opt, "mask_dim", 128)),
-            mask_queries=int(getattr(opt, "mask_queries", 32)),
-            mask_decoder_layers=int(getattr(opt, "mask_decoder_layers", 3)),
-            mask_heads=int(getattr(opt, "mask_heads", 4)),
             dino_arch=opt.dino_arch,
             extract_ids=opt.extract_ids,
             dino_weight=opt.dino_weight,
             input_mean=[float(value) for value in opt.mean],
             input_std=[float(value) for value in opt.std],
-            dino_input_norm=str(getattr(opt, "dino_input_norm", "shared")),
             device=self.device,
         )
         self.aux_base_weights = [
@@ -125,7 +121,11 @@ class HACQIEngine(nn.Module):
         amp_enabled = bool(getattr(self.opt, "amp", False)) and self.device.type == "cuda"
         if not amp_enabled:
             return nullcontext()
-        amp_dtype = torch.bfloat16 if str(getattr(self.opt, "amp_dtype", "fp16")).lower() == "bf16" else torch.float16
+        amp_dtype = (
+            torch.bfloat16
+            if str(getattr(self.opt, "amp_dtype", "bf16")).lower() == "bf16"
+            else torch.float16
+        )
         return torch.amp.autocast(device_type=self.device.type, dtype=amp_dtype, enabled=True)
 
     def _loss_autocast_context(self):
@@ -138,57 +138,58 @@ class HACQIEngine(nn.Module):
         head_prefixes = (
             "ha.",
             "cqi.",
-            "mask_head.",
             "aux_heads.",
             "encoder.dino_adapter.",
             "encoder.semantic_fusion.",
-            "encoder.p1_from_p2.",
+            "decoder.",
         )
-        base_params = []
-        head_params = []
+        grouped_params: dict[tuple[str, bool], list[nn.Parameter]] = {
+            ("base", True): [],
+            ("base", False): [],
+            ("head", True): [],
+            ("head", False): [],
+        }
         frozen_params = 0
         for name, param in self.model.named_parameters():
             if not param.requires_grad:
                 frozen_params += param.numel()
                 continue
-            if name.startswith(head_prefixes):
-                head_params.append(param)
-            else:
-                base_params.append(param)
+            scope = "head" if name.startswith(head_prefixes) else "base"
+            use_weight_decay = not bool(getattr(param, "_no_weight_decay", False))
+            grouped_params[(scope, use_weight_decay)].append(param)
 
         param_groups = []
-        if base_params:
-            param_groups.append(
-                {
-                    "params": base_params,
-                    "lr": opt.lr,
-                    "weight_decay": opt.weight_decay,
-                    "name": "base",
-                }
-            )
-        if head_params:
-            param_groups.append(
-                {
-                    "params": head_params,
-                    "lr": opt.lr * float(getattr(opt, "head_lr_mult", 3.0)),
-                    "weight_decay": opt.weight_decay,
-                    "name": "head",
-                }
-            )
+        head_lr = opt.lr * float(getattr(opt, "head_lr_mult", 2.0))
+        for scope in ("base", "head"):
+            for use_weight_decay in (True, False):
+                params = grouped_params[(scope, use_weight_decay)]
+                if not params:
+                    continue
+                param_groups.append(
+                    {
+                        "params": params,
+                        "lr": opt.lr if scope == "base" else head_lr,
+                        "weight_decay": opt.weight_decay if use_weight_decay else 0.0,
+                        "name": scope if use_weight_decay else f"{scope}_no_decay",
+                    }
+                )
+        base_params = grouped_params[("base", True)] + grouped_params[("base", False)]
+        head_params = grouped_params[("head", True)] + grouped_params[("head", False)]
+        no_decay_params = grouped_params[("base", False)] + grouped_params[("head", False)]
         print(
             "optimizer param groups | "
             f"base={sum(p.numel() for p in base_params) / 1e6:.3f}M@{opt.lr:.2e} "
             f"| head={sum(p.numel() for p in head_params) / 1e6:.3f}M@"
-            f"{opt.lr * float(getattr(opt, 'head_lr_mult', 3.0)):.2e} "
+            f"{head_lr:.2e} "
+            f"| no_decay={sum(p.numel() for p in no_decay_params) / 1e6:.3f}M "
             f"| frozen={frozen_params / 1e6:.3f}M"
         )
         return optim.AdamW(param_groups, lr=opt.lr, weight_decay=opt.weight_decay)
 
-    def _query_gate_tensor(self):
-        query_gate = getattr(self.model.mask_head, "query_gate", None)
-        if callable(query_gate):
-            return query_gate().detach()
-        return torch.tensor(float("nan"), device=self.device)
+    def _decoder_diagnostics(self) -> dict[str, torch.Tensor]:
+        """导出 decoder 上下文/细节幅值诊断，不参与反向传播。"""
+        diagnostics = self.model.decoder.diagnostics()
+        return {name: value.detach() for name, value in diagnostics.items()}
 
     @staticmethod
     def _linear_progress(epoch: int | None, total_epochs: int, start_epoch: int = 1) -> float:
@@ -279,7 +280,7 @@ class HACQIEngine(nn.Module):
         return loss / (1.0 + float(len(coarse_preds)))
 
     def forward(self, x1, x2, label, epoch: int | None = None):
-        final_pred, aux_preds = self.model(x1, x2, gt_mask=label)
+        final_pred, aux_preds = self.model(x1, x2)
         label = label.long()
         tversky_alpha, tversky_beta = self._tversky_params(epoch)
         aux_loss_scale = self._aux_loss_scale(epoch)
@@ -328,7 +329,7 @@ class HACQIEngine(nn.Module):
             "coarse_weight": torch.tensor(coarse_weight, device=self.device),
             "aux_loss_scale": torch.tensor(aux_loss_scale, device=self.device),
             "tversky_beta": torch.tensor(tversky_beta, device=self.device),
-            "query_gate": self._query_gate_tensor(),
+            **self._decoder_diagnostics(),
         }
         return final_pred, focal, tversky + consistency
 
@@ -355,7 +356,7 @@ class HACQIEngine(nn.Module):
                 )
         model_config = {
             "architecture": "HA-CQI",
-            "backbone": self.opt.backbone,
+            "backbone": DEFAULT_BACKBONE_NAME,
             "backbone_weight": portable_repo_path(self.opt.backbone_weight, REPO_ROOT),
             "fpn_channels": int(self.opt.fpn_channels),
             "deform_groups": int(self.opt.deform_groups),
@@ -370,14 +371,16 @@ class HACQIEngine(nn.Module):
             "align_offset_groups": int(self.opt.align_offset_groups),
             "num_change_queries": int(getattr(self.opt, "num_change_queries", 16)),
             "cqi_heads": int(getattr(self.opt, "cqi_heads", 4)),
-            "mask_dim": int(getattr(self.opt, "mask_dim", 128)),
-            "mask_queries": int(getattr(self.opt, "mask_queries", 32)),
-            "mask_decoder_layers": int(getattr(self.opt, "mask_decoder_layers", 3)),
-            "mask_heads": int(getattr(self.opt, "mask_heads", 4)),
+            "decoder": "oscd_v1",
+            "decoder_channels": 128,
+            "ssm_state_dim": 1,
+            "ssm_directions": 4,
+            "context_levels": [3, 4, 5],
+            "detail_levels": [2, 1],
             "dino_arch": self.opt.dino_arch,
             "dino_weight": portable_repo_path(self.opt.dino_weight, REPO_ROOT),
             "extract_ids": [int(v) for v in self.opt.extract_ids],
-            "dino_input_norm": str(getattr(self.opt, "dino_input_norm", "shared")),
+            "dino_input_norm": "imagenet",
             "input_mean": [float(v) for v in self.opt.mean],
             "input_std": [float(v) for v in self.opt.std],
         }
@@ -424,7 +427,7 @@ class HACQIEngine(nn.Module):
                 "seed": int(getattr(self.opt, "seed", 1)),
                 "deterministic": bool(getattr(self.opt, "deterministic", True)),
                 "amp": bool(getattr(self.opt, "amp", False)),
-                "amp_dtype": str(getattr(self.opt, "amp_dtype", "fp16")),
+                "amp_dtype": str(getattr(self.opt, "amp_dtype", "bf16")),
                 "grad_scaler_init_scale": float(
                     getattr(self.opt, "grad_scaler_init_scale", 4096.0)
                 ),
@@ -488,6 +491,7 @@ class HACQIEngine(nn.Module):
         data_loader_generator=None,
     ) -> tuple[int, int, dict[str, Any]]:
         payload = load_checkpoint_payload(checkpoint_path, map_location="cpu")
+        checkpoint_model_config(payload)
         meta = payload.get("meta")
         if not isinstance(meta, dict):
             raise ValueError("--resume requires checkpoint v2 metadata")

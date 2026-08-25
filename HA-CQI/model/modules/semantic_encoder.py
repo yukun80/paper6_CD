@@ -1,8 +1,11 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-from ..backbones import DEFAULT_BACKBONE_WEIGHT, build_feature_backbone
+from ..backbones import (
+    DEFAULT_BACKBONE_NAME,
+    DEFAULT_BACKBONE_WEIGHT,
+    build_feature_backbone,
+)
 from ..necks import DsBnRelu, FPN
 from .attention_blocks import CBAM
 from .dino_adapter import DinoPyramidAdapter, DinoV3FeatureExtractor
@@ -35,7 +38,6 @@ class HierarchicalCnnDinoEncoder(nn.Module):
 
     def __init__(
         self,
-        backbone: str = "efficientnet_b0",
         fpn_channels: int = 128,
         deform_groups: int = 4,
         gamma_mode: str = "SE",
@@ -47,21 +49,17 @@ class HierarchicalCnnDinoEncoder(nn.Module):
         extract_ids: list[int] | None = None,
         input_mean: list[float] | None = None,
         input_std: list[float] | None = None,
-        dino_input_norm: str = "shared",
         **kwargs,
     ):
         super().__init__()
         del kwargs
-        self.backbone_name = backbone
-        if dino_input_norm not in {"shared", "imagenet"}:
-            raise ValueError(f"Unsupported dino_input_norm: {dino_input_norm}")
+        self.backbone_name = DEFAULT_BACKBONE_NAME
         input_mean = input_mean or [0.5, 0.5, 0.5]
         input_std = input_std or [0.5, 0.5, 0.5]
         if len(input_mean) != 3 or len(input_std) != 3:
             raise ValueError("input_mean/input_std must contain exactly three values")
         if any(float(value) <= 0.0 for value in input_std):
             raise ValueError("input_std values must be positive")
-        self.dino_input_norm = dino_input_norm
         self.register_buffer(
             "input_mean",
             torch.tensor(input_mean, dtype=torch.float32).view(1, 3, 1, 1),
@@ -82,10 +80,9 @@ class HierarchicalCnnDinoEncoder(nn.Module):
             torch.tensor([0.229, 0.224, 0.225], dtype=torch.float32).view(1, 3, 1, 1),
             persistent=False,
         )
-        self.backbone = build_feature_backbone(backbone, backbone_weight=backbone_weight)
-        self.has_native_p1 = len(self.backbone.channels) == 5
+        self.backbone = build_feature_backbone(backbone_weight=backbone_weight)
         self.neck = FPN(
-            in_channels=self.backbone.channels if self.has_native_p1 else self.backbone.channels[-4:],
+            in_channels=self.backbone.channels,
             out_channels=fpn_channels,
             deform_groups=deform_groups,
             gamma_mode=gamma_mode,
@@ -101,31 +98,19 @@ class HierarchicalCnnDinoEncoder(nn.Module):
             bottleneck=fpn_channels // 2,
         )
         self.semantic_fusion = DinoSemanticFusion(in_dims=[fpn_channels] * 3, hidden_dim=dense_out_dim)
-        self.p1_from_p2 = nn.Sequential(
-            nn.Conv2d(fpn_channels, fpn_channels, 1, bias=False),
-            nn.BatchNorm2d(fpn_channels),
-            nn.SiLU(inplace=True),
-        )
+
+    def prepare_dino_input(self, x: torch.Tensor) -> torch.Tensor:
+        """把 CNN 的数据集归一化输入转换为 DINOv3-LVD 官方输入。"""
+        raw = torch.clamp(x * self.input_std + self.input_mean, 0.0, 1.0)
+        return (raw - self.dino_mean) / self.dino_std
 
     def forward(self, x):
-        cnn_stages = self.backbone.forward(x)
-        pyramid = self.neck(cnn_stages if self.has_native_p1 else cnn_stages[-4:])
+        cnn_stages = self.backbone(x)
+        pyramid = self.neck(cnn_stages)
 
-        dino_input = x
-        if self.dino_input_norm == "imagenet":
-            # 数据层输出已经按 SAR 统计归一化；先恢复 [0,1]，再遵循 DINO LVD 契约。
-            dino_input = torch.clamp(x * self.input_std + self.input_mean, 0.0, 1.0)
-            dino_input = (dino_input - self.dino_mean) / self.dino_std
-        dino_raw = self.dino_extractor(dino_input)
+        dino_raw = self.dino_extractor(self.prepare_dino_input(x))
         dino_features = self.dino_adapter(dino_raw[1:])
 
-        if len(pyramid) == 5:
-            p1, p2, p3, p4, p5 = pyramid
-        else:
-            p1 = self.p1_from_p2(
-                F.interpolate(pyramid[0], scale_factor=2, mode="bilinear", align_corners=False)
-            )
-            p2, p3, p4, p5 = pyramid
-
+        p1, p2, p3, p4, p5 = pyramid
         p3, p4, p5 = self.semantic_fusion((p3, p4, p5), dino_features)
         return p1, p2, p3, p4, p5

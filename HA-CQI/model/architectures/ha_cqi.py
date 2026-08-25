@@ -1,16 +1,15 @@
 import torch
 import torch.nn as nn
 
-from ..decode_heads import Mask2FormerChangeHead, MultiScaleAuxiliaryHead
+from ..decode_heads import MultiScaleAuxiliaryHead, OmniScaleStateSpaceChangeDecoder
 from ..modules import ChangeQueryInteraction, HarmonizedAlignment, HierarchicalCnnDinoEncoder
 
 
 class HACQIModel(nn.Module):
-    """HA-CQI 主模型：Encoder -> HA -> CQI -> Mask2Former change head。"""
+    """HA-CQI 主模型：Encoder -> HA -> CQI -> omni-scale dense decoder。"""
 
     def __init__(
         self,
-        backbone: str = "efficientnet_b0",
         fpn_channels: int = 128,
         disable_soft_alignment: bool = False,
         align_window: int = 5,
@@ -21,14 +20,10 @@ class HACQIModel(nn.Module):
         align_offset_groups: int = 4,
         num_change_queries: int = 16,
         cqi_heads: int = 4,
-        mask_dim: int = 128,
-        mask_queries: int = 32,
-        mask_decoder_layers: int = 3,
-        mask_heads: int = 4,
         **kwargs,
     ):
         super().__init__()
-        self.encoder = HierarchicalCnnDinoEncoder(backbone=backbone, fpn_channels=fpn_channels, **kwargs)
+        self.encoder = HierarchicalCnnDinoEncoder(fpn_channels=fpn_channels, **kwargs)
         self.ha = HarmonizedAlignment(
             channels=fpn_channels,
             disable_soft_alignment=disable_soft_alignment,
@@ -44,12 +39,10 @@ class HACQIModel(nn.Module):
             num_queries=num_change_queries,
             num_heads=cqi_heads,
         )
-        self.mask_head = Mask2FormerChangeHead(
+        self.decoder = OmniScaleStateSpaceChangeDecoder(
             channels=fpn_channels,
-            mask_dim=mask_dim,
-            num_mask_queries=mask_queries,
-            num_decoder_layers=mask_decoder_layers,
-            num_heads=mask_heads,
+            d_state=1,
+            ffn_ratio=4,
         )
         self.aux_heads = MultiScaleAuxiliaryHead(fpn_channels)
 
@@ -58,12 +51,11 @@ class HACQIModel(nn.Module):
         logits, _ = self.forward(x1, x2)
         return logits
 
-    def forward(self, x1, x2, gt_mask=None, current_epoch: int | None = None):
-        del gt_mask, current_epoch
+    def forward(self, x1, x2):
         pre_pyramid = self.encoder(x1)
         post_pyramid = self.encoder(x2)
         aligned_pre, aligned_post = self.ha(pre_pyramid, post_pyramid)
         change_primitives = self.cqi(aligned_pre, aligned_post)
-        final_pred = self.mask_head(change_primitives, x1.shape[-2:])
+        final_pred = self.decoder(change_primitives, x1.shape[-2:])
         aux_preds = self.aux_heads(change_primitives, x1.shape[-2:])
         return final_pred, aux_preds

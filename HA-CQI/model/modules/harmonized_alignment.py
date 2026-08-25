@@ -6,13 +6,13 @@ from .deformable_alignment import DeformableAlignmentBlock
 
 
 class PairSharedStyleCalibration(nn.Module):
-    """PSC：用 pair-shared 统计和源域原型协调 SAR 浅层风格。"""
+    """PSC：用 pair-shared 统计和可学习 canonical affine 协调浅层风格。"""
 
     def __init__(self, channels: int, eps: float = 1e-5):
         super().__init__()
         self.eps = eps
-        self.source_mu = nn.Parameter(torch.zeros(1, channels, 1, 1))
-        self.source_log_std = nn.Parameter(torch.zeros(1, channels, 1, 1))
+        self.canonical_mu = nn.Parameter(torch.zeros(1, channels, 1, 1))
+        self.canonical_log_std = nn.Parameter(torch.zeros(1, channels, 1, 1))
         self.recover = nn.Sequential(
             nn.Conv2d(channels, channels, 3, padding=1, bias=False),
             nn.BatchNorm2d(channels),
@@ -23,9 +23,9 @@ class PairSharedStyleCalibration(nn.Module):
         nn.init.zeros_(self.recover[-2].weight)
 
     def _calibrate_one(self, feat: torch.Tensor, pair_mu: torch.Tensor, pair_std: torch.Tensor) -> torch.Tensor:
-        source_std = F.softplus(self.source_log_std) + self.eps
+        canonical_std = F.softplus(self.canonical_log_std) + self.eps
         normalized = (feat - pair_mu) / pair_std
-        calibrated = normalized * source_std + self.source_mu
+        calibrated = normalized * canonical_std + self.canonical_mu
         return calibrated + self.recover(calibrated)
 
     def forward(self, pre_feat: torch.Tensor, post_feat: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:

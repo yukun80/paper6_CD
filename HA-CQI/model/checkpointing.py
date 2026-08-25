@@ -12,6 +12,16 @@ from torch import nn
 
 
 CHECKPOINT_FORMAT_VERSION = 2
+FIXED_MODEL_CONFIG = {
+    "backbone": "efficientnet_b2",
+    "dino_input_norm": "imagenet",
+    "decoder": "oscd_v1",
+    "decoder_channels": 128,
+    "ssm_state_dim": 1,
+    "ssm_directions": 4,
+    "context_levels": [3, 4, 5],
+    "detail_levels": [2, 1],
+}
 
 # 仅这些字段会改变推理网络的构建方式。Loss、optimizer 和验证参数不属于模型结构。
 INFERENCE_MODEL_CONFIG_FIELDS = frozenset(
@@ -31,10 +41,12 @@ INFERENCE_MODEL_CONFIG_FIELDS = frozenset(
         "align_offset_groups",
         "num_change_queries",
         "cqi_heads",
-        "mask_dim",
-        "mask_queries",
-        "mask_decoder_layers",
-        "mask_heads",
+        "decoder",
+        "decoder_channels",
+        "ssm_state_dim",
+        "ssm_directions",
+        "context_levels",
+        "detail_levels",
         "dino_arch",
         "dino_weight",
         "extract_ids",
@@ -44,7 +56,14 @@ INFERENCE_MODEL_CONFIG_FIELDS = frozenset(
     }
 )
 LIST_MODEL_CONFIG_FIELDS = frozenset(
-    {"align_on_levels", "extract_ids", "input_mean", "input_std"}
+    {
+        "align_on_levels",
+        "context_levels",
+        "detail_levels",
+        "extract_ids",
+        "input_mean",
+        "input_std",
+    }
 )
 MODEL_CONFIG_OPTION_FIELDS = {
     "input_mean": "mean",
@@ -102,6 +121,7 @@ def load_network_state(
     map_location: str | torch.device = "cpu",
 ) -> dict[str, Any]:
     payload = load_checkpoint_payload(checkpoint_path, map_location=map_location)
+    checkpoint_model_config(payload)
     state = extract_network_state(payload)
     missing, unexpected = network.load_state_dict(state, strict=strict)
     if strict and (missing or unexpected):
@@ -118,11 +138,25 @@ def checkpoint_model_config(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Checkpoint v2 inference requires non-empty meta.model_config")
     if model_config.get("architecture") != "HA-CQI":
         raise ValueError("Checkpoint v2 meta.model_config.architecture must be 'HA-CQI'")
+    if model_config.get("decoder") != "oscd_v1":
+        raise ValueError(
+            "HA-CQI OSCD-only decoder contract mismatch: "
+            f"checkpoint decoder={model_config.get('decoder')!r}, required='oscd_v1'"
+        )
     missing = sorted(INFERENCE_MODEL_CONFIG_FIELDS.difference(model_config))
     if missing:
         raise ValueError(
             "Checkpoint v2 meta.model_config lacks required inference fields: "
             + ", ".join(missing)
+        )
+    mismatches = [
+        f"{field}: checkpoint={model_config.get(field)!r}, required={expected!r}"
+        for field, expected in FIXED_MODEL_CONFIG.items()
+        if model_config.get(field) != expected
+    ]
+    if mismatches:
+        raise ValueError(
+            "HA-CQI B2/OSCD-only model contract mismatch: " + "; ".join(mismatches)
         )
     return model_config
 

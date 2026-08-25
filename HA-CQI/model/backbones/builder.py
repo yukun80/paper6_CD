@@ -4,10 +4,9 @@ import timm
 import torch
 import torch.nn as nn
 
-from .mobilenetv2 import mobilenet_v2
-
-
-DEFAULT_BACKBONE_WEIGHT = "pretrained/efficientnet_b0_ra-3dd342df.pth"
+DEFAULT_BACKBONE_NAME = "efficientnet_b2"
+DEFAULT_BACKBONE_WEIGHT = "pretrained/efficientnet_b2_ra-bcdf34b7.pth"
+_ALLOWED_CLASSIFICATION_HEAD_PREFIXES = ("conv_head.", "bn2.", "classifier.")
 
 
 class TimmFeatureBackbone(nn.Module):
@@ -26,8 +25,8 @@ class TimmFeatureBackbone(nn.Module):
         return features
 
 
-def _load_local_backbone_weights(backbone: nn.Module, weight_path: str, backbone_name: str) -> None:
-    """优先加载本地骨干预训练权重，避免训练入口隐式联网。"""
+def _load_local_backbone_weights(backbone: nn.Module, weight_path: str) -> None:
+    """严格加载本地 B2 特征权重，只允许丢弃分类头。"""
     weight_file = Path(weight_path).expanduser()
     if not weight_file.is_file():
         raise FileNotFoundError(f"backbone weight not found: {weight_file}")
@@ -53,45 +52,50 @@ def _load_local_backbone_weights(backbone: nn.Module, weight_path: str, backbone
                 clean_key = clean_key[len(prefix) :]
         cleaned_state_dict[clean_key] = value
 
-    missing, unexpected = backbone.load_state_dict(cleaned_state_dict, strict=False)
-    print(f"loaded local backbone weights for {backbone_name}: {weight_file}")
+    try:
+        missing, unexpected = backbone.load_state_dict(cleaned_state_dict, strict=False)
+    except RuntimeError as error:
+        raise RuntimeError(
+            "EfficientNet-B2 feature checkpoint is incompatible; "
+            "B0 and other backbone weights are unsupported"
+        ) from error
+    invalid_unexpected = [
+        key
+        for key in unexpected
+        if not key.startswith(_ALLOWED_CLASSIFICATION_HEAD_PREFIXES)
+    ]
+    if missing or invalid_unexpected:
+        raise RuntimeError(
+            "EfficientNet-B2 feature checkpoint is incompatible: "
+            f"missing={missing}, invalid_unexpected={invalid_unexpected}"
+        )
+
+    print(f"loaded local backbone weights for {DEFAULT_BACKBONE_NAME}: {weight_file}")
     print(f"backbone load summary | missing: {len(missing)} | unexpected: {len(unexpected)}")
-    if missing:
-        print(f"missing keys sample: {missing[:5]}")
     if unexpected:
-        print(f"unexpected keys sample: {unexpected[:5]}")
+        print(f"unexpected classification-head keys: {unexpected}")
 
 
-def _build_timm_feature_backbone(
-    model_name: str, backbone_weight: str | None = None
-) -> TimmFeatureBackbone:
-    timm_backbone = timm.create_model(model_name, pretrained=False, features_only=True)
+def _build_timm_feature_backbone(backbone_weight: str) -> TimmFeatureBackbone:
+    timm_backbone = timm.create_model(
+        DEFAULT_BACKBONE_NAME,
+        pretrained=False,
+        features_only=True,
+    )
     feature_info = timm_backbone.feature_info
     backbone = TimmFeatureBackbone(
         timm_backbone,
         channels=list(feature_info.channels()),
         reductions=list(feature_info.reduction()),
     )
-    if backbone_weight:
-        _load_local_backbone_weights(backbone.model, backbone_weight, model_name)
+    _load_local_backbone_weights(backbone.model, backbone_weight)
     return backbone
 
 
 def build_feature_backbone(
-    backbone_name: str, backbone_weight: str | None = DEFAULT_BACKBONE_WEIGHT
-) -> nn.Module:
-    """构建 HA-CQI 使用的 CNN feature backbone。"""
-    if backbone_name == "mobilenetv2":
-        backbone = mobilenet_v2(pretrained=True, progress=True)
-        backbone.channels = [16, 24, 32, 96, 320]
-        backbone.reductions = [2, 4, 8, 16, 32]
-        return backbone
-
-    if backbone_name == "efficientnet_b0":
-        if not backbone_weight:
-            raise ValueError("efficientnet_b0 requires a local PyTorch --backbone_weight")
-        return _build_timm_feature_backbone("efficientnet_b0", backbone_weight=backbone_weight)
-
-    raise NotImplementedError(
-        f"BACKBONE [{backbone_name}] is not implemented. Supported: mobilenetv2, efficientnet_b0"
-    )
+    backbone_weight: str | None = DEFAULT_BACKBONE_WEIGHT,
+) -> TimmFeatureBackbone:
+    """构建 HA-CQI 唯一支持的 EfficientNet-B2 feature backbone。"""
+    if not backbone_weight:
+        raise ValueError("EfficientNet-B2 requires a local PyTorch --backbone_weight")
+    return _build_timm_feature_backbone(backbone_weight)

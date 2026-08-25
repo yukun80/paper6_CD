@@ -60,10 +60,21 @@ def _json_safe_options(opt) -> dict[str, Any]:
 
 
 class HACQITrainer:
-    """保持网络结构不变，只重建训练、评估与保存契约。"""
+    """HA-CQI 的可复现训练、评估与 checkpoint v2 主流程。"""
 
     def __init__(self, opt) -> None:
         self.opt = opt
+        if (
+            bool(opt.amp)
+            and str(opt.amp_dtype).lower() == "bf16"
+            and torch.cuda.is_available()
+            and bool(opt.gpu_ids)
+            and not torch.cuda.is_bf16_supported()
+        ):
+            raise RuntimeError(
+                "CUDA device does not support bf16, but the B2 baseline requires "
+                "--amp_dtype bf16. Use --amp_dtype fp16 explicitly for this device."
+            )
         self.data_provenance = load_dataset_provenance(opt.dataroot, opt.dataset)
         if str(opt.dataset) == "S1GFloods_CD_DINO_BG_75_25" and not self.data_provenance.get(
             "dataset_fingerprint"
@@ -191,7 +202,11 @@ class HACQITrainer:
             "coarse_weight": 0.0,
             "aux_loss_scale": 0.0,
             "tversky_beta": 0.0,
-            "query_gate": 0.0,
+            "decoder_scan_rms": 0.0,
+            "decoder_context_rms": 0.0,
+            "decoder_p2_detail_rms": 0.0,
+            "decoder_p1_detail_rms": 0.0,
+            "decoder_context_detail_ratio": 0.0,
         }
         step_count = 0
         optimizer_steps = 0

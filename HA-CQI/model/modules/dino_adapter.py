@@ -20,7 +20,6 @@ class DinoV3FeatureExtractor(nn.Module):
     ):
         super().__init__()
         self.device = torch.device(device)
-        self.device_type = self.device.type
         if not Path(weights_path).is_file():
             raise FileNotFoundError(
                 f"DINOv3 weights not found: {weights_path}. "
@@ -36,7 +35,6 @@ class DinoV3FeatureExtractor(nn.Module):
         )
         self.model = self.model.eval().to(self.device)
         self.embed_dim = int(spec["embed_dim"])
-        self.n_layers = int(spec["num_layers"])
         self.patch_size = int(spec["patch_size"])
         self.extract_ids = resolve_extract_ids(self.dino_arch, extract_ids)
 
@@ -53,25 +51,29 @@ class DinoV3FeatureExtractor(nn.Module):
     def forward(self, x):
         scale_factor = 2 / (512 / x.shape[-1])
         x = F.interpolate(
-            x, size=(512, 512), mode="bilinear", align_corners=True, antialias=True
+            x,
+            size=(512, 512),
+            mode="bilinear",
+            align_corners=False,
+            antialias=True,
         )
         with torch.no_grad():
-            # autocast 仅在 CUDA 上开启；CPU 侧保持普通 float32 更稳妥。
-            autocast_enabled = self.device_type == "cuda"
-            with torch.autocast(device_type=self.device_type, dtype=torch.float16, enabled=autocast_enabled):
-                feats = self.model.get_intermediate_layers(
-                    x, n=range(self.n_layers), reshape=True, norm=True
+            # 精度完全继承外层 AMP；只物化实际使用的中间层。
+            feats = self.model.get_intermediate_layers(
+                x,
+                n=self.extract_ids,
+                reshape=True,
+                norm=True,
+            )
+            return [
+                F.interpolate(
+                    feat,
+                    scale_factor=scale_factor,
+                    mode="bilinear",
+                    align_corners=False,
                 )
-                feats_ = []
-                for i in range(len(self.extract_ids)):
-                    feats_.append(
-                        F.interpolate(
-                            feats[self.extract_ids[i]],
-                            scale_factor=scale_factor,
-                            mode="bilinear",
-                        )
-                    )
-        return feats_
+                for feat in feats
+            ]
 
 
 class SeparableAdapterBlock(nn.Module):
@@ -101,7 +103,7 @@ class SeparableAdapterBlock(nn.Module):
 class DinoPyramidAdapter(nn.Module):
     """将 DINOv3 中间层特征适配到与 FPN 金字塔匹配的通道数和空间尺度。
 
-    方案A简化版：只处理 3 层 DINO 特征（跳过最浅层 raw[0]），
+    只处理 3 层 DINO 特征（跳过最浅层 raw[0]），
     分别对应 P3/P4/P5 的语义校准。每层独立 SeparableAdapterBlock + 尺度缩放。
     """
 

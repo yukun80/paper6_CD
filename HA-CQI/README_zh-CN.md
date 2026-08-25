@@ -7,15 +7,17 @@ HA-CQI 是本目录当前使用的合成孔径雷达（SAR）洪水变化检测�
 当前模型名称为 **HA-CQI**，由以下部分组成：
 
 - **模块 I：分层 CNN-DINO 语义编码器**：共享的灾前/灾后编码器融合
-  EfficientNet-B0 或 MobileNetV2 的 CNN-FPN 特征金字塔与 DINOv3 语义特征，输出
-  分辨率对齐的 `P1-P5` 多尺度特征。
+  EfficientNet-B2 的五级 CNN-FPN 特征金字塔与冻结 DINOv3 语义特征，输出分辨率对齐的
+  `P1-P5` 多尺度特征。CNN 使用数据集统计；DINO 分支先反归一化到 `[0,1]`，再固定使用
+  LVD 的 ImageNet mean/std。
 - **模块 II：协调对齐（Harmonized Alignment, HA）**：先在浅层特征上执行成对共享的
   风格校准，缓解 SAR 辐射差异；随后可选地在 `P1/P2/P3` 上执行可变形软对齐。
 - **模块 III：变化查询交互（Change Query Interaction, CQI）**：可学习的变化查询通过
   双向注意力与多尺度特征差异交互，为解码器提供显式的变化感知上下文。
-- **Mask2Former 风格分割头**：轻量级查询掩膜解码器基于高分辨率掩膜特征和经 CQI 增强的
-  上下文预测二值洪水变化 logits。
-- **尺度感知辅助头**：在 `P1-P5` 上提供辅助预测，使小型内涝斑块和大范围淹没区都能获得
+- **Omni-Scale State-Space Change Decoder（OSCD）**：以 `P3-P5` 变化原语执行多尺度区域
+  聚合、Pixel Unshuffle 对齐和一次四方向 SS2D，再用 `P2/P1` 逐级恢复局部边界。它保持
+  二类 dense prediction，不创建第二套 decoder queries 或集合式监督。
+- **多尺度辅助头**：在 `P1-P5` 上提供辅助预测，使小型内涝斑块和大范围淹没区都能获得
   有效监督。
 
 主要代码路径如下：
@@ -25,7 +27,8 @@ model/architectures/ha_cqi.py
 model/engine.py
 model/modules/harmonized_alignment.py
 model/modules/change_query_interaction.py
-model/decode_heads/mask2former_change_head.py
+model/decode_heads/omni_scale_state_space_change_decoder.py
+model/decode_heads/state_space_scan.py
 trainval.py
 test.py
 run.py
@@ -89,22 +92,28 @@ python HA-CQI/scripts/compute_s1gfloods_cd_stats.py \
 
 ```text
 HA-CQI/dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth
-HA-CQI/pretrained/efficientnet_b0_ra-3dd342df.pth
+HA-CQI/pretrained/efficientnet_b2_ra-bcdf34b7.pth
 ```
 
-`efficientnet_b0` 需要本地 PyTorch `.pth` 或 `.pt` 权重文件；训练入口不会自动下载权重。
+主线只支持 `efficientnet_b2`，需要本地 PyTorch `.pth` 或 `.pt` 权重文件且不会在线下载。
+加载时所有 feature keys 必须匹配，只允许忽略 `conv_head/bn2/classifier` 的 8 个分类头键。
+旧 B0 权重和 B0 checkpoint 保留为归档，但 B2-only 主线会明确拒绝。
 
-## 环境迁移
+## 运行环境
 
-在新机器获得 `dl311_dino.tar.gz` 后，执行：
+当前主线使用 `hacqi` conda 环境：
 
 ```bash
-conda activate base
-mkdir -p "$CONDA_PREFIX/envs/dl311_dino"
-tar -xzf dl311_dino.tar.gz -C "$CONDA_PREFIX/envs/dl311_dino"
-"$CONDA_PREFIX/envs/dl311_dino/bin/conda-unpack"
-conda activate "$CONDA_PREFIX/envs/dl311_dino"
+conda activate hacqi
+python -m pip install -r requirements-oscd.txt
+python -c "import torch, timm, mmcv, selective_scan_cuda; print(torch.__version__)"
 ```
+
+`requirements-oscd.txt` 固定为 Python 3.11、Torch 2.4、CUDA 12、CXX11 ABI false 对应的
+`mamba_ssm 2.2.4` 预编译 wheel，并固定 `einops 0.8.1`、`ninja 1.13.0` 和
+`transformers 4.44.2` 以满足 wheel 元数据；后两者不进入 OSCD 前向图。CUDA 缺少或无法
+加载 selective-scan kernel 时 OSCD 会直接失败；CPU 只运行仓库内 FP32 reference recurrence，
+用于测试而非训练。安装后应执行 `python -m pip check`。
 
 ## 训练
 
@@ -112,6 +121,7 @@ conda activate "$CONDA_PREFIX/envs/dl311_dino"
 
 ```bash
 cd HA-CQI
+conda activate hacqi
 bash trainval_s1gfloods.sh
 ```
 
@@ -121,8 +131,11 @@ bash trainval_s1gfloods.sh
 cd HA-CQI
 DATASET_NAME=S1GFloods_CD_DINO_BG_75_25 \
 DATA_ROOT=../datasets \
-RUN_NAME=S1GFloods-HA-CQI-vits16 \
-BATCH_SIZE=6 \
+RUN_NAME=S1GFloods-HA-CQI-B2-vits16 \
+BATCH_SIZE=12 \
+NUM_WORKERS=8 \
+LR=1e-4 \
+AMP_DTYPE=bf16 \
 EVAL_FG_THRESHOLD=0.40 \
 bash trainval_s1gfloods.sh
 ```
@@ -134,23 +147,27 @@ bash trainval_s1gfloods.sh
 - `STATS_FILE=../datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json`
 - `DINO_ARCH=dinov3_vits16`
 - `DINO_WEIGHT=dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth`
-- `BACKBONE=efficientnet_b0`
-- `BACKBONE_WEIGHT=pretrained/efficientnet_b0_ra-3dd342df.pth`
+- `BACKBONE_WEIGHT=pretrained/efficientnet_b2_ra-bcdf34b7.pth`
 - `NUM_CHANGE_QUERIES=16`
-- `MASK_QUERIES=32`
-- `MASK_DECODER_LAYERS=3`
+- decoder 固定为 `oscd_v1`：128 通道、四方向 SS2D、state dimension 1
 - `EVAL_FG_THRESHOLD=0.40`（仅用于 validation 细粒度诊断）
 - `SEED=1`
 - `FOCAL_BG_WEIGHT=0.25`、`FOCAL_FG_WEIGHT=0.75`
-- `DINO_INPUT_NORM=shared`
+- `BATCH_SIZE=12`、`NUM_WORKERS=8`
+- `LR=1e-4`、head LR multiplier `2.0`
+- `AMP=1`、`AMP_DTYPE=bf16`（bf16 不使用 GradScaler）
+- DINO 输入归一化固定为 `imagenet`，不再提供 `shared` 开关
+
+MMCV 2.1 的 DCNv2 CUDA kernel 不实现 BF16，因此仅 DCNv2 在内部回退 FP32 并将输出恢复为
+外层 dtype；其余模型仍使用 bf16 autocast。这是算子兼容处理，不改变模型参数或结构。
 
 新训练在 validation 的 `0.05–0.95`（步长 `0.01`）阈值网格上按
 `Flood IoU → Precision → 较高 threshold` 联合选择，只生成：
 
 ```text
-<run>_<backbone>_best_primary.pth
-<run>_<backbone>_last.pth
-<run>_<backbone>_epoch10.pth ...
+<run>_efficientnet_b2_best_primary.pth
+<run>_efficientnet_b2_last.pth
+<run>_efficientnet_b2_epoch10.pth ...
 selection.json
 metrics.jsonl
 options.json
@@ -158,7 +175,8 @@ options.json
 
 完整续训使用 `RESUME=/path/to/*_last.pth`；仅初始化网络使用
 `python trainval.py ... --init_checkpoint /path/to/checkpoint.pth`。resume 会校验数据指纹和
-训练/loss/模型配置。`--resume`、`--init_checkpoint`、测试和推理入口均只接受 checkpoint v2。
+训练/loss/模型配置。`--resume`、`--init_checkpoint`、测试和推理入口均只接受声明
+`efficientnet_b2 + imagenet + oscd_v1` 的 checkpoint v2。
 `S1GFloods-HA-CQI-vits16-20260427/` 及其结果保留为磁盘归档，当前代码不支持加载。
 
 训练结果写入：
@@ -182,7 +200,7 @@ SOFT_ALIGNMENT=0 RUN_NAME=S1GFloods-HA-CQI-noalign bash trainval_s1gfloods.sh
 ```bash
 cd HA-CQI
 python test.py \
-  --checkpoint checkpoints/<resolved_run_name>/<run>_efficientnet_b0_best_primary.pth \
+  --checkpoint checkpoints/<resolved_run_name>/<run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
   --save_test
 ```
@@ -200,7 +218,7 @@ HA-CQI/checkpoints/<resolved_run_name>/pred/
 ```bash
 cd HA-CQI
 python run.py \
-  --checkpoint checkpoints/<resolved_run_name>/<run>_efficientnet_b0_best_primary.pth \
+  --checkpoint checkpoints/<resolved_run_name>/<run>_efficientnet_b2_best_primary.pth \
   --img_A /path/to/pre_image.tif \
   --img_B /path/to/post_image.tif \
   --output outputs/run_pred.png \
@@ -217,7 +235,7 @@ python run.py \
 ```bash
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
+  --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
   --batch_size 8 \
   --output-dir HA-CQI/outputs/gf3_henan_corrected
@@ -231,7 +249,7 @@ stats 默认从 checkpoint v2 metadata 解析。推理阈值只允许两种来�
 ```bash
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Zhuozhou_CD_infer \
-  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
+  --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
   --batch_size 8 \
   --output-dir HA-CQI/outputs/gf3_zhuozhou_corrected
@@ -242,7 +260,7 @@ python HA-CQI/scripts/infer_gf3_henan_tiles.py \
 ```bash
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/LT1_Guangxi_CD_infer \
-  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
+  --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
   --batch_size 8 \
   --skip-tiles \

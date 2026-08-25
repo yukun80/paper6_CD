@@ -1,0 +1,7 @@
+# OSCD CUDA selective-scan runtime. The wheel is pinned to hacqi's
+# Python 3.11 / Torch 2.4 / CUDA 12 / CXX11_ABI=FALSE contract.
+# SHA256: 72daddd4e96c39d46a7b7a005a8450e66547dd434e1ce6d20782c7364f03e9a5
+https://github.com/state-spaces/mamba/releases/download/v2.2.4/mamba_ssm-2.2.4+cu12torch2.4cxx11abiFALSE-cp311-cp311-linux_x86_64.whl
+einops==0.8.1
+ninja==1.13.0
+transformers==4.44.2

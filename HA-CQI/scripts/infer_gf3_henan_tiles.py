@@ -18,14 +18,14 @@ from infer_sar_scene_tiles import main as infer_main
 """
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
+  --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
   --batch_size 8 \
   --output-dir HA-CQI/outputs/gf3_henan_corrected
 
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Zhuozhou_CD_infer \
-  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
+  --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
   --batch_size 8 \
   --output-dir HA-CQI/outputs/gf3_zhuozhou_corrected_0823

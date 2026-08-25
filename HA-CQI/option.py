@@ -5,6 +5,8 @@ from typing import List
 
 import torch
 
+from model.backbones import DEFAULT_BACKBONE_NAME, DEFAULT_BACKBONE_WEIGHT
+from model.checkpointing import checkpoint_model_config, load_checkpoint_payload
 from model.modules.dino_meta import DINO_ARCH_CHOICES, resolve_dino_arch, resolve_extract_ids
 from utils.provenance import sha256_file
 
@@ -17,7 +19,6 @@ DEFAULT_DATA_ROOT = "../datasets"
 DEFAULT_DATASET = "S1GFloods_CD_DINO_BG_75_25"
 DEFAULT_STATS_FILE = "../datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json"
 DEFAULT_DINO_WEIGHT = "dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth"
-DEFAULT_BACKBONE_WEIGHT = "pretrained/efficientnet_b0_ra-3dd342df.pth"
 
 
 def _resolve_repo_relative_path(path_str: str) -> str:
@@ -156,6 +157,11 @@ class Options:
         self.parser = argparse.ArgumentParser()
 
     def init(self):
+        # B2-only 与 DINOv3-LVD 输入契约仍写入 Namespace/checkpoint，但不再暴露可变 CLI。
+        self.parser.set_defaults(
+            backbone=DEFAULT_BACKBONE_NAME,
+            dino_input_norm="imagenet",
+        )
         self.parser.add_argument(
             "--gpu_ids", type=str, default="0", help="gpu ids: e.g. 0. use -1 for CPU"
         )
@@ -199,16 +205,10 @@ class Options:
 
         self.parser.add_argument("--phase", type=str, default="train")
         self.parser.add_argument(
-            "--backbone",
-            type=str,
-            default="efficientnet_b0",
-            help="CNN backbone，支持 efficientnet_b0、mobilenetv2。",
-        )
-        self.parser.add_argument(
             "--backbone_weight",
             type=str,
             default=DEFAULT_BACKBONE_WEIGHT,
-            help="CNN backbone 本地 PyTorch 预训练权重路径；不接受 TPU/TensorFlow 原始 checkpoint。",
+            help="EfficientNet-B2 本地 PyTorch 预训练权重；不接受其他架构或 TPU/TensorFlow checkpoint。",
         )
         self.parser.add_argument(
             "--dino_arch",
@@ -281,42 +281,11 @@ class Options:
             help="CQI two-way attention 的注意力头数。",
         )
         self.parser.add_argument(
-            "--mask_dim",
-            type=int,
-            default=128,
-            help="轻量 Mask2Former-style head 的 mask feature 维度。",
-        )
-        self.parser.add_argument(
-            "--mask_queries",
-            type=int,
-            default=32,
-            help="Mask2Former-style head 的 learnable mask query 数量。",
-        )
-        self.parser.add_argument(
-            "--mask_decoder_layers",
-            type=int,
-            default=3,
-            help="Mask2Former-style transformer decoder 层数。",
-        )
-        self.parser.add_argument(
-            "--mask_heads",
-            type=int,
-            default=4,
-            help="Mask2Former-style transformer decoder 注意力头数。",
-        )
-        self.parser.add_argument(
             '--extract_ids',
             nargs='+',
             type=int,
             default=None,
             help="从 DINO 主干抽取的层号；默认按 --dino_arch 自动选择。",
-        )
-        self.parser.add_argument(
-            "--dino_input_norm",
-            type=str,
-            default="shared",
-            choices=["shared", "imagenet"],
-            help="DINO 输入归一化；shared 保持旧行为，imagenet 使用预训练统计。",
         )
         self.parser.add_argument(
             "--focal_class_weights",
@@ -328,11 +297,11 @@ class Options:
         )
         self.parser.add_argument("--gamma", type=float, default=2.0, help="gamma for Focal loss")
 
-        self.parser.add_argument("--batch_size", type=int, default=6)
-        self.parser.add_argument("--num_epochs", type=int, default=100)
+        self.parser.add_argument("--batch_size", type=int, default=12)
+        self.parser.add_argument("--num_epochs", type=int, default=80)
         self.parser.add_argument("--input_size", type=int, default=256, help="训练/推理默认输入尺寸")
-        self.parser.add_argument("--num_workers", type=int, default=4, help="#threads for loading data")
-        self.parser.add_argument("--lr", type=float, default=5e-4)
+        self.parser.add_argument("--num_workers", type=int, default=8, help="#threads for loading data")
+        self.parser.add_argument("--lr", type=float, default=1e-4)
         self.parser.add_argument("--weight_decay", type=float, default=5e-4)
         self.parser.add_argument(
             "--head_lr_mult",
@@ -402,15 +371,16 @@ class Options:
         )
         self.parser.add_argument(
             "--amp",
-            action="store_true",
-            help="启用 CUDA 自动混合精度训练与验证，降低显存占用。",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help="启用 CUDA 自动混合精度；B2 baseline 默认启用，可用 --no-amp 关闭。",
         )
         self.parser.add_argument(
             "--amp_dtype",
             type=str,
-            default="fp16",
+            default="bf16",
             choices=["fp16", "bf16"],
-            help="AMP autocast 精度类型；默认 fp16，数值不稳定时可切换 bf16。",
+            help="AMP autocast 精度类型；B2 baseline 默认 bf16。",
         )
         self.parser.add_argument(
             "--grad_scaler_init_scale",
@@ -558,14 +528,8 @@ class Options:
             raise ValueError("--num_change_queries must be a positive integer")
         if self.opt.cqi_heads < 1:
             raise ValueError("--cqi_heads must be a positive integer")
-        if self.opt.mask_dim < 1:
-            raise ValueError("--mask_dim must be a positive integer")
-        if self.opt.mask_queries < 1:
-            raise ValueError("--mask_queries must be a positive integer")
-        if self.opt.mask_decoder_layers < 1:
-            raise ValueError("--mask_decoder_layers must be a positive integer")
-        if self.opt.mask_heads < 1:
-            raise ValueError("--mask_heads must be a positive integer")
+        if self.opt.fpn_channels != 128:
+            raise ValueError("HA-CQI OSCD v1 requires --fpn_channels 128")
         if self.opt.head_lr_mult <= 0.0:
             raise ValueError("--head_lr_mult must be positive")
         focal_weights = [float(value) for value in self.opt.focal_class_weights]
@@ -617,6 +581,19 @@ class Options:
             raise ValueError("--threshold must be within [0, 1]")
         if self.opt.small_area_thresh < self.opt.tiny_area_thresh:
             raise ValueError("--small_area_thresh must be >= --tiny_area_thresh")
+        if self.opt.batch_size < 1:
+            raise ValueError("--batch_size must be positive")
+        if self.opt.num_workers < 0:
+            raise ValueError("--num_workers must be non-negative")
+        if self.opt.lr <= 0.0:
+            raise ValueError("--lr must be positive")
+
+        # 在模型构建前给旧 backbone/input/decoder checkpoint 明确的契约错误。
+        for checkpoint_path in (self.opt.resume, self.opt.init_checkpoint):
+            if checkpoint_path:
+                checkpoint_model_config(
+                    load_checkpoint_payload(checkpoint_path, map_location="cpu")
+                )
         self.opt.mean, self.opt.std = resolve_norm_stats(self.opt)
         validate_stats_provenance(self.opt)
 

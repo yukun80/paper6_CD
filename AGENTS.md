@@ -17,7 +17,7 @@ Keep these artifact boundaries explicit. Do not mix manuscript prose, patent cla
   - `model/architectures/ha_cqi.py`: HA-CQI model assembly.
   - `model/engine.py`: training/inference engine, losses, checkpoint metadata.
   - `model/modules/`: harmonized alignment, DINO adapter, CQI, semantic encoding, attention blocks.
-  - `model/decode_heads/`: Mask2Former-style change mask decoder and auxiliary heads.
+  - `model/decode_heads/`: OSCD state-space dense change decoder and auxiliary heads.
   - `data/`: SAR change-detection dataset and transforms.
   - `scripts/`: whole-scene SAR tile inference, label preparation, and mosaic utilities.
   - `model_design/paper_narrative.md`: model-story reference for paper-aligned algorithm changes.
@@ -45,13 +45,13 @@ Keep these artifact boundaries explicit. Do not mix manuscript prose, patent cla
 - The active change-detection model is **HA-CQI**, not ChangeDINO.
 - The active HA-CQI stack is:
   - shared pre/post CNN-DINO semantic encoder;
-  - EfficientNet-B0 or MobileNetV2 CNN-FPN pyramid;
-  - DINOv3 semantic features;
+  - EfficientNet-B2-only CNN-FPN pyramid;
+  - frozen DINOv3 semantic features with fixed LVD ImageNet normalization;
   - Harmonized Alignment on shallow features;
   - optional deformable soft alignment;
   - Change Query Interaction;
-  - Mask2Former-style binary flood-change decoder;
-  - size-aware auxiliary supervision for small waterlogging and large inundation regions.
+  - MMSCoPE-inspired Omni-Scale State-Space Change Decoder (OSCD);
+  - multi-scale auxiliary supervision for small waterlogging and large inundation regions.
 - Preserve HA-CQI's own architecture story. Do not back-port ChangeDINO Risk-Aware, HybridRefiner, topo-router, or micro-gate modules unless the user explicitly requests that experiment.
 - HA-CQI selects `best_primary` by validation Flood IoU while jointly calibrating threshold on the configured grid. `0.40` is only a validation diagnostic threshold.
 - Active code accepts checkpoint v2 only. The 20260427 checkpoints are disk archives and are intentionally unsupported.
@@ -72,8 +72,11 @@ Useful overrides:
 cd HA-CQI
 DATASET_NAME=S1GFloods_CD_DINO_BG_75_25 \
 DATA_ROOT=../datasets \
-RUN_NAME=S1GFloods-HA-CQI-vits16 \
-BATCH_SIZE=6 \
+RUN_NAME=S1GFloods-HA-CQI-B2-vits16 \
+BATCH_SIZE=12 \
+NUM_WORKERS=8 \
+LR=1e-4 \
+AMP_DTYPE=bf16 \
 EVAL_FG_THRESHOLD=0.40 \
 bash trainval_s1gfloods.sh
 ```
@@ -89,9 +92,9 @@ SOFT_ALIGNMENT=0 RUN_NAME=S1GFloods-HA-CQI-noalign bash trainval_s1gfloods.sh
 ```bash
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
+  --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
-  --batch_size 6 \
+  --batch_size 8 \
   --output-dir HA-CQI/outputs/gf3_henan
 ```
 
@@ -100,9 +103,9 @@ For Zhuozhou, switch `--tiles-root` and `--output-dir`:
 ```bash
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Zhuozhou_CD_infer \
-  --checkpoint HA-CQI/checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
+  --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
-  --batch_size 6 \
+  --batch_size 8 \
   --output-dir HA-CQI/outputs/gf3_zhuozhou
 ```
 
@@ -110,7 +113,7 @@ python HA-CQI/scripts/infer_gf3_henan_tiles.py \
 ```bash
 cd HA-CQI
 python run.py \
-  --checkpoint checkpoints/S1GFloods-HA-CQI-corrected-baseline-s1-20260822/S1GFloods-HA-CQI-corrected-baseline-s1-20260822_efficientnet_b0_best_primary.pth \
+  --checkpoint checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
   --img_A /path/to/pre_image.tif \
   --img_B /path/to/post_image.tif \
   --output outputs/run_pred.png \
@@ -162,7 +165,7 @@ If `latexmk` is unavailable, use the local LaTeX toolchain available in the envi
 - Do not commit datasets, model checkpoints, pretrained weights, large generated rasters, or bulky rendered outputs.
 - HA-CQI default local weights:
   - `HA-CQI/dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth`
-  - `HA-CQI/pretrained/efficientnet_b0_ra-3dd342df.pth`
+  - `HA-CQI/pretrained/efficientnet_b2_ra-bcdf34b7.pth`
 - HA-CQI-CFDepth default local weights:
   - `HA-CQI-CFDepth/pretrained/dinov3_vits16_pretrain_lvd1689m-08c60483.pth`
   - `HA-CQI-CFDepth/pretrained/efficientnet_b0_ra-3dd342df.pth`

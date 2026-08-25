@@ -59,22 +59,16 @@ class GenerateBeta(nn.Module):
         return self.conv(x)
 
 
-### MoFPN
+# EfficientNet-B2 五级调制特征金字塔。
 class FPN(nn.Module):
     def __init__(self, in_channels, out_channels=128, deform_groups=4, gamma_mode='SE', beta_mode='contextgatedconv'):
         super(FPN, self).__init__()
-        self.has_p1 = len(in_channels) == 5
-        if len(in_channels) not in {4, 5}:
-            raise ValueError(f"FPN expects 4 or 5 input stages, got {len(in_channels)}")
+        if len(in_channels) != 5:
+            raise ValueError(f"EfficientNet-B2 FPN expects 5 input stages, got {len(in_channels)}")
+        c1, c2, c3, c4, c5 = in_channels
 
-        if self.has_p1:
-            c1, c2, c3, c4, c5 = in_channels
-        else:
-            c2, c3, c4, c5 = in_channels
-
-        if self.has_p1:
-            self.p1 = DCNv2(in_channels=c1, out_channels=out_channels,
-                            kernel_size=3, padding=1, deform_groups=deform_groups)
+        self.p1 = DCNv2(in_channels=c1, out_channels=out_channels,
+                        kernel_size=3, padding=1, deform_groups=deform_groups)
         self.p2 = DCNv2(in_channels=c2, out_channels=out_channels,
                         kernel_size=3, padding=1, deform_groups=deform_groups)
         self.p3 = DCNv2(in_channels=c3, out_channels=out_channels,
@@ -88,32 +82,28 @@ class FPN(nn.Module):
         self.p4_bn = nn.BatchNorm2d(out_channels, affine=False)
         self.p3_bn = nn.BatchNorm2d(out_channels, affine=False)
         self.p2_bn = nn.BatchNorm2d(out_channels, affine=False)
-        if self.has_p1:
-            self.p1_bn = nn.BatchNorm2d(out_channels, affine=False)
+        self.p1_bn = nn.BatchNorm2d(out_channels, affine=False)
         self.activation = nn.ReLU(True)
 
-        self.up = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
         self.p4_Gamma = GenerateGamma(out_channels, mode=gamma_mode)
         self.p4_beta = GenerateBeta(out_channels, mode=beta_mode)
         self.p3_Gamma = GenerateGamma(out_channels, mode=gamma_mode)
         self.p3_beta = GenerateBeta(out_channels, mode=beta_mode)
         self.p2_Gamma = GenerateGamma(out_channels, mode=gamma_mode)
         self.p2_beta = GenerateBeta(out_channels, mode=beta_mode)
-        if self.has_p1:
-            self.p1_Gamma = GenerateGamma(out_channels, mode=gamma_mode)
-            self.p1_beta = GenerateBeta(out_channels, mode=beta_mode)
+        self.p1_Gamma = GenerateGamma(out_channels, mode=gamma_mode)
+        self.p1_beta = GenerateBeta(out_channels, mode=beta_mode)
 
         self.p5_smooth = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         self.p4_smooth = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         self.p3_smooth = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
         self.p2_smooth = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
-        if self.has_p1:
-            self.p1_smooth = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.p1_smooth = nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+
     def forward(self, input):
-        if self.has_p1:
-            c1, c2, c3, c4, c5 = input
-        else:
-            c2, c3, c4, c5 = input
+        if len(input) != 5:
+            raise ValueError(f"EfficientNet-B2 FPN expects 5 tensors, got {len(input)}")
+        c1, c2, c3, c4, c5 = input
 
         p5 = self.activation(self.p5_bn(self.p5(c5)))
         p5_up = F.interpolate(p5, size=c4.shape[-2:], mode='bilinear', align_corners=False)
@@ -128,41 +118,23 @@ class FPN(nn.Module):
         p2 = self.p2_bn(self.p2(c2))
         p2_gamma, p2_beta = self.p2_Gamma(p3_up), self.p2_beta(p3_up)
         p2 = self.activation(p2 * (1 + p2_gamma) + p2_beta)
-        if self.has_p1:
-            p2_up = F.interpolate(p2, size=c1.shape[-2:], mode='bilinear', align_corners=False)
-            p1 = self.p1_bn(self.p1(c1))
-            p1_gamma, p1_beta = self.p1_Gamma(p2_up), self.p1_beta(p2_up)
-            p1 = self.activation(p1 * (1 + p1_gamma) + p1_beta)
+        p2_up = F.interpolate(p2, size=c1.shape[-2:], mode='bilinear', align_corners=False)
+        p1 = self.p1_bn(self.p1(c1))
+        p1_gamma, p1_beta = self.p1_Gamma(p2_up), self.p1_beta(p2_up)
+        p1 = self.activation(p1 * (1 + p1_gamma) + p1_beta)
 
         p5 = self.p5_smooth(p5)
         p4 = self.p4_smooth(p4)
         p3 = self.p3_smooth(p3)
         p2 = self.p2_smooth(p2)
-        if self.has_p1:
-            p1 = self.p1_smooth(p1)
-
-        if self.has_p1:
-            return p1, p2, p3, p4, p5
-        return p2, p3, p4, p5
+        p1 = self.p1_smooth(p1)
+        return p1, p2, p3, p4, p5
     
 ###############################################################################
 """
 https://github.com/iduta/pyconv
 https://github.com/XudongLinthu/context-gated-convolution
 """
-
-class ConvBnRelu(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, dilation=1):
-        super(ConvBnRelu, self).__init__()
-        self.block = nn.Sequential(nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride,
-                                             padding=padding, dilation=dilation, bias=False),
-                                   nn.BatchNorm2d(out_channels),
-                                   nn.ReLU(inplace=True))
-
-    def forward(self, x):
-        x = self.block(x)
-        return x
-
 
 class DsBnRelu(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, dilation=1):
@@ -188,30 +160,6 @@ class DsBnRelu(nn.Module):
         x = self.bn(x)
         x = self.relu(x)
         return x
-
-
-class PyConv2d(nn.Module):
-    def __init__(self, in_channels, out_channels, pyconv_kernels=[1, 3, 5, 7], pyconv_groups=[1, 2, 4, 8], bias=False):
-        super(PyConv2d, self).__init__()
-
-        pyconv_levels = []
-        for pyconv_kernel, pyconv_group in zip(pyconv_kernels, pyconv_groups):
-            pyconv_levels.append(nn.Conv2d(in_channels, out_channels // 2, kernel_size=pyconv_kernel,
-                                           padding=pyconv_kernel // 2, groups=pyconv_group, bias=bias))
-        self.pyconv_levels = nn.Sequential(*pyconv_levels)
-        self.to_out = nn.Sequential(nn.Conv2d((out_channels // 2) * len(pyconv_kernels), out_channels, 1, bias=False),
-                                    nn.BatchNorm2d(out_channels),
-                                    nn.ReLU(True))
-        self.relu = nn.ReLU(True)
-
-    def forward(self, x):
-        out = []
-        for level in self.pyconv_levels:
-            out.append(self.relu(level(x)))
-        out = torch.cat(out, dim=1)
-        out = self.to_out(out)
-
-        return out
 
 
 class GatedConv2d(torch.nn.Module):
@@ -338,7 +286,7 @@ class DCNv2(ModulatedDeformConv2dPack):
         self.offset = nn.Conv2d(out_channels * 3, out_channels, 1, bias=True)
         self.init_weights()
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore
+    def _forward_impl(self, x: torch.Tensor) -> torch.Tensor:
         out = []
         for level in self.pyconv_levels:
             out.append(level(x))
@@ -352,3 +300,11 @@ class DCNv2(ModulatedDeformConv2dPack):
                                        self.stride, self.padding,
                                        self.dilation, self.groups,
                                        self.deform_groups)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:  # type: ignore
+        # MMCV 2.1 的 DCNv2 CUDA kernel 不实现 BF16；仅该算子回退 FP32，
+        # 输出再恢复外层 AMP dtype，避免把整个模型降回 fp16/fp32。
+        if x.dtype == torch.bfloat16:
+            with torch.autocast(device_type=x.device.type, enabled=False):
+                return self._forward_impl(x.float()).to(dtype=x.dtype)
+        return self._forward_impl(x)

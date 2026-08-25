@@ -136,6 +136,7 @@ class DataLoader(torch.utils.data.Dataset):
             pin_memory=True,
             drop_last=opt.phase == "train",
             num_workers=int(opt.num_workers),
+            persistent_workers=False,
             worker_init_fn=seed_worker,
             generator=self.generator,
         )

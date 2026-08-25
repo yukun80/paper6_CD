@@ -1,4 +1,4 @@
 from .auxiliary_head import MultiScaleAuxiliaryHead
-from .mask2former_change_head import Mask2FormerChangeHead
+from .omni_scale_state_space_change_decoder import OmniScaleStateSpaceChangeDecoder
 
-__all__ = ["Mask2FormerChangeHead", "MultiScaleAuxiliaryHead"]
+__all__ = ["MultiScaleAuxiliaryHead", "OmniScaleStateSpaceChangeDecoder"]

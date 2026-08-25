@@ -31,6 +31,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from model.engine import build_hacqi_engine  # noqa: E402
+from model.backbones import DEFAULT_BACKBONE_WEIGHT  # noqa: E402
 from model.checkpointing import (  # noqa: E402
     apply_checkpoint_model_config,
     checkpoint_data_config,
@@ -44,7 +45,6 @@ from model.modules.dino_meta import (  # noqa: E402
     resolve_extract_ids,
 )
 from option import (  # noqa: E402
-    DEFAULT_BACKBONE_WEIGHT,
     Options,
     _validate_backbone_weight_path,
     resolve_norm_stats,
@@ -54,7 +54,6 @@ from option import (  # noqa: E402
 
 PROB_NODATA = -1.0
 BINARY_NODATA = 255
-SUPPORTED_BACKBONES = {"mobilenetv2", "efficientnet_b0"}
 
 
 class TileDataset(Dataset):
@@ -149,7 +148,6 @@ def build_parser(
         dataset="S1GFloods_CD_DINO_BG_75_25",
         batch_size=8,
         num_workers=4,
-        backbone="efficientnet_b0",
         backbone_weight=DEFAULT_BACKBONE_WEIGHT,
         stats_file="datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json",
     )
@@ -262,12 +260,6 @@ def parse_and_prepare(
         invalid_align_levels = [v for v in opt.align_on_levels if v not in {1, 2, 3}]
         if invalid_align_levels:
             raise ValueError(f"--align_on_levels only supports P1/P2/P3, got {invalid_align_levels}")
-    if opt.backbone not in SUPPORTED_BACKBONES:
-        raise NotImplementedError(
-            f"Unsupported backbone from CLI/checkpoint: {opt.backbone}. "
-            "Only mobilenetv2 and efficientnet_b0 are supported."
-        )
-
     opt.dataroot = str(resolve_existing_path(opt.dataroot, expect_file=False))
     if opt.stats_file:
         opt.stats_file = str(resolve_existing_path(opt.stats_file, expect_file=True))
@@ -482,13 +474,16 @@ def build_model_report(opt: argparse.Namespace) -> dict[str, object]:
         "align_offset_groups": int(opt.align_offset_groups),
         "num_change_queries": int(getattr(opt, "num_change_queries", 16)),
         "cqi_heads": int(getattr(opt, "cqi_heads", 4)),
-        "mask_dim": int(getattr(opt, "mask_dim", 128)),
-        "mask_queries": int(getattr(opt, "mask_queries", 32)),
-        "mask_decoder_layers": int(getattr(opt, "mask_decoder_layers", 3)),
-        "mask_heads": int(getattr(opt, "mask_heads", 4)),
+        "decoder": "oscd_v1",
+        "decoder_channels": 128,
+        "ssm_state_dim": 1,
+        "ssm_directions": 4,
+        "context_levels": [3, 4, 5],
+        "detail_levels": [2, 1],
         "dino_arch": opt.dino_arch,
         "dino_weight": str(opt.dino_weight),
         "extract_ids": [int(v) for v in opt.extract_ids],
+        "dino_input_norm": "imagenet",
     }
 
 
