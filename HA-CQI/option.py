@@ -7,8 +7,11 @@ import torch
 
 from model.backbones import DEFAULT_BACKBONE_NAME, DEFAULT_BACKBONE_WEIGHT
 from model.checkpointing import checkpoint_model_config, load_checkpoint_payload
-from model.modules.dino_meta import DINO_ARCH_CHOICES, resolve_dino_arch, resolve_extract_ids
-from utils.provenance import sha256_file
+from model.modules.dino_meta import (
+    DINO_ARCH_CHOICES,
+    resolve_dino_arch,
+    resolve_dino_fusion_layers,
+)
 
 
 OPTICAL_MEAN = [0.430, 0.411, 0.296]
@@ -116,40 +119,16 @@ def resolve_norm_stats(opt) -> tuple[List[float], List[float]]:
 
 
 def validate_stats_provenance(opt) -> None:
-    """新格式数据必须使用同一 dataset fingerprint 计算的统计量。"""
+    """统计量必须来自训练 split；不绑定可变的数据集成员清单。"""
     if not opt.stats_file:
         return
-    report_path = Path(opt.dataroot) / str(opt.dataset) / "split_report.json"
     stats_path = Path(opt.stats_file)
-    if not report_path.is_file() or not stats_path.is_file():
+    if not stats_path.is_file():
         return
-    report = json.loads(report_path.read_text(encoding="utf-8"))
     stats = json.loads(stats_path.read_text(encoding="utf-8"))
-    expected = report.get("dataset_fingerprint")
-    observed = stats.get("dataset_fingerprint")
-    if expected and not observed:
-        raise ValueError(
-            f"Stats file lacks dataset_fingerprint required by {report_path}: {stats_path}"
-        )
-    if expected and str(observed) != str(expected):
-        raise ValueError(
-            "Dataset/stats fingerprint mismatch: "
-            f"dataset={expected}, stats={observed}, stats_file={stats_path}"
-        )
     stats_split = str(stats.get("split", "train"))
     if stats_split != "train":
         raise ValueError(f"HA-CQI normalization stats must use train split, got: {stats_split}")
-    manifest_path = report_path.parent / f"manifest_{stats_split}.csv"
-    expected_manifest_sha = stats.get("manifest_sha256")
-    if expected_manifest_sha:
-        if not manifest_path.is_file():
-            raise FileNotFoundError(f"Stats manifest not found: {manifest_path}")
-        actual_manifest_sha = sha256_file(manifest_path)
-        if str(expected_manifest_sha) != actual_manifest_sha:
-            raise ValueError(
-                "Stats/split manifest mismatch: "
-                f"stats={expected_manifest_sha}, manifest={actual_manifest_sha}, path={manifest_path}"
-            )
 
 
 class Options:
@@ -281,11 +260,24 @@ class Options:
             help="CQI two-way attention 的注意力头数。",
         )
         self.parser.add_argument(
-            '--extract_ids',
+            "--dino_fusion_layers",
             nargs='+',
             type=int,
             default=None,
-            help="从 DINO 主干抽取的层号；默认按 --dino_arch 自动选择。",
+            help="真正进入 P3/P4/P5 融合的三个 DINO 层；默认按架构选择早/中/深层。",
+        )
+        self.parser.add_argument(
+            "--shallow_change_mode",
+            type=str,
+            default="cqi",
+            choices=["cqi", "local_structural"],
+            help="P1/P2 变化表达；Exp-1 默认保留 CQI，Exp-2 使用局部归一化 query-free 投影。",
+        )
+        self.parser.add_argument(
+            "--shallow_aux_supervision",
+            action=argparse.BooleanOptionalAction,
+            default=True,
+            help="是否保留 P1/P2 全掩膜辅助监督；关闭时只监督 P3-P5。",
         )
         self.parser.add_argument(
             "--focal_class_weights",
@@ -296,11 +288,31 @@ class Options:
             help="Focal loss 的背景/前景权重，解析后归一化为和 1。",
         )
         self.parser.add_argument("--gamma", type=float, default=2.0, help="gamma for Focal loss")
+        self.parser.add_argument(
+            "--overlap_loss_mode",
+            type=str,
+            default="foreground_tversky",
+            choices=["foreground_tversky", "dual_class"],
+            help="Exp-5 可切换为 0.5 前景 Tversky + 0.5 背景 Dice。",
+        )
+        self.parser.add_argument(
+            "--boundary_loss_weight",
+            type=float,
+            default=0.0,
+            help="主概率图 BoundaryDice 权重；默认关闭，仅在 Boundary F1 证实瓶颈后启用。",
+        )
 
         self.parser.add_argument("--batch_size", type=int, default=12)
         self.parser.add_argument("--num_epochs", type=int, default=80)
         self.parser.add_argument("--input_size", type=int, default=256, help="训练/推理默认输入尺寸")
         self.parser.add_argument("--num_workers", type=int, default=8, help="#threads for loading data")
+        self.parser.add_argument(
+            "--radiometric_jitter_mode",
+            type=str,
+            default="shared",
+            choices=["shared", "independent"],
+            help="SAR 亮度/对比增强模式；Exp-3 对随机单一时相独立扰动。",
+        )
         self.parser.add_argument("--lr", type=float, default=1e-4)
         self.parser.add_argument("--weight_decay", type=float, default=5e-4)
         self.parser.add_argument(
@@ -514,7 +526,10 @@ class Options:
             _validate_backbone_weight_path(self.opt.backbone_weight)
             self.opt.backbone_weight = _resolve_repo_relative_path(self.opt.backbone_weight)
         self.opt.dino_arch = resolve_dino_arch(self.opt.dino_arch, self.opt.dino_weight)
-        self.opt.extract_ids = resolve_extract_ids(self.opt.dino_arch, self.opt.extract_ids)
+        self.opt.dino_fusion_layers = resolve_dino_fusion_layers(
+            self.opt.dino_arch,
+            self.opt.dino_fusion_layers,
+        )
         if self.opt.disable_soft_alignment:
             self.opt.align_on_levels = []
         else:
@@ -528,6 +543,14 @@ class Options:
             raise ValueError("--num_change_queries must be a positive integer")
         if self.opt.cqi_heads < 1:
             raise ValueError("--cqi_heads must be a positive integer")
+        if not self.opt.shallow_aux_supervision and (
+            self.opt.support_consistency_weight > 0.0
+            or self.opt.coarse_consistency_weight > 0.0
+        ):
+            raise ValueError(
+                "--no-shallow_aux_supervision requires "
+                "--support_consistency_weight 0 and --coarse_consistency_weight 0"
+            )
         if self.opt.fpn_channels != 128:
             raise ValueError("HA-CQI OSCD v1 requires --fpn_channels 128")
         if self.opt.head_lr_mult <= 0.0:
@@ -541,6 +564,8 @@ class Options:
             raise ValueError("--aux_loss_weight must be non-negative")
         if self.opt.aux_loss_weight_end < 0.0:
             raise ValueError("--aux_loss_weight_end must be non-negative")
+        if self.opt.boundary_loss_weight < 0.0:
+            raise ValueError("--boundary_loss_weight must be non-negative")
         if self.opt.aux_decay_start_epoch < 1:
             raise ValueError("--aux_decay_start_epoch must be >= 1")
         if not 0.0 <= self.opt.tversky_beta_start <= 1.0:

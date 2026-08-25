@@ -1,5 +1,32 @@
-#!/usr/bin/env python3
-"""将单波段整景 SAR tif 切成 ChangeDINO 推理所需的 PNG/TIF 切片。"""
+"""将单波段整景 SAR tif 切成 ChangeDINO 推理所需的 PNG/TIF 切片。
+
+python baselines/ChangeDINO-main/scripts/prepare_sar_scene_infer.py \
+  --src-root datasets/USA_Brazos_River \
+  --pre-image Pre_Brazos_ascending_20170805.tif \
+  --post-image Post_Brazos_ascending_20170829.tif \
+  --out-root datasets/USA_Brazos_River_CD_infer \
+  --scene-tag usa_brazos_river \
+  --tile-size 256 \
+  --stride 128 \
+  --stretch-low 2 \
+  --stretch-high 98 \
+  --min-valid-ratio 0.01 \
+  --strict
+
+python baselines/ChangeDINO-main/scripts/prepare_sar_scene_infer.py \
+  --src-root datasets/USA_San_Jacinto \
+  --pre-image Pre_SanJacinto_ascending_20170805.tif \
+  --post-image Post_SanJacinto_ascending_20170829.tif \
+  --out-root datasets/USA_San_Jacinto_CD_infer \
+  --scene-tag usa_san_jacinto \
+  --tile-size 256 \
+  --stride 128 \
+  --stretch-low 2 \
+  --stretch-high 98 \
+  --min-valid-ratio 0.01 \
+  --strict
+
+"""
 
 from __future__ import annotations
 

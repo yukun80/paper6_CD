@@ -46,10 +46,10 @@ Keep these artifact boundaries explicit. Do not mix manuscript prose, patent cla
 - The active HA-CQI stack is:
   - shared pre/post CNN-DINO semantic encoder;
   - EfficientNet-B2-only CNN-FPN pyramid;
-  - frozen DINOv3 semantic features with fixed LVD ImageNet normalization;
+  - frozen DINOv3 semantic features from explicit fusion layers `[2,8,11]` with fixed LVD ImageNet normalization;
   - Harmonized Alignment on shallow features;
   - optional deformable soft alignment;
-  - Change Query Interaction;
+  - default five-level Change Query Interaction; the `local_structural` ablation replaces only P1/P2 with query-free locally normalized change projection;
   - MMSCoPE-inspired Omni-Scale State-Space Change Decoder (OSCD);
   - multi-scale auxiliary supervision for small waterlogging and large inundation regions.
 - Preserve HA-CQI's own architecture story. Do not back-port ChangeDINO Risk-Aware, HybridRefiner, topo-router, or micro-gate modules unless the user explicitly requests that experiment.
@@ -195,6 +195,7 @@ If `latexmk` is unavailable, use the local LaTeX toolchain available in the envi
     trainval.py \
     test.py \
     run.py \
+    scripts/diagnose_cross_domain_features.py \
     scripts/infer_sar_scene_tiles.py \
     scripts/infer_gf3_henan_tiles.py
   bash -n trainval_s1gfloods.sh trainval.sh
