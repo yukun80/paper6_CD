@@ -9,15 +9,16 @@ HA-CQI 是本目录当前使用的合成孔径雷达（SAR）洪水变化检测�
 - **模块 I：分层 CNN-DINO 语义编码器**：共享的灾前/灾后编码器融合
   EfficientNet-B2 的五级 CNN-FPN 特征金字塔与冻结 DINOv3 语义特征，输出分辨率对齐的
   `P1-P5` 多尺度特征。CNN 使用数据集统计；DINO 分支先反归一化到 `[0,1]`，再固定使用
-  LVD 的 ImageNet mean/std。
+  LVD 的 ImageNet mean/std。默认只抽取真正参与 P3–P5 融合的 `[5,8,11]`，adapter 不再
+  通过切片静默丢弃浅层特征。
 - **模块 II：协调对齐（Harmonized Alignment, HA）**：先在浅层特征上执行成对共享的
   风格校准，缓解 SAR 辐射差异；随后可选地在 `P1/P2/P3` 上执行可变形软对齐。
-- **模块 III：变化查询交互（Change Query Interaction, CQI）**：可学习的变化查询通过
-  双向注意力与多尺度特征差异交互，为解码器提供显式的变化感知上下文。
+- **模块 III：变化查询交互（Change Query Interaction, CQI）**：P1–P5 均由可学习变化查询
+  通过双向注意力与多尺度双时相特征交互，为解码器提供强召回变化原语。
 - **Omni-Scale State-Space Change Decoder（OSCD）**：以 `P3-P5` 变化原语执行多尺度区域
   聚合、Pixel Unshuffle 对齐和一次四方向 SS2D，再用 `P2/P1` 逐级恢复局部边界。它保持
   二类 dense prediction，不创建第二套 decoder queries 或集合式监督。
-- **多尺度辅助头**：在 `P1-P5` 上提供辅助预测，使小型内涝斑块和大范围淹没区都能获得
+- **多尺度辅助头**：固定在 `P1-P5` 上提供辅助预测，使小型内涝斑块和大范围淹没区都能获得
   有效监督。
 
 主要代码路径如下：
@@ -37,54 +38,23 @@ trainval_s1gfloods.sh
 
 ## 数据集
 
-训练数据加载器要求以下标准二值变化检测目录结构：
+训练数据加载器只以当前目录中的完整同名三元组为成员依据：
 
 ```text
 datasets/<DATASET_NAME>/
 ├── train/{A,B,label}
-├── val/{A,B,label}
-├── train_tif/{A,B,label}
-├── val_tif/{A,B,label}
-├── manifest_train.csv
-├── manifest_val.csv
-└── channel_stats_s1gfloods_train.json
+└── val/{A,B,label}
 ```
 
-默认训练数据集为 `datasets/S1GFloods_CD_DINO_BG_75_25`。该版本保留全部 581 个有效
-全背景 tile，并沿用确定性的全局随机 `75/25` 划分；旧数据集不会被覆盖。
+默认数据集为 `datasets/S1GFloods_CD_DINO_BG_75_25_`。2026-08-26 清洗后的启动快照为
+train/val `4737/1593`，但该数字不是代码硬约束。完整删除同名 A/B/label 三元组后，下次启动会
+自动使用剩余样本；若只缺少其中任一文件，加载器会明确失败。训练期间不支持热删除。
 
-若尚未构建融合后的 S1GFloods 数据集，请从仓库根目录运行 HA-CQI 的数据预处理工具，并计算
-训练集通道统计量：
-
-```bash
-python HA-CQI/scripts/prepare_fused_sar_cd_dataset.py \
-  --s1gfloods-root datasets/S1GFloods \
-  --varfloods-root datasets/VarFloods \
-  --out-root datasets/S1GFloods_CD_DINO_BG_75_25 \
-  --tile-size 256 \
-  --stride 128 \
-  --train-ratio 0.75 \
-  --seed 42 \
-  --dry-run
-
-python HA-CQI/scripts/prepare_fused_sar_cd_dataset.py \
-  --s1gfloods-root datasets/S1GFloods \
-  --varfloods-root datasets/VarFloods \
-  --out-root datasets/S1GFloods_CD_DINO_BG_75_25 \
-  --tile-size 256 \
-  --stride 128 \
-  --train-ratio 0.75 \
-  --seed 42
-
-python HA-CQI/scripts/compute_s1gfloods_cd_stats.py \
-  --data-root datasets/S1GFloods_CD_DINO_BG_75_25 \
-  --split train \
-  --output datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json
-```
-
-预期计数为 train/val `5064/1688`、全背景 `437/144`。构建报告会记录数据指纹、来源/区域/
-背景分布、2,044 对跨 split 重叠窗口，以及旧数据集四个控制文件的构建前后 SHA256。
-默认不允许覆盖已存在的新目录。
+`manifest_*.csv`、`split_report.json` 和历史 dataset fingerprint 仅作构建审计，不决定训练成员，
+也不阻止 resume。默认 `STATS_MODE=auto` 按当前 train A/B 的文件名、大小和 mtime 生成运行快照，
+自动命中或重算 mean/std 缓存。每个 run 会保存包含实际文件名、样本/前景统计和归一化参数的
+`data_snapshot.json`。若需复现实验，可显式使用 `STATS_MODE=file` 与 `STATS_FILE=...`；文件模式
+只校验 train split、三个有限 mean/std 和正数 std，不绑定 manifest。
 
 ## 预训练权重
 
@@ -129,9 +99,10 @@ bash trainval_s1gfloods.sh
 
 ```bash
 cd HA-CQI
-DATASET_NAME=S1GFloods_CD_DINO_BG_75_25 \
+DATASET_NAME=S1GFloods_CD_DINO_BG_75_25_ \
 DATA_ROOT=../datasets \
-RUN_NAME=S1GFloods-HA-CQI-B2-vits16 \
+STATS_MODE=auto \
+RUN_NAME=S1GFloods-HA-CQI-B2-OSCD-DINO5-8-11-CLEAN-s1 \
 BATCH_SIZE=12 \
 NUM_WORKERS=8 \
 LR=1e-4 \
@@ -142,13 +113,17 @@ bash trainval_s1gfloods.sh
 
 默认训练脚本使用以下关键配置：
 
-- `DATASET_NAME=S1GFloods_CD_DINO_BG_75_25`
+- `DATASET_NAME=S1GFloods_CD_DINO_BG_75_25_`
 - `DATA_ROOT=../datasets`
-- `STATS_FILE=../datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json`
+- `STATS_MODE=auto`（`STATS_FILE` 仅在 `STATS_MODE=file` 时使用）
 - `DINO_ARCH=dinov3_vits16`
 - `DINO_WEIGHT=dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth`
 - `BACKBONE_WEIGHT=pretrained/efficientnet_b2_ra-bcdf34b7.pth`
 - `NUM_CHANGE_QUERIES=16`
+- `DINO_FUSION_LAYERS="5 8 11"`
+- `RADIOMETRIC_JITTER_MODE=shared`
+- P1–P5 CQI 与 P1–P5 auxiliary 固定启用
+- 原 Focal + foreground Tversky + support/coarse loss 固定启用
 - decoder 固定为 `oscd_v1`：128 通道、四方向 SS2D、state dimension 1
 - `EVAL_FG_THRESHOLD=0.40`（仅用于 validation 细粒度诊断）
 - `SEED=1`
@@ -173,11 +148,17 @@ metrics.jsonl
 options.json
 ```
 
-完整续训使用 `RESUME=/path/to/*_last.pth`；仅初始化网络使用
-`python trainval.py ... --init_checkpoint /path/to/checkpoint.pth`。resume 会校验数据指纹和
-训练/loss/模型配置。`--resume`、`--init_checkpoint`、测试和推理入口均只接受声明
-`efficientnet_b2 + imagenet + oscd_v1` 的 checkpoint v2。
+每个 run 还会保存 `data_snapshot.json`。完整续训使用 `RESUME=/path/to/*_last.pth`；仅初始化网络使用
+`python trainval.py ... --init_checkpoint /path/to/checkpoint.pth`。resume 会校验
+训练/loss/模型配置；数据成员或自动统计变化只给出醒目 warning，并在当前目录快照上继续。`--resume`、`--init_checkpoint`、测试和推理入口均只接受声明
+`efficientnet_b2 + imagenet + oscd_v1` 的 checkpoint v2。2026-08-23/24 的早期 B2-OSCD
+v2 checkpoint 可被精确映射为其实际有效层 `[5,8,11]` 以复现实验；其他缺失/模糊路由不会猜测。
 `S1GFloods-HA-CQI-vits16-20260427/` 及其结果保留为磁盘归档，当前代码不支持加载。
+
+此前试验性的浅层 query-free、浅层监督减法、dual-class overlap 和 boundary loss 已从主线删除，
+避免在清洗数据的强召回 baseline 中继续叠加背景抑制。时相独立辐射增强仍保留为后续单变量实验，
+但默认关闭：`RADIOMETRIC_JITTER_MODE=shared`。只有清洗后模型仍仅在跨域场景出现 FP 时，才测试
+`RADIOMETRIC_JITTER_MODE=independent`。
 
 训练结果写入：
 
@@ -289,7 +270,23 @@ python HA-CQI/scripts/evaluate_sar_scene.py \
 
 评估器排除 metadata nodata 和历史标签值 `3`，并同时报告 raw/filtered 的 IoU、F1、P/R、
 PR-AUC、Brier、ECE、背景 tile FP、FP 像素比例、最大/P95 FP 连通域及 tiny/small/large
-coverage recall。河南只用于外部校准/诊断，涿州作为锁定测试，不参与训练 epoch 选择。
+coverage recall，并新增 2/4 像素容差 Boundary F1。河南只用于外部校准/诊断，涿州作为
+锁定测试，不参与训练 epoch 选择。
+
+统一跨域特征诊断（新 checkpoint 可额外输出 P1–P5/CQI 指标）：
+
+```bash
+python HA-CQI/scripts/diagnose_cross_domain_features.py \
+  --tiles-root datasets/GF3_Henan_CD_infer \
+  --probability HA-CQI/outputs/<henan_run>/mosaic/change_prob.tif \
+  --ground-truth datasets/GF3_Henan/GF3_Zhengzhou_label.tif \
+  --checkpoint HA-CQI/checkpoints/<run>/<run>_efficientnet_b2_best_primary.pth \
+  --threshold <checkpoint_selected_threshold> \
+  --role calibration \
+  --output /tmp/<run>_henan_feature_diagnostic.json
+```
+
+Zhuozhou 必须使用 `--role locked_test`；LT1 使用 `--role qualitative` 且不能据此选模型。
 
 ## 代码校验
 
@@ -304,9 +301,12 @@ python -m py_compile \
   model/decode_heads/*.py \
   model/engine.py \
   model/checkpointing.py \
+  data/transform.py \
+  utils/flood_evaluation.py \
   trainval.py \
   test.py \
-  run.py
+  run.py \
+  scripts/diagnose_cross_domain_features.py
 
 python -m unittest tests/test_pipeline_contracts.py
 

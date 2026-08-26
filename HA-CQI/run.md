@@ -1,47 +1,69 @@
-# HA-CQI B2 + OSCD 运行说明
+# HA-CQI B2 + OSCD 强召回动态数据运行说明
 
-## 1. 默认 baseline
+## 1. 当前 baseline
+
+主线固定为：
+
+- 当前目录数据集 `S1GFloods_CD_DINO_BG_75_25_`；
+- EfficientNet-B2 五级 CNN-FPN；
+- frozen DINOv3 ViT-S/16 LVD，ImageNet normalization，融合层 `[5,8,11]`；
+- HA + 五级 CQI + OSCD；
+- P1–P5 auxiliary；
+- Focal `0.25/0.75`、foreground Tversky `0.70→0.55`、support/coarse `0.03/0.02`；
+- batch 12、8 workers、bf16、AdamW base/head LR `1e-4/2e-4`、80 epoch cosine。
+
+此前用于 0825 的 P1/P2 query-free、浅层监督减法、dual-class overlap 与 boundary loss 已删除。
+时相独立辐射增强仅保留为显式消融，默认仍为 shared。
+
+## 2. 正式训练
 
 ```bash
 cd HA-CQI
 conda activate hacqi
+
+DATASET_NAME=S1GFloods_CD_DINO_BG_75_25_ \
+DATA_ROOT=../datasets \
+STATS_MODE=auto \
+RUN_NAME=S1GFloods-HA-CQI-B2-OSCD-DINO5-8-11-CLEAN-s1 \
+DINO_ARCH=dinov3_vits16 \
+DINO_WEIGHT=dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth \
+DINO_FUSION_LAYERS="5 8 11" \
+BACKBONE_WEIGHT=pretrained/efficientnet_b2_ra-bcdf34b7.pth \
+BATCH_SIZE=12 \
+NUM_WORKERS=8 \
+LR=1e-4 \
+HEAD_LR_MULT=2.0 \
+AMP=1 \
+AMP_DTYPE=bf16 \
+SEED=1 \
 bash trainval_s1gfloods.sh
 ```
 
-默认配置固定为：
+`STATS_MODE=auto` 会扫描当前 train/val 的 A/B/label 同名集合。完整删除三元组后，下次进程启动
+自动减样本；只缺任一文件会失败。train A/B 的文件名、大小或 mtime 变化时，mean/std 缓存自动
+失效。历史 manifest、split report 与 fingerprint 不决定运行成员。
 
-- 数据集 `S1GFloods_CD_DINO_BG_75_25`，自然频率采样；
-- EfficientNet-B2 五级 CNN-FPN；
-- 冻结 DINOv3 ViT-S/16 LVD，DINO 输入固定为 ImageNet normalization；
-- HA + CQI + Omni-Scale State-Space Change Decoder（OSCD）；
-- focal `0.25/0.75`、Tversky beta `0.70→0.55`、support/coarse `0.03/0.02`、aux `1.0→0.5`；
-- batch `12`、8 workers、bf16、AdamW base LR `1e-4`、head LR `2e-4`、cosine 80 epochs。
-
-`BACKBONE`、`DINO_INPUT_NORM` 及 MobileNetV2 接口已经移除。`BACKBONE_WEIGHT` 仍可覆盖，
-但只能提供与 EfficientNet-B2 完整兼容的本地 PyTorch 权重。
-
-首次运行需在 `hacqi` 环境安装固定 CUDA 扩展：
+若需要复现指定统计文件：
 
 ```bash
-python -m pip install -r requirements-oscd.txt
-python -m pip check
+STATS_MODE=file \
+STATS_FILE=../datasets/S1GFloods_CD_DINO_BG_75_25_/channel_stats_s1gfloods_train.json \
+bash trainval_s1gfloods.sh
 ```
 
-CUDA selective-scan 不可用或 ABI 不匹配时直接失败；CPU recurrence 仅用于结构测试。
+文件模式只验证 train split、三个有限 mean/std 与正数 std。
 
-validation 在 `0.05–0.95/0.01` 上联合选阈值，primary 固定为 Flood IoU；IoU 并列时依次
-选择更高 precision 和更高 threshold。`0.40` 只用于 validation 细粒度诊断。
-
-## 2. 可复现短步诊断
+## 3. 短步冒烟
 
 ```bash
 cd HA-CQI
 conda activate hacqi
 python trainval.py \
-  --name smoke-hacqi-b2 \
-  --dataset S1GFloods_CD_DINO_BG_75_25 \
+  --name smoke-hacqi-b2-dino5 \
+  --dataset S1GFloods_CD_DINO_BG_75_25_ \
   --dataroot ../datasets \
-  --stats_file ../datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json \
+  --stats_mode auto \
+  --dino_fusion_layers 5 8 11 \
   --gpu_ids 0 \
   --batch_size 1 \
   --num_workers 0 \
@@ -53,12 +75,11 @@ python trainval.py \
   --amp_dtype bf16
 ```
 
-`--max_train_steps/--max_val_steps` 只用于冒烟，正式训练不得保留。CUDA 可用但不支持 bf16
-时会直接失败；需要旧 GPU 时必须显式改用 `--amp_dtype fp16`。
+正式训练不得保留 `--max_train_steps/--max_val_steps`。
 
-## 3. Checkpoint v2
+## 4. Checkpoint 与 resume
 
-新训练目录产生：
+每个 run 记录：
 
 ```text
 *_efficientnet_b2_best_primary.pth
@@ -67,58 +88,29 @@ python trainval.py \
 selection.json
 metrics.jsonl
 options.json
+data_snapshot.json
 ```
 
 完整续训：
 
 ```bash
 cd HA-CQI
-RESUME=checkpoints/<b2_run>/<b2_run>_efficientnet_b2_last.pth \
+RESUME=checkpoints/<run>/<run>_efficientnet_b2_last.pth \
 bash trainval_s1gfloods.sh
 ```
 
-仅加载网络参数：
-
-```bash
-cd HA-CQI
-python trainval.py <其余训练参数> \
-  --init_checkpoint checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth
-```
-
-resume 恢复 optimizer、scheduler、GradScaler、epoch、global step、随机状态和 DataLoader
-generator，并对模型、loss、训练配置及 dataset fingerprint 做 fail-closed 校验。B0、`shared`
-DINO normalization、非 `oscd_v1` decoder、v1/raw checkpoint 都会在 state-dict 加载前被拒绝。
-
-## 4. B2 baseline 后的单变量消融
-
-固定 B2、ImageNet DINO normalization、batch 12/bf16，其余候选依次测试；只有胜者进入下一轮：
-
-```bash
-# 1. 关闭 support consistency
-SUPPORT_CONSISTENCY_WEIGHT=0 \
-RUN_NAME=S1GFloods-HA-CQI-B2-ab01-support0 bash trainval_s1gfloods.sh
-
-# 2. 平衡 focal class weights
-FOCAL_BG_WEIGHT=0.5 FOCAL_FG_WEIGHT=0.5 \
-RUN_NAME=S1GFloods-HA-CQI-B2-ab02-focal-balanced bash trainval_s1gfloods.sh
-
-# 3. 平衡 Tversky
-TVERSKY_BETA_START=0.5 TVERSKY_BETA_END=0.5 \
-RUN_NAME=S1GFloods-HA-CQI-B2-ab03-tversky-balanced bash trainval_s1gfloods.sh
-
-# 4. 降低后期 auxiliary 权重
-AUX_LOSS_WEIGHT_END=0.25 \
-RUN_NAME=S1GFloods-HA-CQI-B2-ab04-aux025 bash trainval_s1gfloods.sh
-```
-
-不要并行执行以上命令，也不要一次改变多个变量。每轮需显式携带前序胜者配置。
+模型、loss 和训练配置仍严格一致。若目录成员或自动统计变化，resume 会给出醒目 warning，恢复
+optimizer/scheduler/scaler/epoch/随机状态后在当前快照上继续；同时重置内存中的历史 best 比较值，
+由下一次完整 validation 建立新 primary baseline。此时不再视为严格可复现实验。
+早期 B2-OSCD v2 的 `[2,5,8,11] + raw[1:]` 仅按可证明等价关系解释为 `[5,8,11]`；
+显式 `[2,8,11]` 的 0825 checkpoint 仍按原层路由复现。
 
 ## 5. 测试与推理
 
 ```bash
 cd HA-CQI
 python test.py \
-  --checkpoint checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
+  --checkpoint checkpoints/<run>/<run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
   --save_test
 ```
@@ -126,20 +118,21 @@ python test.py \
 ```bash
 cd HA-CQI
 python run.py \
-  --checkpoint checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
+  --checkpoint checkpoints/<run>/<run>_efficientnet_b2_best_primary.pth \
   --img_A /path/to/pre.tif \
   --img_B /path/to/post.tif \
   --output outputs/pair.png \
   --gpu_ids 0
 ```
 
-推理阈值优先级为：显式 `--threshold` → checkpoint v2 `meta.selection.threshold`；两者均
-缺失时失败。checkpoint 的 stats 路径会自动解析，显式 CLI 始终优先。
+推理阈值优先级为显式 `--threshold`，其次 checkpoint v2 `meta.selection.threshold`；两者均缺失
+时失败。推理归一化直接使用 checkpoint 的实际 mean/std，不重新扫描训练目录。
 
-## 6. 当前边界
+## 6. 当前停止边界
 
-- 不改变 HA、CQI、DCNv2、辅助头、输入尺寸、loss 数值或整景后处理；
-- 不实现标准 Mask2Former，不引入伪彩色、pair-shared radiometric stretch 或更大 DINO；
-- OSCD 对 FP、tiny flood 和跨区域一致性的收益需要完整训练或消融实验验证；
-- 当前随机 75/25 split 仍有 2,044 对跨 split 重叠窗口，不是严格跨区域泛化验证；
-- 4090 的 batch 12/bf16 必须以实际 peak allocated/reserved memory 为准，不能由 CPU 冒烟替代。
+- 不重建数据集，不用 manifest/fingerprint 阻止训练；
+- 不改 HA、CQI、OSCD、输入尺寸或 SAR 色调映射；
+- 不启用新的背景抑制 loss；
+- 只有清洗后 baseline 仍仅在跨域场景出现 FP，才单独测试
+  `RADIOMETRIC_JITTER_MODE=independent`；
+- FP、tiny recall 和跨域泛化收益需要完整训练验证，轻量工程测试不代表算法指标提升。

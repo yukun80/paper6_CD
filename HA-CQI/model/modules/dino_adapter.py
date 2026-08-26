@@ -3,7 +3,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pathlib import Path
 
-from .dino_meta import get_dino_arch_spec, resolve_dino_arch, resolve_extract_ids
+from .dino_meta import (
+    get_dino_arch_spec,
+    resolve_dino_arch,
+    resolve_dino_fusion_layers,
+)
 
 REPO_DIR = str(Path(__file__).resolve().parents[2] / "dinov3")
 
@@ -15,7 +19,7 @@ class DinoV3FeatureExtractor(nn.Module):
         self,
         dino_arch="auto",
         weights_path="dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth",
-        extract_ids=None,
+        fusion_layers=None,
         device="cuda",
     ):
         super().__init__()
@@ -36,7 +40,7 @@ class DinoV3FeatureExtractor(nn.Module):
         self.model = self.model.eval().to(self.device)
         self.embed_dim = int(spec["embed_dim"])
         self.patch_size = int(spec["patch_size"])
-        self.extract_ids = resolve_extract_ids(self.dino_arch, extract_ids)
+        self.fusion_layers = resolve_dino_fusion_layers(self.dino_arch, fusion_layers)
 
         # freeze the backbone
         for p in self.model.parameters():
@@ -48,7 +52,14 @@ class DinoV3FeatureExtractor(nn.Module):
         self.model.eval()
         return self
 
-    def forward(self, x):
+    def extract_layers(self, x: torch.Tensor, layer_ids: list[int]) -> list[torch.Tensor]:
+        """供离线诊断显式抽取任意合法层；训练 forward 仍固定三层融合契约。"""
+        if not layer_ids:
+            raise ValueError("layer_ids must not be empty")
+        num_layers = int(get_dino_arch_spec(self.dino_arch)["num_layers"])
+        invalid = [value for value in layer_ids if value < 0 or value >= num_layers]
+        if invalid:
+            raise ValueError(f"Invalid DINO diagnostic layers: {invalid}")
         scale_factor = 2 / (512 / x.shape[-1])
         x = F.interpolate(
             x,
@@ -61,7 +72,7 @@ class DinoV3FeatureExtractor(nn.Module):
             # 精度完全继承外层 AMP；只物化实际使用的中间层。
             feats = self.model.get_intermediate_layers(
                 x,
-                n=self.extract_ids,
+                n=layer_ids,
                 reshape=True,
                 norm=True,
             )
@@ -74,6 +85,9 @@ class DinoV3FeatureExtractor(nn.Module):
                 )
                 for feat in feats
             ]
+
+    def forward(self, x):
+        return self.extract_layers(x, self.fusion_layers)
 
 
 class SeparableAdapterBlock(nn.Module):
@@ -103,8 +117,8 @@ class SeparableAdapterBlock(nn.Module):
 class DinoPyramidAdapter(nn.Module):
     """将 DINOv3 中间层特征适配到与 FPN 金字塔匹配的通道数和空间尺度。
 
-    只处理 3 层 DINO 特征（跳过最浅层 raw[0]），
-    分别对应 P3/P4/P5 的语义校准。每层独立 SeparableAdapterBlock + 尺度缩放。
+    处理 extractor 明确返回的 3 层 DINO 特征，分别对应 P3/P4/P5。
+    adapter 不再自行跳层，每层使用独立 SeparableAdapterBlock 与尺度缩放。
     """
 
     def __init__(
@@ -130,7 +144,7 @@ class DinoPyramidAdapter(nn.Module):
     def forward(self, feats):
         """
         feats: list of num_levels tensors, each [B, C, H_i, W_i]（C = in_dim）
-               默认 3 层，对应 raw[1], raw[2], raw[3]
+               三层均会参与融合，不存在隐式切片或丢层
         return: list of num_levels tensors, each [B, out_dim, S_i, S_i]
         """
         if len(feats) != self.num_levels:

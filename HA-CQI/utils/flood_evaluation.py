@@ -148,6 +148,79 @@ def false_positive_component_scores(
     }
 
 
+def boundary_match_counts(
+    target: np.ndarray,
+    prediction: np.ndarray,
+    valid_mask: np.ndarray,
+    tolerance: int,
+) -> dict[str, int]:
+    """返回容差匹配的洪水内边界计数，忽略 nodata 邻域。"""
+    if tolerance < 0:
+        raise ValueError("boundary tolerance must be non-negative")
+    structure = np.ones((3, 3), dtype=bool)
+    valid = np.asarray(valid_mask).astype(bool)
+    gt = np.asarray(target).astype(bool) & valid
+    pred = np.asarray(prediction).astype(bool) & valid
+    interior_valid = ndimage.binary_erosion(valid, structure=structure, border_value=0)
+    gt_boundary = gt & ~ndimage.binary_erosion(gt, structure=structure, border_value=0)
+    pred_boundary = pred & ~ndimage.binary_erosion(pred, structure=structure, border_value=0)
+    gt_boundary &= interior_valid
+    pred_boundary &= interior_valid
+
+    if tolerance > 0:
+        match_structure = ndimage.generate_binary_structure(2, 2)
+        gt_tolerance = ndimage.binary_dilation(
+            gt_boundary,
+            structure=match_structure,
+            iterations=tolerance,
+        )
+        pred_tolerance = ndimage.binary_dilation(
+            pred_boundary,
+            structure=match_structure,
+            iterations=tolerance,
+        )
+    else:
+        gt_tolerance = gt_boundary
+        pred_tolerance = pred_boundary
+    return {
+        "matched_prediction": int(np.count_nonzero(pred_boundary & gt_tolerance)),
+        "prediction_boundary": int(np.count_nonzero(pred_boundary)),
+        "matched_target": int(np.count_nonzero(gt_boundary & pred_tolerance)),
+        "target_boundary": int(np.count_nonzero(gt_boundary)),
+    }
+
+
+def boundary_f1_metrics(
+    target: np.ndarray,
+    prediction: np.ndarray,
+    valid_mask: np.ndarray | None = None,
+    tolerance: int = 2,
+) -> dict[str, float | int]:
+    """计算容差边界 Precision/Recall/F1，双空边界定义为 1。"""
+    gt = np.asarray(target)
+    valid = np.ones(gt.shape, dtype=bool) if valid_mask is None else np.asarray(valid_mask)
+    counts = boundary_match_counts(gt, prediction, valid, tolerance)
+    pred_total = counts["prediction_boundary"]
+    target_total = counts["target_boundary"]
+    precision = (
+        counts["matched_prediction"] / pred_total
+        if pred_total
+        else float(target_total == 0)
+    )
+    recall = (
+        counts["matched_target"] / target_total
+        if target_total
+        else float(pred_total == 0)
+    )
+    f1 = 2.0 * precision * recall / (precision + recall + EPS)
+    return {
+        **counts,
+        f"boundary_precision_tol{tolerance}": float(precision),
+        f"boundary_recall_tol{tolerance}": float(recall),
+        f"boundary_f1_tol{tolerance}": float(f1),
+    }
+
+
 class FloodEvaluationAccumulator:
     """内存常数级累计多阈值混淆矩阵、校准和参考阈值细粒度指标。"""
 
@@ -182,6 +255,16 @@ class FloodEvaluationAccumulator:
         self.background_tile_fp_count = 0
         self.background_tile_fp_fractions: list[float] = []
         self.fp_component_areas: list[int] = []
+        self.boundary_tolerances = (2, 4)
+        self.boundary_counts = {
+            tolerance: {
+                "matched_prediction": 0,
+                "prediction_boundary": 0,
+                "matched_target": 0,
+                "target_boundary": 0,
+            }
+            for tolerance in self.boundary_tolerances
+        }
 
     def update(
         self,
@@ -238,6 +321,15 @@ class FloodEvaluationAccumulator:
         for prob_item, gt_item, valid_item in zip(batch_probs, batch_gt, batch_valid):
             pred_item = prob_item >= self.reference_threshold
             self.component_stats.update(gt_item, pred_item, valid_item)
+            for tolerance in self.boundary_tolerances:
+                counts = boundary_match_counts(
+                    gt_item,
+                    pred_item,
+                    valid_item,
+                    tolerance,
+                )
+                for key, value in counts.items():
+                    self.boundary_counts[tolerance][key] += int(value)
             valid_count = int(np.count_nonzero(valid_item))
             if valid_count > 0 and not np.any(gt_item & valid_item):
                 fp_fraction = float(np.count_nonzero(pred_item & valid_item)) / valid_count
@@ -311,6 +403,24 @@ class FloodEvaluationAccumulator:
                 ),
             }
         )
+        for tolerance, counts in self.boundary_counts.items():
+            pred_total = counts["prediction_boundary"]
+            target_total = counts["target_boundary"]
+            precision = (
+                counts["matched_prediction"] / pred_total
+                if pred_total
+                else float(target_total == 0)
+            )
+            recall = (
+                counts["matched_target"] / target_total
+                if target_total
+                else float(pred_total == 0)
+            )
+            reference[f"boundary_precision_tol{tolerance}"] = float(precision)
+            reference[f"boundary_recall_tol{tolerance}"] = float(recall)
+            reference[f"boundary_f1_tol{tolerance}"] = float(
+                2.0 * precision * recall / (precision + recall + EPS)
+            )
         fp_areas = np.asarray(self.fp_component_areas, dtype=np.int64)
         reference.update(
             {

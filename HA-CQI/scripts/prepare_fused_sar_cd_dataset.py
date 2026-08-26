@@ -399,7 +399,7 @@ def compute_cross_split_overlap(splits: dict[str, list[SampleRecord]]) -> dict[s
 
 
 def compute_dataset_fingerprint(splits: dict[str, list[SampleRecord]]) -> str:
-    """对 split 成员及标签统计生成与绝对路径无关的稳定指纹。"""
+    """生成构建时审计指纹；训练和 resume 从不把它作为准入条件。"""
     digest = hashlib.sha256()
     for split in ("train", "val"):
         for record in sorted(splits[split], key=lambda item: item.sample_id):

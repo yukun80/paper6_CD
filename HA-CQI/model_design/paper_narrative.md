@@ -4,7 +4,7 @@
 
 SAR 城市洪水范围制图的困难并不只来自双时相之间是否存在变化，更来自变化关系是否建立在可比较的双时相特征之上。对跨传感器或跨场景 SAR 影像而言，轻微但稳定的灰度色调和散射统计偏移会优先污染浅层局部响应；在此基础上，残余几何错位和高层语义不稳定会继续削弱双时相特征的可比性；即使特征已经具备较好的比较基础，城市道路积水、建筑阴影、永久水体邻域和 speckle 噪声仍会产生与洪水相似的伪变化响应。围绕这条问题链，HA-CQI 将方法主线组织为 **Harmonized Alignment (HA)** 和 **Change Query Interaction (CQI)** 两个核心模块，对应 `feature harmonization and alignment -> query-based bitemporal change primitive construction` 的因果顺序；随后采用受 SegMAN MMSCoPE 启发的 **Omni-Scale State-Space Change Decoder (OSCD)** 聚合多尺度空间上下文并重建最终洪水范围图。
 
-给定灾前图像 `I_pre` 与灾后图像 `I_post`，单波段 SAR 首先以重复灰度形成三通道表示。共享 EfficientNet-B2 编码器使用训练集统计归一化输入，冻结 DINOv3 分支则先将该输入反归一化到 `[0,1]`，再应用 LVD 预训练对应的 ImageNet mean/std。编码器提取双时相金字塔特征 `\{P_t^l\}_{l=1}^{5}`，其中 `t \in \{\text{pre}, \text{post}\}`。`P1-P2` 保留高分辨率局部纹理和边界细节，`P3-P5` 承担中高层语义表达。HA 输出经风格协调和局部对齐的可比较双时相特征；CQI 再通过变化查询与双时相 pair tokens 的交互，在五个尺度上生成结构化变化原语 `\{D^l\}_{l=1}^{5}`；OSCD 以 `D3-D5` 建模多尺度空间上下文，再通过 `D2-D1` 恢复局部细节，输出二值洪水范围预测，并为后续 CFDepth 提供 `SAR-derived change-defined flood support`。
+给定灾前图像 `I_pre` 与灾后图像 `I_post`，单波段 SAR 首先以重复灰度形成三通道表示。共享 EfficientNet-B2 编码器使用当前训练目录自动统计的归一化输入，冻结 DINOv3 分支则先将该输入反归一化到 `[0,1]`，再应用 LVD 预训练对应的 ImageNet mean/std。当前强召回 baseline 显式抽取 DINO `[5,8,11]` 三层并全部用于 `P3-P5` 语义融合，不再抽取四层后在 adapter 内静默丢弃一层。编码器提取双时相金字塔特征 `\{P_t^l\}_{l=1}^{5}`，其中 `t \in \{\text{pre}, \text{post}\}`。`P1-P2` 保留高分辨率局部纹理和边界细节，`P3-P5` 承担中高层语义表达。HA 输出经风格协调和局部对齐的可比较双时相特征；CQI 再通过变化查询与双时相 pair tokens 的交互，在五个尺度上生成结构化变化原语 `\{D^l\}_{l=1}^{5}`；OSCD 以 `D3-D5` 建模多尺度空间上下文，再通过 `D2-D1` 恢复局部细节，输出二值洪水范围预测，并为后续 CFDepth 提供 `SAR-derived change-defined flood support`。
 
 ## Harmonized Alignment (HA)
 
@@ -101,7 +101,7 @@ Z^l
 \mathrm{Attn}_{z\leftarrow q}^l(Z^l,\hat Q^l).
 \]
 
-这一 two-way interaction 的作用是让少量查询先概括当前尺度中的变化模式，再用这些模式反向调制所有空间位置。与直接在 `X_{\mathrm{pre}}^l` 和 `X_{\mathrm{post}}^l` 之间做无约束 cross-attention 不同，CQI 的注意力发生在 dense pair tokens 与 change queries 之间，因此不会把双时相特征过早混合成难以解释的表示。当前实现对五个尺度均使用 query-token 全局交互，并未实现窗口化或稀疏路由。
+这一 two-way interaction 的作用是让少量查询先概括当前尺度中的变化模式，再用这些模式反向调制所有空间位置。与直接在 `X_{\mathrm{pre}}^l` 和 `X_{\mathrm{post}}^l` 之间做无约束 cross-attention 不同，CQI 的注意力发生在 dense pair tokens 与 change queries 之间，因此不会把双时相特征过早混合成难以解释的表示。当前强召回 baseline 对五个尺度均使用 query-token 全局交互；此前试验性的 P1/P2 query-free 路径因小目标召回下降风险且数据噪声证据更强，已从主线删除。
 
 最终，CQI 将变化感知后的 pair tokens 映射为多尺度变化原语：
 

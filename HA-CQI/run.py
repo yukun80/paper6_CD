@@ -26,7 +26,7 @@ from option import (
     resolve_norm_stats,
     validate_stats_provenance,
 )
-from model.modules.dino_meta import resolve_dino_arch, resolve_extract_ids
+from model.modules.dino_meta import resolve_dino_arch, resolve_dino_fusion_layers
 
 
 def build_parser() -> ArgumentParser:
@@ -103,7 +103,10 @@ def parse_and_prepare() -> tuple[object, dict]:
         _validate_backbone_weight_path(opt.backbone_weight)
         opt.backbone_weight = _resolve_repo_relative_path(opt.backbone_weight)
     opt.dino_arch = resolve_dino_arch(opt.dino_arch, opt.dino_weight)
-    opt.extract_ids = resolve_extract_ids(opt.dino_arch, opt.extract_ids)
+    opt.dino_fusion_layers = resolve_dino_fusion_layers(
+        opt.dino_arch,
+        opt.dino_fusion_layers,
+    )
     opt.mean, opt.std = resolve_norm_stats(opt)
     validate_stats_provenance(opt)
 

@@ -42,7 +42,7 @@ from model.checkpointing import (  # noqa: E402
 )
 from model.modules.dino_meta import (  # noqa: E402
     resolve_dino_arch,
-    resolve_extract_ids,
+    resolve_dino_fusion_layers,
 )
 from option import (  # noqa: E402
     Options,
@@ -145,11 +145,11 @@ def build_parser(
     parser = opt_builder.parser
     parser.set_defaults(
         name="HA-CQI",
-        dataset="S1GFloods_CD_DINO_BG_75_25",
+        dataset="S1GFloods_CD_DINO_BG_75_25_",
         batch_size=8,
         num_workers=4,
         backbone_weight=DEFAULT_BACKBONE_WEIGHT,
-        stats_file="datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json",
+        stats_file="datasets/S1GFloods_CD_DINO_BG_75_25_/channel_stats_s1gfloods_train.json",
     )
     parser.description = description
     parser.add_argument("--tiles-root", type=Path, default=Path("datasets/SAR_Scene_CD_infer"))
@@ -208,6 +208,7 @@ def parse_and_prepare(
     *,
     defaults: dict[str, object] | None = None,
     description: str = "Infer HA-CQI on SAR scene tiles",
+    create_output_dirs: bool = True,
 ) -> tuple[argparse.Namespace, dict[str, object]]:
     explicit_arguments = collect_explicit_arguments(argv)
     opt = parse_args(argv=argv, defaults=defaults, description=description)
@@ -284,13 +285,17 @@ def parse_and_prepare(
 
     opt.phase = "test"
     opt.dino_arch = resolve_dino_arch(opt.dino_arch, opt.dino_weight)
-    opt.extract_ids = resolve_extract_ids(opt.dino_arch, opt.extract_ids)
+    opt.dino_fusion_layers = resolve_dino_fusion_layers(
+        opt.dino_arch,
+        opt.dino_fusion_layers,
+    )
     opt.mean, opt.std = resolve_norm_stats(opt)
     validate_stats_provenance(opt)
-    opt.output_dir.mkdir(parents=True, exist_ok=True)
     opt.mosaic_dir = opt.output_dir / "mosaic"
-    opt.mosaic_dir.mkdir(parents=True, exist_ok=True)
-    if opt.skip_tiles:
+    if create_output_dirs:
+        opt.output_dir.mkdir(parents=True, exist_ok=True)
+        opt.mosaic_dir.mkdir(parents=True, exist_ok=True)
+    if opt.skip_tiles or not create_output_dirs:
         opt.tile_png_dir = None
         opt.tile_tif_dir = None
     else:
@@ -482,7 +487,7 @@ def build_model_report(opt: argparse.Namespace) -> dict[str, object]:
         "detail_levels": [2, 1],
         "dino_arch": opt.dino_arch,
         "dino_weight": str(opt.dino_weight),
-        "extract_ids": [int(v) for v in opt.extract_ids],
+        "dino_fusion_layers": [int(v) for v in opt.dino_fusion_layers],
         "dino_input_norm": "imagenet",
     }
 

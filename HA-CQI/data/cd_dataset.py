@@ -7,11 +7,9 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torchvision import transforms
 
+from .runtime_snapshot import scan_split_files
 from .transform import Transforms
 from .tif_io import is_tiff_path, read_binary_label_tif, read_sar_tif
-
-
-VALID_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff"}
 
 
 def seed_worker(worker_id: int) -> None:
@@ -20,21 +18,6 @@ def seed_worker(worker_id: int) -> None:
     worker_seed = torch.initial_seed() % (2**32)
     np.random.seed(worker_seed)
     random.seed(worker_seed)
-
-
-def _scan_split_dir(split_dir: Path) -> dict[str, Path]:
-    if not split_dir.is_dir():
-        raise FileNotFoundError(f"Split directory not found: {split_dir}")
-    files = sorted(p for p in split_dir.iterdir() if p.is_file() and p.suffix.lower() in VALID_IMAGE_SUFFIXES)
-    return {p.name: p for p in files}
-
-
-def _resolve_label_dir(base_dir: Path) -> Path:
-    candidates = [base_dir / "label", base_dir / "Label"]
-    for candidate in candidates:
-        if candidate.is_dir():
-            return candidate
-    raise FileNotFoundError(f"Cannot find label directory under: {base_dir}")
 
 
 def _normalize_to_rgb(image: Image.Image) -> Image.Image:
@@ -83,24 +66,22 @@ class Load_Dataset(Dataset):
         # train/val loader 共用同一 argparse Namespace；冻结 phase，避免后续切换污染验证增强。
         self.phase = str(opt.phase)
 
-        split_root = Path(opt.dataroot) / opt.dataset / self.phase
-        dir1 = split_root / "A"
-        dir2 = split_root / "B"
-        dir_label = _resolve_label_dir(split_root)
-
-        self.t1_map = _scan_split_dir(dir1)
-        self.t2_map = _scan_split_dir(dir2)
-        self.label_map = _scan_split_dir(dir_label)
-        self.fnames = sorted(self.t1_map.keys())
-
-        if self.fnames != sorted(self.t2_map.keys()) or self.fnames != sorted(self.label_map.keys()):
-            raise ValueError(f"File mismatch under split {split_root}: " "A/B/label must have identical file names.")
-        if not self.fnames:
-            raise ValueError(f"No samples found under split: {split_root}")
+        dataset_root = Path(opt.dataroot) / opt.dataset
+        split_files = scan_split_files(dataset_root, self.phase)
+        self.t1_map = split_files.a
+        self.t2_map = split_files.b
+        self.label_map = split_files.label
+        self.fnames = list(split_files.filenames)
 
         self.dataset_size = len(self.fnames)
         self.normalize = transforms.Normalize(tuple(opt.mean), tuple(opt.std))
-        self.transform = Transforms(input_size=opt.input_size, dataset_mode=opt.dataset_mode)
+        self.transform = Transforms(
+            input_size=opt.input_size,
+            dataset_mode=opt.dataset_mode,
+            radiometric_jitter_mode=str(
+                getattr(opt, "radiometric_jitter_mode", "shared")
+            ),
+        )
         self.to_tensor = transforms.ToTensor()
 
     def __len__(self):

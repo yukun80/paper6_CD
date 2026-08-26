@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import csv
 import json
 import sys
 import tempfile
@@ -15,7 +14,6 @@ import numpy as np
 import rasterio
 import torch
 from PIL import Image
-from rasterio.windows import Window
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = PROJECT_ROOT.parent
@@ -28,6 +26,12 @@ from data.tif_io import (  # noqa: E402
     stretch_sar_array,
 )
 from data.cd_dataset import Load_Dataset  # noqa: E402
+from data.runtime_snapshot import (  # noqa: E402
+    build_runtime_data_snapshot,
+    resolve_auto_channel_stats,
+    scan_split_files,
+    warn_if_runtime_snapshot_changed,
+)
 from model.checkpointing import (  # noqa: E402
     CHECKPOINT_FORMAT_VERSION,
     atomic_torch_save,
@@ -37,21 +41,22 @@ from model.checkpointing import (  # noqa: E402
     resolve_inference_threshold,
 )
 from model.backbones import build_feature_backbone  # noqa: E402
-from model.decode_heads import OmniScaleStateSpaceChangeDecoder  # noqa: E402
+from model.decode_heads import (  # noqa: E402
+    MultiScaleAuxiliaryHead,
+    OmniScaleStateSpaceChangeDecoder,
+)
 from model.decode_heads.state_space_scan import (  # noqa: E402
     FourDirectionSelectiveScan2D,
     selective_scan_reference,
 )
 from model.losses.focal import FocalLoss  # noqa: E402
-from model.losses.dice import DICELoss  # noqa: E402
+from model.losses.dice import TverskyLoss  # noqa: E402
+from model.engine import HACQIEngine  # noqa: E402
 from model.modules.dino_adapter import DinoV3FeatureExtractor  # noqa: E402
+from model.modules.change_query_interaction import ChangeQueryInteraction  # noqa: E402
+from model.modules.dino_meta import resolve_dino_fusion_layers  # noqa: E402
 from model.modules.semantic_encoder import HierarchicalCnnDinoEncoder  # noqa: E402
-from scripts.prepare_fused_sar_cd_dataset import (  # noqa: E402
-    assign_splits,
-    build_s1gfloods_records,
-    build_varfloods_records,
-    compute_cross_split_overlap,
-)
+from data.transform import Transforms  # noqa: E402
 from scripts.compute_s1gfloods_cd_stats import (  # noqa: E402
     compute_stats_payload,
     write_stats_payload,
@@ -59,9 +64,10 @@ from scripts.compute_s1gfloods_cd_stats import (  # noqa: E402
 from scripts.evaluate_sar_scene import resolve_inputs  # noqa: E402
 from utils.flood_evaluation import (  # noqa: E402
     FloodEvaluationAccumulator,
+    boundary_f1_metrics,
     select_primary_threshold,
 )
-from option import Options, validate_stats_provenance  # noqa: E402
+from option import Options, resolve_norm_stats, validate_stats_provenance  # noqa: E402
 
 
 def valid_model_config() -> dict[str, object]:
@@ -90,11 +96,32 @@ def valid_model_config() -> dict[str, object]:
         "detail_levels": [2, 1],
         "dino_arch": "dinov3_vits16",
         "dino_weight": "dinov3/weights/vits16.pth",
-        "extract_ids": [2, 5, 8, 11],
+        "dino_fusion_layers": [5, 8, 11],
         "dino_input_norm": "imagenet",
         "input_mean": [0.5, 0.5, 0.5],
         "input_std": [0.5, 0.5, 0.5],
     }
+
+
+def write_triplet(
+    dataset_root: Path,
+    split: str,
+    filename: str,
+    *,
+    pre_value: int,
+    post_value: int,
+    foreground: bool = False,
+) -> None:
+    """在临时目录生成完整同名 A/B/label 三元组。"""
+    arrays = {
+        "A": np.full((4, 4), pre_value, dtype=np.uint8),
+        "B": np.full((4, 4), post_value, dtype=np.uint8),
+        "label": np.full((4, 4), 255 if foreground else 0, dtype=np.uint8),
+    }
+    for role, array in arrays.items():
+        directory = dataset_root / split / role
+        directory.mkdir(parents=True, exist_ok=True)
+        Image.fromarray(array).save(directory / filename)
 
 
 class PipelineContractTests(unittest.TestCase):
@@ -157,6 +184,35 @@ class PipelineContractTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "OSCD-only decoder contract mismatch"):
             checkpoint_model_config(payload)
 
+    def test_early_oscd_v2_checkpoint_maps_only_proven_effective_dino_layers(self) -> None:
+        model_config = valid_model_config()
+        model_config.pop("dino_fusion_layers")
+        model_config["extract_ids"] = [2, 5, 8, 11]
+        payload = {
+            "network": {"weight": torch.ones(1)},
+            "meta": {
+                "format_version": CHECKPOINT_FORMAT_VERSION,
+                "model_config": model_config,
+            },
+        }
+        with self.assertWarnsRegex(UserWarning, "actual effective fusion layers"):
+            normalized = checkpoint_model_config(payload)
+        self.assertEqual(normalized["dino_fusion_layers"], [5, 8, 11])
+        self.assertNotIn("extract_ids", normalized)
+
+        model_config["extract_ids"] = [1, 4, 7, 10]
+        with self.assertRaisesRegex(ValueError, "lacks required inference fields"):
+            checkpoint_model_config(payload)
+
+        vitl_config = valid_model_config()
+        vitl_config["dino_arch"] = "dinov3_vitl16"
+        vitl_config.pop("dino_fusion_layers")
+        vitl_config["extract_ids"] = [5, 11, 17, 23]
+        payload["meta"]["model_config"] = vitl_config
+        with self.assertWarnsRegex(UserWarning, "actual effective fusion layers"):
+            normalized_vitl = checkpoint_model_config(payload)
+        self.assertEqual(normalized_vitl["dino_fusion_layers"], [11, 17, 23])
+
     def test_dino_input_contract_reverses_dataset_norm_then_uses_imagenet(self) -> None:
         encoder = object.__new__(HierarchicalCnnDinoEncoder)
         torch.nn.Module.__init__(encoder)
@@ -198,7 +254,7 @@ class PipelineContractTests(unittest.TestCase):
         extractor = DinoV3FeatureExtractor(
             dino_arch="dinov3_vits16",
             weights_path=str(weight),
-            extract_ids=[2, 5, 8, 11],
+            fusion_layers=[5, 8, 11],
             device="cpu",
         )
         sample = torch.randn(1, 3, 64, 64)
@@ -207,9 +263,9 @@ class PipelineContractTests(unittest.TestCase):
                 sample, n=12, reshape=True, norm=True
             )
             selected = extractor.model.get_intermediate_layers(
-                sample, n=[2, 5, 8, 11], reshape=True, norm=True
+                sample, n=[5, 8, 11], reshape=True, norm=True
             )
-        for expected_index, actual in zip([2, 5, 8, 11], selected):
+        for expected_index, actual in zip([5, 8, 11], selected):
             torch.testing.assert_close(actual, legacy_all[expected_index])
 
     def test_dino_forward_inherits_outer_autocast_context(self) -> None:
@@ -230,14 +286,49 @@ class PipelineContractTests(unittest.TestCase):
         extractor = object.__new__(DinoV3FeatureExtractor)
         torch.nn.Module.__init__(extractor)
         extractor.device = torch.device("cpu")
-        extractor.extract_ids = [2, 5, 8, 11]
+        extractor.dino_arch = "dinov3_vits16"
+        extractor.fusion_layers = [5, 8, 11]
         extractor.model = RecordingDino()
         with torch.autocast("cpu", dtype=torch.bfloat16):
             output = extractor(torch.randn(1, 3, 32, 32))
-        self.assertEqual(len(output), 4)
+        self.assertEqual(len(output), 3)
         self.assertTrue(extractor.model.autocast_enabled)
         self.assertEqual(extractor.model.autocast_dtype, torch.bfloat16)
-        self.assertEqual(extractor.model.requested_layers, [2, 5, 8, 11])
+        self.assertEqual(extractor.model.requested_layers, [5, 8, 11])
+
+    def test_dino_adapter_contract_uses_all_three_returned_layers(self) -> None:
+        from model.modules.dino_adapter import DinoPyramidAdapter
+
+        adapter = DinoPyramidAdapter(in_dim=8, out_dim=4, bottleneck=4).eval()
+        features = [torch.randn(1, 8, 16, 16) for _ in range(3)]
+        with torch.inference_mode():
+            outputs = adapter(features)
+        self.assertEqual([tuple(value.shape) for value in outputs], [
+            (1, 4, 16, 16),
+            (1, 4, 8, 8),
+            (1, 4, 4, 4),
+        ])
+        with self.assertRaisesRegex(ValueError, "expects 3 features"):
+            adapter([*features, torch.randn(1, 8, 16, 16)])
+
+    def test_dino_defaults_restore_historical_strong_recall_layers(self) -> None:
+        self.assertEqual(resolve_dino_fusion_layers("dinov3_vits16", None), [5, 8, 11])
+        self.assertEqual(resolve_dino_fusion_layers("dinov3_vitb16", None), [5, 8, 11])
+        self.assertEqual(resolve_dino_fusion_layers("dinov3_vitl16", None), [11, 17, 23])
+
+    def test_cqi_and_auxiliary_supervision_are_fixed_to_five_levels(self) -> None:
+        interaction = ChangeQueryInteraction(channels=8, num_queries=4, num_heads=2).eval()
+        inputs = [torch.randn(1, 8, size, size) for size in (16, 8, 4, 2, 1)]
+        with torch.inference_mode():
+            outputs = interaction(inputs, [value + 0.1 for value in inputs])
+        self.assertEqual([tuple(value.shape) for value in outputs], [
+            tuple(value.shape) for value in inputs
+        ])
+        head = MultiScaleAuxiliaryHead(8).eval()
+        features = [torch.randn(1, 8, size, size) for size in (32, 16, 8, 4, 2)]
+        with torch.inference_mode():
+            aux_outputs = head(features, (64, 64))
+        self.assertEqual([tuple(value.shape) for value in aux_outputs], [(1, 2, 64, 64)] * 5)
 
     def test_oscd_decoder_shape_diagnostics_and_backward(self) -> None:
         torch.manual_seed(123)
@@ -383,11 +474,18 @@ class PipelineContractTests(unittest.TestCase):
             for option in action.option_strings
         }
         self.assertFalse(any(option.startswith("--mask_") for option in option_names))
+        for removed in (
+            "--shallow_change_mode",
+            "--shallow_aux_supervision",
+            "--overlap_loss_mode",
+            "--boundary_loss_weight",
+        ):
+            self.assertNotIn(removed, option_names)
 
     def test_train_and_val_dataset_phase_is_frozen(self) -> None:
         opt = SimpleNamespace(
             dataroot=str(REPO_ROOT / "datasets"),
-            dataset="S1GFloods_CD_DINO_BG_75_25",
+            dataset="S1GFloods_CD_DINO_BG_75_25_",
             phase="train",
             mean=[0.5, 0.5, 0.5],
             std=[0.5, 0.5, 0.5],
@@ -401,34 +499,81 @@ class PipelineContractTests(unittest.TestCase):
         self.assertEqual(train_dataset.phase, "train")
         self.assertEqual(val_dataset.phase, "val")
 
-    def test_corrected_split_is_reproducible_and_keeps_background(self) -> None:
-        class Args:
-            varfloods_root = REPO_ROOT / "datasets" / "VarFloods"
-            tile_size = 256
-            stride = 128
-            min_valid_ratio = 0.0
-            strict = False
+    def test_directory_membership_and_auto_stats_are_dynamic(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            dataset_root = Path(directory) / "dataset"
+            cache_root = Path(directory) / "cache"
+            write_triplet(dataset_root, "train", "one.png", pre_value=0, post_value=64)
+            write_triplet(
+                dataset_root,
+                "train",
+                "two.png",
+                pre_value=128,
+                post_value=255,
+                foreground=True,
+            )
+            write_triplet(dataset_root, "val", "val.png", pre_value=32, post_value=96)
+            (dataset_root / "split_report.json").write_text(
+                json.dumps({"counts": {"train": 9999, "val": 9999}}),
+                encoding="utf-8",
+            )
+            (dataset_root / "manifest_train.csv").write_text(
+                "sample_id\nstale-only\n",
+                encoding="utf-8",
+            )
 
-        records = build_s1gfloods_records(
-            REPO_ROOT / "datasets" / "S1GFloods", strict=False
-        )
-        var_records, _ = build_varfloods_records(Args())
-        all_records = records + var_records
-        first = assign_splits(all_records, 0.75, 42)
-        second = assign_splits(all_records, 0.75, 42)
-        self.assertEqual(
-            [item.sample_id for item in first["train"]],
-            [item.sample_id for item in second["train"]],
-        )
-        self.assertEqual((len(first["train"]), len(first["val"])), (5064, 1688))
-        self.assertEqual(
-            (
-                sum(item.is_background for item in first["train"]),
-                sum(item.is_background for item in first["val"]),
-            ),
-            (437, 144),
-        )
-        self.assertEqual(compute_cross_split_overlap(first)["overlap_pairs"], 2044)
+            first_stats, first_snapshot, first_path, first_hit = resolve_auto_channel_stats(
+                dataset_root,
+                cache_root,
+            )
+            self.assertFalse(first_hit)
+            self.assertEqual(first_snapshot["splits"]["train"]["samples"], 2)
+            self.assertEqual(first_snapshot["splits"]["val"]["samples"], 1)
+            self.assertEqual(first_stats["num_pairs"], 2)
+            self.assertTrue(first_path.is_file())
+            _, repeated_snapshot, repeated_path, repeated_hit = resolve_auto_channel_stats(
+                dataset_root,
+                cache_root,
+            )
+            self.assertTrue(repeated_hit)
+            self.assertEqual(repeated_path, first_path)
+            self.assertEqual(
+                repeated_snapshot["runtime_snapshot_id"],
+                first_snapshot["runtime_snapshot_id"],
+            )
+            first_path.write_text("{broken-cache", encoding="utf-8")
+            recovered_stats, _, recovered_path, recovered_hit = resolve_auto_channel_stats(
+                dataset_root,
+                cache_root,
+            )
+            self.assertFalse(recovered_hit)
+            self.assertEqual(recovered_path, first_path)
+            self.assertEqual(recovered_stats["num_pairs"], 2)
+
+            for role in ("A", "B", "label"):
+                (dataset_root / "train" / role / "two.png").unlink()
+            second_stats, second_snapshot, second_path, second_hit = resolve_auto_channel_stats(
+                dataset_root,
+                cache_root,
+            )
+            self.assertFalse(second_hit)
+            self.assertNotEqual(second_path, first_path)
+            self.assertNotEqual(
+                second_snapshot["runtime_snapshot_id"],
+                first_snapshot["runtime_snapshot_id"],
+            )
+            self.assertEqual(second_stats["num_pairs"], 1)
+            self.assertEqual(scan_split_files(dataset_root, "train").filenames, ("one.png",))
+
+            (dataset_root / "val" / "B" / "val.png").unlink()
+            with self.assertRaisesRegex(ValueError, "A/B/label must have identical"):
+                build_runtime_data_snapshot(dataset_root)
+
+    def test_resume_snapshot_change_warns_but_does_not_fail(self) -> None:
+        self.assertFalse(warn_if_runtime_snapshot_changed("same", "same"))
+        with self.assertWarnsRegex(UserWarning, "no longer a strictly reproducible"):
+            changed = warn_if_runtime_snapshot_changed("old", "current")
+        self.assertTrue(changed)
 
     def test_stats_payload_write_is_atomic(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -441,15 +586,15 @@ class PipelineContractTests(unittest.TestCase):
                 data_root=root,
                 split="train",
                 paths=[image_a, image_b],
-                dataset_fingerprint="fingerprint",
-                manifest_sha256="manifest",
             )
             self.assertEqual(payload["num_images"], 2)
             self.assertEqual(payload["pixel_count"], 8)
             self.assertEqual(payload["recommended_config_fields"]["mean"], [0.5] * 3)
             output = root / "stats.json"
             write_stats_payload(payload, output)
-            self.assertEqual(json.loads(output.read_text())["dataset_fingerprint"], "fingerprint")
+            written = json.loads(output.read_text())
+            self.assertNotIn("dataset_fingerprint", written)
+            self.assertNotIn("manifest_sha256", written)
 
     def test_focal_contract_and_background_penalty(self) -> None:
         generator = torch.Generator().manual_seed(123)
@@ -477,7 +622,7 @@ class PipelineContractTests(unittest.TestCase):
         false_positive_loss = criterion(false_positive_logits, background)
         self.assertTrue(torch.isfinite(false_positive_loss))
         self.assertGreater(float(false_positive_loss), float(correct_loss))
-        tversky = DICELoss()
+        tversky = TverskyLoss()
         correct_composite = correct_loss + tversky(
             correct_logits, background, alpha=0.30, beta=0.70
         )
@@ -486,6 +631,39 @@ class PipelineContractTests(unittest.TestCase):
         )
         self.assertTrue(torch.isfinite(false_positive_composite))
         self.assertGreater(float(false_positive_composite), float(correct_composite))
+
+    def test_boundary_f1_supports_two_and_four_pixel_tolerance(self) -> None:
+        target = np.zeros((24, 24), dtype=np.uint8)
+        prediction = np.zeros_like(target)
+        target[6:16, 6:16] = 1
+        prediction[8:18, 6:16] = 1
+        tolerance_two = boundary_f1_metrics(target, prediction, tolerance=2)
+        tolerance_four = boundary_f1_metrics(target, prediction, tolerance=4)
+        self.assertGreaterEqual(
+            tolerance_four["boundary_f1_tol4"],
+            tolerance_two["boundary_f1_tol2"],
+        )
+        self.assertGreater(tolerance_two["boundary_f1_tol2"], 0.0)
+
+    def test_independent_sar_jitter_changes_only_one_time(self) -> None:
+        image_a = Image.fromarray(np.full((12, 12), 100, dtype=np.uint8), mode="L")
+        image_b = Image.fromarray(np.full((12, 12), 150, dtype=np.uint8), mode="L")
+        label = Image.fromarray(np.zeros((12, 12), dtype=np.uint8), mode="L")
+        transform = Transforms(
+            input_size=12,
+            dataset_mode="sar",
+            radiometric_jitter_mode="independent",
+        )
+        with mock.patch(
+            "data.transform.random.random",
+            side_effect=[0.9, 0.9, 0.9, 0.1, 0.1, 0.9],
+        ), mock.patch(
+            "data.transform.random.uniform",
+            side_effect=[1.1, 1.0],
+        ), mock.patch("data.transform.random.shuffle"):
+            result = transform({"img1": image_a, "img2": image_b, "cd_label": label})
+        self.assertFalse(np.array_equal(np.asarray(result["img1"]), np.asarray(image_a)))
+        self.assertTrue(np.array_equal(np.asarray(result["img2"]), np.asarray(image_b)))
 
     def test_threshold_tie_break_is_iou_precision_then_higher_threshold(self) -> None:
         selected = select_primary_threshold(
@@ -597,7 +775,7 @@ class PipelineContractTests(unittest.TestCase):
                     "meta": {
                         "format_version": CHECKPOINT_FORMAT_VERSION,
                         "model_config": valid_model_config(),
-                        "data_config": {"dataset_fingerprint": "test"},
+                        "data_config": {},
                         "selection": {"threshold": 0.55},
                     },
                 },
@@ -622,6 +800,88 @@ class PipelineContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "lacks required inference fields"):
                 checkpoint_model_config(payload)
 
+    def test_resume_ignores_runtime_membership_but_checks_configs(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            class TinyNetwork(torch.nn.Module):
+                def __init__(self) -> None:
+                    super().__init__()
+                    self.encoder = torch.nn.Module()
+                    self.encoder.register_buffer(
+                        "input_mean", torch.full((1, 3, 1, 1), 0.2)
+                    )
+                    self.encoder.register_buffer(
+                        "input_std", torch.full((1, 3, 1, 1), 0.3)
+                    )
+                    self.conv = torch.nn.Conv2d(2, 2, 1)
+
+            engine = object.__new__(HACQIEngine)
+            torch.nn.Module.__init__(engine)
+            engine.model = TinyNetwork()
+            engine.opt = SimpleNamespace(
+                mean=[0.7, 0.6, 0.5],
+                std=[0.4, 0.3, 0.2],
+            )
+            engine.optimizer = torch.optim.AdamW(engine.model.parameters(), lr=1e-3)
+            engine.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                engine.optimizer, T_max=2
+            )
+            current_model_config = valid_model_config()
+            current_model_config["input_mean"] = list(engine.opt.mean)
+            current_model_config["input_std"] = list(engine.opt.std)
+            expected_meta = {
+                "model_config": current_model_config,
+                "loss_config": {"mode": "expected"},
+                "training_config": {"seed": 1},
+            }
+            engine._build_checkpoint_meta = lambda **_: expected_meta
+            checkpoint_model = valid_model_config()
+            checkpoint_model["input_mean"] = [0.2, 0.2, 0.2]
+            checkpoint_model["input_std"] = [0.3, 0.3, 0.3]
+
+            payload = {
+                "network": engine.model.state_dict(),
+                "optimizer": engine.optimizer.state_dict(),
+                "scheduler": engine.scheduler.state_dict(),
+                "scaler": None,
+                "epoch": 1,
+                "global_step": 2,
+                "torch_rng_state": torch.get_rng_state(),
+                "data_loader_generator_state": None,
+                "meta": {
+                    "format_version": CHECKPOINT_FORMAT_VERSION,
+                    "model_config": checkpoint_model,
+                    "loss_config": expected_meta["loss_config"],
+                    "training_config": expected_meta["training_config"],
+                    "data_config": {
+                        "runtime_snapshot_id": "different-directory-snapshot",
+                    },
+                },
+            }
+            compatible = atomic_torch_save(payload, root / "compatible.pth")
+            start_epoch, global_step, _ = engine.restore_training_checkpoint(
+                compatible,
+                scaler=None,
+            )
+            self.assertEqual((start_epoch, global_step), (2, 2))
+            torch.testing.assert_close(
+                engine.model.encoder.input_mean,
+                torch.tensor(engine.opt.mean).view(1, 3, 1, 1),
+            )
+            torch.testing.assert_close(
+                engine.model.encoder.input_std,
+                torch.tensor(engine.opt.std).view(1, 3, 1, 1),
+            )
+
+            payload["meta"] = {
+                **payload["meta"],
+                "training_config": {"seed": 2},
+            }
+            incompatible = atomic_torch_save(payload, root / "incompatible.pth")
+            with self.assertRaisesRegex(ValueError, "training_config.seed"):
+                engine.restore_training_checkpoint(incompatible, scaler=None)
+
     def test_shared_sar_helpers_preserve_validity_and_stretch(self) -> None:
         array = np.asarray([[0.0, 1.0], [2.0, -9999.0]], dtype=np.float32)
         valid = build_valid_mask(array, -9999.0)
@@ -630,65 +890,13 @@ class PipelineContractTests(unittest.TestCase):
         self.assertTrue(np.allclose(stretched[valid], [0.0, 0.5, 1.0]))
         self.assertEqual(float(stretched[1, 1]), 0.0)
 
-    def test_shared_stretch_matches_materialized_varflood_tile(self) -> None:
-        dataset_root = REPO_ROOT / "datasets" / "S1GFloods_CD_DINO_BG_75_25"
-        with (dataset_root / "manifest_train.csv").open(
-            "r", encoding="utf-8", newline=""
-        ) as handle:
-            row = next(item for item in csv.DictReader(handle) if item["source"] == "varfloods_pro")
-        source_root = REPO_ROOT / "datasets" / "VarFloods" / row["region"] / "PRO"
-        a_path = next((source_root / "A").glob("*.tif"))
-        b_path = next((source_root / "B").glob("*.tif"))
-        window = Window(
-            col_off=int(row["col_off"]),
-            row_off=int(row["row_off"]),
-            width=int(row["width"]),
-            height=int(row["height"]),
-        )
-        with rasterio.open(a_path) as dataset_a, rasterio.open(b_path) as dataset_b:
-            array_a = dataset_a.read(1, window=window).astype(np.float32, copy=False)
-            array_b = dataset_b.read(1, window=window).astype(np.float32, copy=False)
-            valid = build_valid_mask(array_a, dataset_a.nodata)
-            valid &= build_valid_mask(array_b, dataset_b.nodata)
-        expected = np.rint(stretch_sar_array(array_a, valid) * 255.0).astype(np.uint8)
-        materialized = np.asarray(Image.open(dataset_root / row["a_png"]).convert("RGB"))[:, :, 0]
-        self.assertTrue(np.array_equal(expected, materialized))
-
-    def test_stats_and_split_fingerprints_match(self) -> None:
-        root = REPO_ROOT / "datasets" / "S1GFloods_CD_DINO_BG_75_25"
-        if not root.is_dir():
-            self.skipTest("corrected dataset has not been materialized yet")
-        report = json.loads((root / "split_report.json").read_text(encoding="utf-8"))
-        stats = json.loads(
-            (root / "channel_stats_s1gfloods_train.json").read_text(encoding="utf-8")
-        )
-        self.assertEqual(report["dataset_fingerprint"], stats["dataset_fingerprint"])
-
-    def test_all_materialized_background_tiles_exist(self) -> None:
-        root = REPO_ROOT / "datasets" / "S1GFloods_CD_DINO_BG_75_25"
-        background_rows: list[dict[str, str]] = []
-        split_counts: dict[str, int] = {}
-        for split in ("train", "val"):
-            with (root / f"manifest_{split}.csv").open(
-                "r", encoding="utf-8", newline=""
-            ) as handle:
-                rows = [row for row in csv.DictReader(handle) if row["is_background"] == "1"]
-            split_counts[split] = len(rows)
-            background_rows.extend(rows)
-        self.assertEqual(split_counts, {"train": 437, "val": 144})
-        self.assertEqual(len(background_rows), 581)
-        for row in background_rows:
-            self.assertTrue((root / row["a_png"]).is_file())
-            self.assertTrue((root / row["b_png"]).is_file())
-            self.assertTrue((root / row["label_png"]).is_file())
-
-    def test_stats_manifest_mismatch_fails_closed(self) -> None:
+    def test_legacy_membership_metadata_is_ignored_but_split_is_checked(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             dataset_dir = root / "dataset"
             dataset_dir.mkdir()
             (dataset_dir / "split_report.json").write_text(
-                json.dumps({"dataset_fingerprint": "fingerprint"}), encoding="utf-8"
+                json.dumps({"dataset_fingerprint": "legacy-report"}), encoding="utf-8"
             )
             (dataset_dir / "manifest_train.csv").write_text("sample_id\na\n", encoding="utf-8")
             stats_path = dataset_dir / "stats.json"
@@ -696,17 +904,65 @@ class PipelineContractTests(unittest.TestCase):
                 json.dumps(
                     {
                         "split": "train",
-                        "dataset_fingerprint": "fingerprint",
+                        "dataset_fingerprint": "legacy-stats",
                         "manifest_sha256": "wrong",
+                        "recommended_config_fields": {
+                            "mean": [0.5, 0.5, 0.5],
+                            "std": [0.25, 0.25, 0.25],
+                        },
                     }
                 ),
                 encoding="utf-8",
             )
             opt = SimpleNamespace(
-                dataroot=str(root), dataset="dataset", stats_file=str(stats_path)
+                dataroot=str(root),
+                dataset="dataset",
+                stats_mode="file",
+                stats_file=str(stats_path),
+                mean=None,
+                std=None,
             )
-            with self.assertRaisesRegex(ValueError, "Stats/split manifest mismatch"):
+            validate_stats_provenance(opt)
+            self.assertEqual(resolve_norm_stats(opt), ([0.5] * 3, [0.25] * 3))
+
+            stats_path.write_text(
+                json.dumps(
+                    {
+                        "split": "val",
+                        "mean": [0.5, 0.5, 0.5],
+                        "std": [0.25, 0.25, 0.25],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "must use train split"):
                 validate_stats_provenance(opt)
+
+            stats_path.write_text(
+                json.dumps(
+                    {
+                        "split": "train",
+                        "mean": [0.5, float("nan"), 0.5],
+                        "std": [0.25, 0.25, 0.25],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "must be finite"):
+                resolve_norm_stats(opt)
+
+            stats_path.write_text(
+                json.dumps(
+                    {
+                        "split": "train",
+                        "mean": [0.5, 0.5, 0.5],
+                        "std": [0.25, 0.0, 0.25],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "must be positive"):
+                resolve_norm_stats(opt)
 
 
 if __name__ == "__main__":

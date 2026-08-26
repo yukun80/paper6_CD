@@ -19,7 +19,7 @@ from .checkpointing import (
     load_checkpoint_payload,
     load_network_state,
 )
-from .losses.dice import BoundaryDiceLoss, DualClassOverlapLoss, TverskyLoss
+from .losses.dice import DICELoss
 from .losses.focal import FocalLoss
 from utils.provenance import portable_repo_path
 
@@ -91,10 +91,6 @@ class HACQIEngine(nn.Module):
             align_offset_groups=opt.align_offset_groups,
             num_change_queries=int(getattr(opt, "num_change_queries", 16)),
             cqi_heads=int(getattr(opt, "cqi_heads", 4)),
-            shallow_change_mode=str(getattr(opt, "shallow_change_mode", "cqi")),
-            shallow_aux_supervision=bool(
-                getattr(opt, "shallow_aux_supervision", True)
-            ),
             dino_arch=opt.dino_arch,
             dino_fusion_layers=opt.dino_fusion_layers,
             dino_weight=opt.dino_weight,
@@ -102,25 +98,14 @@ class HACQIEngine(nn.Module):
             input_std=[float(value) for value in opt.std],
             device=self.device,
         )
-        self.aux_level_ids = tuple(self.model.aux_heads.level_ids)
-        selected_aux_weights = [
-            self.AUX_BASE_WEIGHTS[level - 1] for level in self.aux_level_ids
-        ]
-        selected_aux_weight_sum = sum(selected_aux_weights)
         self.aux_base_weights = [
-            weight / selected_aux_weight_sum for weight in selected_aux_weights
+            weight / sum(self.AUX_BASE_WEIGHTS) for weight in self.AUX_BASE_WEIGHTS
         ]
         self.focal = FocalLoss(
             class_weights=opt.focal_class_weights,
             gamma=opt.gamma,
         )
-        overlap_mode = str(getattr(opt, "overlap_loss_mode", "foreground_tversky"))
-        self.overlap = (
-            DualClassOverlapLoss()
-            if overlap_mode == "dual_class"
-            else TverskyLoss()
-        )
-        self.boundary = BoundaryDiceLoss()
+        self.dice = DICELoss()
         self.last_loss_stats = {}
         self.optimizer = self._build_optimizer(opt)
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
@@ -252,11 +237,10 @@ class HACQIEngine(nn.Module):
         return torch.softmax(logits.float(), dim=1)[:, 1:2]
 
     def _high_resolution_support(self, aux_preds: tuple[torch.Tensor, ...]) -> torch.Tensor | None:
-        by_level = dict(zip(self.aux_level_ids, aux_preds))
-        if 1 not in by_level or 2 not in by_level:
+        if len(aux_preds) < 2:
             return None
-        p1_fg = self._foreground_prob(by_level[1]).detach()
-        p2_fg = self._foreground_prob(by_level[2]).detach()
+        p1_fg = self._foreground_prob(aux_preds[0]).detach()
+        p2_fg = self._foreground_prob(aux_preds[1]).detach()
         return torch.maximum(p1_fg, p2_fg)
 
     def _support_preserve_loss(
@@ -288,8 +272,7 @@ class HACQIEngine(nn.Module):
         final_fg = self._foreground_prob(final_pred)
         loss = F.relu(final_fg - support.detach() - 0.15)
         loss = (loss * weak_support_mask).sum() / weak_support_mask.sum().clamp_min(1.0)
-        by_level = dict(zip(self.aux_level_ids, aux_preds))
-        coarse_preds = [by_level[level] for level in (4, 5) if level in by_level]
+        coarse_preds = aux_preds[3:5] if len(aux_preds) >= 5 else aux_preds[2:]
         for pred in coarse_preds:
             coarse_fg = self._foreground_prob(pred)
             excess = F.relu(coarse_fg - support.detach() - 0.15)
@@ -310,19 +293,19 @@ class HACQIEngine(nn.Module):
         )
         with self._loss_autocast_context():
             main_focal = 0.5 * self.focal(final_pred.float(), label)
-            main_overlap = self.overlap(
+            main_tversky = self.dice(
                 final_pred.float(),
                 label,
                 alpha=tversky_alpha,
                 beta=tversky_beta,
             )
             aux_focal = main_focal.new_zeros(())
-            aux_overlap = main_overlap.new_zeros(())
+            aux_tversky = main_tversky.new_zeros(())
             for weight, pred in zip(aux_head_weights, aux_preds):
                 if weight <= 0.0:
                     continue
                 aux_focal = aux_focal + 0.5 * weight * self.focal(pred.float(), label)
-                aux_overlap = aux_overlap + weight * self.overlap(
+                aux_tversky = aux_tversky + weight * self.dice(
                     pred.float(),
                     label,
                     alpha=tversky_alpha,
@@ -330,25 +313,16 @@ class HACQIEngine(nn.Module):
                 )
 
             focal = main_focal + aux_focal
-            overlap = main_overlap + aux_overlap
             support_loss = self._support_preserve_loss(final_pred.float(), aux_preds)
             coarse_loss = self._coarse_suppression_loss(final_pred.float(), aux_preds)
             consistency = support_weight * support_loss + coarse_weight * coarse_loss
-            boundary_weight = float(getattr(self.opt, "boundary_loss_weight", 0.0))
-            boundary_loss = (
-                self.boundary(final_pred.float(), label)
-                if boundary_weight > 0.0
-                else final_pred.float().sum() * 0.0
-            )
-            structural_loss = overlap + consistency + boundary_weight * boundary_loss
+            tversky = main_tversky + aux_tversky
 
         self.last_loss_stats = {
             "main_focal": main_focal.detach(),
-            "main_overlap": main_overlap.detach(),
+            "main_tversky": main_tversky.detach(),
             "aux_focal": aux_focal.detach(),
-            "aux_overlap": aux_overlap.detach(),
-            "boundary_loss": boundary_loss.detach(),
-            "boundary_weight": torch.tensor(boundary_weight, device=self.device),
+            "aux_tversky": aux_tversky.detach(),
             "support_loss": support_loss.detach(),
             "coarse_loss": coarse_loss.detach(),
             "support_weight": torch.tensor(support_weight, device=self.device),
@@ -357,7 +331,7 @@ class HACQIEngine(nn.Module):
             "tversky_beta": torch.tensor(tversky_beta, device=self.device),
             **self._decoder_diagnostics(),
         }
-        return final_pred, focal, structural_loss
+        return final_pred, focal, tversky + consistency
 
     @torch.inference_mode()
     def inference(self, x1, x2):
@@ -375,7 +349,7 @@ class HACQIEngine(nn.Module):
     ) -> dict[str, Any]:
         """保存结构、训练、数据和阈值选择契约。"""
         portable_data_provenance = dict(data_provenance)
-        for path_key in ("dataset_dir", "split_report"):
+        for path_key in ("dataset_dir", "historical_split_report"):
             if portable_data_provenance.get(path_key):
                 portable_data_provenance[path_key] = portable_repo_path(
                     portable_data_provenance[path_key], REPO_ROOT
@@ -397,10 +371,6 @@ class HACQIEngine(nn.Module):
             "align_offset_groups": int(self.opt.align_offset_groups),
             "num_change_queries": int(getattr(self.opt, "num_change_queries", 16)),
             "cqi_heads": int(getattr(self.opt, "cqi_heads", 4)),
-            "shallow_change_mode": str(getattr(self.opt, "shallow_change_mode", "cqi")),
-            "shallow_aux_supervision": bool(
-                getattr(self.opt, "shallow_aux_supervision", True)
-            ),
             "decoder": "oscd_v1",
             "decoder_channels": 128,
             "ssm_state_dim": 1,
@@ -417,12 +387,6 @@ class HACQIEngine(nn.Module):
         loss_config = {
             "focal_class_weights": [float(v) for v in self.opt.focal_class_weights],
             "focal_gamma": float(getattr(self.opt, "gamma", 2.0)),
-            "overlap_loss_mode": str(
-                getattr(self.opt, "overlap_loss_mode", "foreground_tversky")
-            ),
-            "boundary_loss_weight": float(
-                getattr(self.opt, "boundary_loss_weight", 0.0)
-            ),
             "aux_loss_weight": float(getattr(self.opt, "aux_loss_weight", 1.0)),
             "aux_loss_weight_end": float(getattr(self.opt, "aux_loss_weight_end", 0.5)),
             "aux_decay_start_epoch": int(getattr(self.opt, "aux_decay_start_epoch", 5)),
@@ -479,6 +443,8 @@ class HACQIEngine(nn.Module):
                 **portable_data_provenance,
                 "dataroot": portable_repo_path(self.opt.dataroot, REPO_ROOT),
                 "stats_file": portable_repo_path(self.opt.stats_file, REPO_ROOT),
+                "stats_mode": str(getattr(self.opt, "stats_mode", "file")),
+                "stats_source": str(getattr(self.opt, "stats_source", "unknown")),
             },
             "selection": dict(selection or {}),
         }
@@ -529,7 +495,7 @@ class HACQIEngine(nn.Module):
         data_loader_generator=None,
     ) -> tuple[int, int, dict[str, Any]]:
         payload = load_checkpoint_payload(checkpoint_path, map_location="cpu")
-        checkpoint_model_config(payload)
+        normalized_model_config = checkpoint_model_config(payload)
         meta = payload.get("meta")
         if not isinstance(meta, dict):
             raise ValueError("--resume requires checkpoint v2 metadata")
@@ -542,12 +508,19 @@ class HACQIEngine(nn.Module):
         )
         mismatches: list[str] = []
         for section_name in ("model_config", "loss_config", "training_config"):
-            checkpoint_section = meta.get(section_name)
+            checkpoint_section = (
+                normalized_model_config
+                if section_name == "model_config"
+                else meta.get(section_name)
+            )
             expected_section = expected_meta[section_name]
             if not isinstance(checkpoint_section, dict):
                 mismatches.append(f"{section_name}=missing")
                 continue
             for key, expected_value in expected_section.items():
+                if section_name == "model_config" and key in {"input_mean", "input_std"}:
+                    # 自动统计属于本次数据快照；成员变化时允许续训并在加载后刷新 buffer。
+                    continue
                 actual_value = checkpoint_section.get(key)
                 if actual_value != expected_value:
                     mismatches.append(
@@ -557,6 +530,17 @@ class HACQIEngine(nn.Module):
             details = "\n  - ".join(mismatches)
             raise ValueError(f"Resume configuration mismatch:\n  - {details}")
         self.model.load_state_dict(payload["network"], strict=True)
+        with torch.no_grad():
+            self.model.encoder.input_mean.copy_(
+                torch.tensor(self.opt.mean, device=self.model.encoder.input_mean.device).view(
+                    1, 3, 1, 1
+                )
+            )
+            self.model.encoder.input_std.copy_(
+                torch.tensor(self.opt.std, device=self.model.encoder.input_std.device).view(
+                    1, 3, 1, 1
+                )
+            )
         if "optimizer" not in payload or "scheduler" not in payload:
             raise ValueError("Resume checkpoint lacks optimizer or scheduler state")
         self.optimizer.load_state_dict(payload["optimizer"])

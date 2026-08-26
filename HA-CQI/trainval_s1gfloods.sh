@@ -6,9 +6,11 @@ cd "$(dirname "$0")"
 DINO_ARCH="${DINO_ARCH:-dinov3_vits16}"
 DINO_WEIGHT="${DINO_WEIGHT:-dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth}"
 BACKBONE_WEIGHT="${BACKBONE_WEIGHT:-pretrained/efficientnet_b2_ra-bcdf34b7.pth}"
-RUN_NAME="${RUN_NAME:-S1GFloods-HA-CQI-B2-${DINO_ARCH#dinov3_}}"
-DATASET_NAME="${DATASET_NAME:-S1GFloods_CD_DINO_BG_75_25}"
+SEED="${SEED:-1}"
+RUN_NAME="${RUN_NAME:-S1GFloods-HA-CQI-B2-OSCD-DINO5-8-11-CLEAN-s${SEED}}"
+DATASET_NAME="${DATASET_NAME:-S1GFloods_CD_DINO_BG_75_25_}"
 DATA_ROOT="${DATA_ROOT:-../datasets}"
+STATS_MODE="${STATS_MODE:-auto}"
 STATS_FILE="${STATS_FILE:-${DATA_ROOT}/${DATASET_NAME}/channel_stats_s1gfloods_train.json}"
 BATCH_SIZE="${BATCH_SIZE:-12}"
 NUM_WORKERS="${NUM_WORKERS:-8}"
@@ -16,11 +18,12 @@ LR="${LR:-1e-4}"
 SOFT_ALIGNMENT="${SOFT_ALIGNMENT:-1}"
 NUM_CHANGE_QUERIES="${NUM_CHANGE_QUERIES:-16}"
 CQI_HEADS="${CQI_HEADS:-4}"
+DINO_FUSION_LAYERS="${DINO_FUSION_LAYERS:-5 8 11}"
+RADIOMETRIC_JITTER_MODE="${RADIOMETRIC_JITTER_MODE:-shared}"
 EVAL_FG_THRESHOLD="${EVAL_FG_THRESHOLD:-0.40}"
 THRESHOLD_MIN="${THRESHOLD_MIN:-0.05}"
 THRESHOLD_MAX="${THRESHOLD_MAX:-0.95}"
 THRESHOLD_STEP="${THRESHOLD_STEP:-0.01}"
-SEED="${SEED:-1}"
 FOCAL_BG_WEIGHT="${FOCAL_BG_WEIGHT:-0.25}"
 FOCAL_FG_WEIGHT="${FOCAL_FG_WEIGHT:-0.75}"
 RESUME="${RESUME:-}"
@@ -37,13 +40,19 @@ CONSISTENCY_WARMUP_EPOCHS="${CONSISTENCY_WARMUP_EPOCHS:-5}"
 CONSISTENCY_RAMP_EPOCHS="${CONSISTENCY_RAMP_EPOCHS:-10}"
 AMP="${AMP:-1}"
 AMP_DTYPE="${AMP_DTYPE:-bf16}"
+read -r -a dino_fusion_layers <<< "${DINO_FUSION_LAYERS}"
 
 if [[ ! -d "${DATA_ROOT}/${DATASET_NAME}" ]]; then
   echo "Dataset directory not found: ${DATA_ROOT}/${DATASET_NAME}" >&2
   exit 1
 fi
 
-if [[ ! -f "${STATS_FILE}" ]]; then
+if [[ "${STATS_MODE}" != "auto" && "${STATS_MODE}" != "file" ]]; then
+  echo "STATS_MODE must be auto or file, got: ${STATS_MODE}" >&2
+  exit 1
+fi
+
+if [[ "${STATS_MODE}" == "file" && ! -f "${STATS_FILE}" ]]; then
   echo "Stats file not found: ${STATS_FILE}" >&2
   exit 1
 fi
@@ -64,11 +73,13 @@ python trainval.py \
   --dataset "${DATASET_NAME}" \
   --dataroot "${DATA_ROOT}" \
   --dataset_mode sar \
-  --stats_file "${STATS_FILE}" \
+  --stats_mode "${STATS_MODE}" \
   --dino_arch "${DINO_ARCH}" \
   --dino_weight "${DINO_WEIGHT}" \
+  --dino_fusion_layers "${dino_fusion_layers[@]}" \
   --num_change_queries "${NUM_CHANGE_QUERIES}" \
   --cqi_heads "${CQI_HEADS}" \
+  --radiometric_jitter_mode "${RADIOMETRIC_JITTER_MODE}" \
   --head_lr_mult "${HEAD_LR_MULT}" \
   --aux_loss_weight "${AUX_LOSS_WEIGHT}" \
   --aux_loss_weight_end "${AUX_LOSS_WEIGHT_END}" \
@@ -95,6 +106,10 @@ python trainval.py \
 
 if [[ -n "${BACKBONE_WEIGHT}" ]]; then
   cmd+=(--backbone_weight "${BACKBONE_WEIGHT}")
+fi
+
+if [[ "${STATS_MODE}" == "file" ]]; then
+  cmd+=(--stats_file "${STATS_FILE}")
 fi
 
 if [[ "${SOFT_ALIGNMENT}" != "1" ]]; then

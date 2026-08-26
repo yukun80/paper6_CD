@@ -1,10 +1,12 @@
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import List
 
 import torch
 
+from data.runtime_snapshot import resolve_auto_channel_stats
 from model.backbones import DEFAULT_BACKBONE_NAME, DEFAULT_BACKBONE_WEIGHT
 from model.checkpointing import checkpoint_model_config, load_checkpoint_payload
 from model.modules.dino_meta import (
@@ -19,8 +21,8 @@ OPTICAL_STD = [0.213, 0.156, 0.143]
 PROJECT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = PROJECT_DIR.parent
 DEFAULT_DATA_ROOT = "../datasets"
-DEFAULT_DATASET = "S1GFloods_CD_DINO_BG_75_25"
-DEFAULT_STATS_FILE = "../datasets/S1GFloods_CD_DINO_BG_75_25/channel_stats_s1gfloods_train.json"
+DEFAULT_DATASET = "S1GFloods_CD_DINO_BG_75_25_"
+DEFAULT_STATS_FILE = "../datasets/S1GFloods_CD_DINO_BG_75_25_/channel_stats_s1gfloods_train.json"
 DEFAULT_DINO_WEIGHT = "dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth"
 
 
@@ -85,13 +87,7 @@ def _validate_backbone_weight_path(path_str: str) -> None:
 def _load_stats_from_json(stats_path: Path) -> tuple[List[float], List[float]]:
     payload = json.loads(stats_path.read_text(encoding="utf-8"))
     stats = payload.get("recommended_config_fields", payload)
-    mean = stats.get("mean")
-    std = stats.get("std")
-    if mean is None or std is None:
-        raise ValueError(f"Stats file missing mean/std: {stats_path}")
-    mean = _parse_float_list([str(v) for v in mean], "mean")
-    std = _parse_float_list([str(v) for v in std], "std")
-    return mean, std
+    return _load_stats_values(stats, stats_path)
 
 
 def resolve_norm_stats(opt) -> tuple[List[float], List[float]]:
@@ -101,9 +97,37 @@ def resolve_norm_stats(opt) -> tuple[List[float], List[float]]:
     if mean is not None or std is not None:
         if mean is None or std is None:
             raise ValueError("mean/std must be provided together")
+        if any(not math.isfinite(value) for value in mean + std):
+            raise ValueError("mean/std must contain finite values")
+        if any(value <= 0.0 for value in std):
+            raise ValueError("std must contain positive values")
+        opt.stats_source = "explicit"
+        opt.runtime_data_snapshot = None
         return mean, std
 
+    stats_mode = str(getattr(opt, "stats_mode", "file")).lower()
+    if stats_mode == "auto":
+        dataset_root = Path(opt.dataroot) / str(opt.dataset)
+        cache_dir = Path(opt.checkpoint_dir) / ".runtime_stats_cache"
+        stats, snapshot, cache_path, cache_hit = resolve_auto_channel_stats(
+            dataset_root,
+            cache_dir,
+        )
+        opt.runtime_data_snapshot = snapshot
+        opt.stats_file = str(cache_path)
+        opt.stats_source = "auto_cache" if cache_hit else "auto_computed"
+        print(
+            f"[INFO] runtime data snapshot={snapshot['runtime_snapshot_id'][:12]} "
+            f"| train={snapshot['splits']['train']['samples']} "
+            f"| val={snapshot['splits']['val']['samples']} "
+            f"| stats={opt.stats_source}"
+        )
+        recommended = stats.get("recommended_config_fields", stats)
+        return _load_stats_values(recommended, cache_path)
+
     if opt.stats_file:
+        opt.stats_source = "file"
+        opt.runtime_data_snapshot = None
         return _load_stats_from_json(Path(opt.stats_file))
 
     dataset_name = str(opt.dataset)
@@ -112,21 +136,49 @@ def resolve_norm_stats(opt) -> tuple[List[float], List[float]]:
         for dataset_dir in candidate_dirs:
             default_stats = dataset_dir / "channel_stats_s1gfloods_train.json"
             if default_stats.exists():
+                opt.stats_source = "discovered_file"
+                opt.runtime_data_snapshot = None
                 return _load_stats_from_json(default_stats)
+        opt.stats_source = "sar_fallback"
+        opt.runtime_data_snapshot = None
         return [0.5, 0.5, 0.5], [0.5, 0.5, 0.5]
 
+    opt.stats_source = "optical_default"
+    opt.runtime_data_snapshot = None
     return OPTICAL_MEAN.copy(), OPTICAL_STD.copy()
+
+
+def _load_stats_values(
+    stats: dict,
+    source: Path,
+) -> tuple[List[float], List[float]]:
+    """校验已解析的统计字段，供文件与自动缓存共享数值契约。"""
+    mean = stats.get("mean")
+    std = stats.get("std")
+    if mean is None or std is None:
+        raise ValueError(f"Stats file missing mean/std: {source}")
+    mean_values = _parse_float_list([str(v) for v in mean], "mean")
+    std_values = _parse_float_list([str(v) for v in std], "std")
+    if any(not math.isfinite(value) for value in mean_values + std_values):
+        raise ValueError(f"Stats mean/std must be finite: {source}")
+    if any(value <= 0.0 for value in std_values):
+        raise ValueError(f"Stats std must be positive: {source}")
+    return mean_values, std_values
 
 
 def validate_stats_provenance(opt) -> None:
     """统计量必须来自训练 split；不绑定可变的数据集成员清单。"""
-    if not opt.stats_file:
+    if (
+        str(getattr(opt, "stats_mode", "file")) != "file"
+        or str(getattr(opt, "stats_source", "file")) != "file"
+        or not opt.stats_file
+    ):
         return
     stats_path = Path(opt.stats_file)
     if not stats_path.is_file():
-        return
+        raise FileNotFoundError(f"Stats file not found: {stats_path}")
     stats = json.loads(stats_path.read_text(encoding="utf-8"))
-    stats_split = str(stats.get("split", "train"))
+    stats_split = stats.get("split")
     if stats_split != "train":
         raise ValueError(f"HA-CQI normalization stats must use train split, got: {stats_split}")
 
@@ -267,19 +319,6 @@ class Options:
             help="真正进入 P3/P4/P5 融合的三个 DINO 层；默认按架构选择早/中/深层。",
         )
         self.parser.add_argument(
-            "--shallow_change_mode",
-            type=str,
-            default="cqi",
-            choices=["cqi", "local_structural"],
-            help="P1/P2 变化表达；Exp-1 默认保留 CQI，Exp-2 使用局部归一化 query-free 投影。",
-        )
-        self.parser.add_argument(
-            "--shallow_aux_supervision",
-            action=argparse.BooleanOptionalAction,
-            default=True,
-            help="是否保留 P1/P2 全掩膜辅助监督；关闭时只监督 P3-P5。",
-        )
-        self.parser.add_argument(
             "--focal_class_weights",
             nargs=2,
             type=float,
@@ -288,20 +327,6 @@ class Options:
             help="Focal loss 的背景/前景权重，解析后归一化为和 1。",
         )
         self.parser.add_argument("--gamma", type=float, default=2.0, help="gamma for Focal loss")
-        self.parser.add_argument(
-            "--overlap_loss_mode",
-            type=str,
-            default="foreground_tversky",
-            choices=["foreground_tversky", "dual_class"],
-            help="Exp-5 可切换为 0.5 前景 Tversky + 0.5 背景 Dice。",
-        )
-        self.parser.add_argument(
-            "--boundary_loss_weight",
-            type=float,
-            default=0.0,
-            help="主概率图 BoundaryDice 权重；默认关闭，仅在 Boundary F1 证实瓶颈后启用。",
-        )
-
         self.parser.add_argument("--batch_size", type=int, default=12)
         self.parser.add_argument("--num_epochs", type=int, default=80)
         self.parser.add_argument("--input_size", type=int, default=256, help="训练/推理默认输入尺寸")
@@ -432,10 +457,17 @@ class Options:
             help="仅加载显式 checkpoint 的网络参数。",
         )
         self.parser.add_argument(
+            "--stats_mode",
+            type=str,
+            default="auto",
+            choices=["auto", "file"],
+            help="auto 按当前 train 目录成员自动缓存 mean/std；file 显式使用 --stats_file。",
+        )
+        self.parser.add_argument(
             "--stats_file",
             type=str,
             default=DEFAULT_STATS_FILE,
-            help="JSON 统计文件路径；若为空则按数据集使用默认值或自动发现。",
+            help="stats_mode=file 时使用的 train split JSON 统计文件。",
         )
         self.parser.add_argument(
             "--mean",
@@ -543,14 +575,6 @@ class Options:
             raise ValueError("--num_change_queries must be a positive integer")
         if self.opt.cqi_heads < 1:
             raise ValueError("--cqi_heads must be a positive integer")
-        if not self.opt.shallow_aux_supervision and (
-            self.opt.support_consistency_weight > 0.0
-            or self.opt.coarse_consistency_weight > 0.0
-        ):
-            raise ValueError(
-                "--no-shallow_aux_supervision requires "
-                "--support_consistency_weight 0 and --coarse_consistency_weight 0"
-            )
         if self.opt.fpn_channels != 128:
             raise ValueError("HA-CQI OSCD v1 requires --fpn_channels 128")
         if self.opt.head_lr_mult <= 0.0:
@@ -564,8 +588,6 @@ class Options:
             raise ValueError("--aux_loss_weight must be non-negative")
         if self.opt.aux_loss_weight_end < 0.0:
             raise ValueError("--aux_loss_weight_end must be non-negative")
-        if self.opt.boundary_loss_weight < 0.0:
-            raise ValueError("--boundary_loss_weight must be non-negative")
         if self.opt.aux_decay_start_epoch < 1:
             raise ValueError("--aux_decay_start_epoch must be >= 1")
         if not 0.0 <= self.opt.tversky_beta_start <= 1.0:
@@ -626,6 +648,14 @@ class Options:
 
         print("------------ Options -------------")
         for k, v in sorted(args.items()):
+            if k == "runtime_data_snapshot" and isinstance(v, dict):
+                splits = v.get("splits", {})
+                v = (
+                    f"id={str(v.get('runtime_snapshot_id', ''))[:12]} "
+                    f"train={splits.get('train', {}).get('samples')} "
+                    f"val={splits.get('val', {}).get('samples')} "
+                    "(full file list saved to data_snapshot.json)"
+                )
             print("%s: %s" % (str(k), str(v)))
         print("-------------- End ----------------")
 

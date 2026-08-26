@@ -46,7 +46,7 @@ class HierarchicalCnnDinoEncoder(nn.Module):
         dino_weight: str = "dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth",
         backbone_weight: str = DEFAULT_BACKBONE_WEIGHT,
         device: str = "cuda",
-        extract_ids: list[int] | None = None,
+        dino_fusion_layers: list[int] | None = None,
         input_mean: list[float] | None = None,
         input_std: list[float] | None = None,
         **kwargs,
@@ -90,7 +90,10 @@ class HierarchicalCnnDinoEncoder(nn.Module):
         )
         dense_out_dim = fpn_channels * 2
         self.dino_extractor = DinoV3FeatureExtractor(
-            dino_arch=dino_arch, weights_path=dino_weight, device=device, extract_ids=extract_ids
+            dino_arch=dino_arch,
+            weights_path=dino_weight,
+            device=device,
+            fusion_layers=dino_fusion_layers,
         )
         self.dino_adapter = DinoPyramidAdapter(
             in_dim=self.dino_extractor.embed_dim,
@@ -109,7 +112,7 @@ class HierarchicalCnnDinoEncoder(nn.Module):
         pyramid = self.neck(cnn_stages)
 
         dino_raw = self.dino_extractor(self.prepare_dino_input(x))
-        dino_features = self.dino_adapter(dino_raw[1:])
+        dino_features = self.dino_adapter(dino_raw)
 
         p1, p2, p3, p4, p5 = pyramid
         p3, p4, p5 = self.semantic_fusion((p3, p4, p5), dino_features)

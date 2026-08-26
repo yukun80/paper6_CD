@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from pathlib import Path
 from typing import Any
+
+from data.runtime_snapshot import build_runtime_data_snapshot
 
 
 def sha256_file(path: str | Path) -> str:
@@ -18,43 +19,37 @@ def sha256_file(path: str | Path) -> str:
     return digest.hexdigest()
 
 
-def load_json(path: str | Path) -> dict[str, Any]:
-    source = Path(path)
-    payload = json.loads(source.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        raise ValueError(f"Expected a JSON object: {source}")
-    return payload
-
-
-def load_dataset_provenance(data_root: str | Path, dataset: str) -> dict[str, Any]:
-    """读取数据构建报告，并为旧数据集提供可诊断的兼容结果。"""
-    dataset_dir = Path(data_root) / dataset
-    report_path = dataset_dir / "split_report.json"
-    result: dict[str, Any] = {
+def load_dataset_provenance(
+    data_root: str | Path,
+    dataset: str,
+    *,
+    runtime_snapshot: dict[str, Any] | None = None,
+    stats_mode: str | None = None,
+    stats_source: str | None = None,
+) -> dict[str, Any]:
+    """从实际目录生成轻量溯源；历史 manifest/report 不参与运行准入。"""
+    dataset_dir = (Path(data_root) / dataset).resolve()
+    snapshot = runtime_snapshot or build_runtime_data_snapshot(dataset_dir)
+    split_summaries: dict[str, Any] = {}
+    counts: dict[str, int] = {}
+    for split, raw_summary in snapshot["splits"].items():
+        summary = dict(raw_summary)
+        summary.pop("filenames", None)
+        split_summaries[str(split)] = summary
+        counts[str(split)] = int(summary["samples"])
+    return {
         "dataset": str(dataset),
         "dataset_dir": str(dataset_dir),
-        "split_report": str(report_path),
-        "dataset_fingerprint": None,
-        "counts": {},
-        "counts_by_label_presence": {},
+        "membership_authority": "train_val_directories",
+        "manifest_enforced": False,
+        "historical_split_report": str(dataset_dir / "split_report.json"),
+        "runtime_snapshot_id": str(snapshot["runtime_snapshot_id"]),
+        "train_image_snapshot_id": str(snapshot["train_image_snapshot_id"]),
+        "counts": counts,
+        "splits": split_summaries,
+        "stats_mode": stats_mode,
+        "stats_source": stats_source,
     }
-    if not report_path.is_file():
-        return result
-
-    report = load_json(report_path)
-    result.update(
-        {
-            "dataset_fingerprint": report.get("dataset_fingerprint"),
-            "counts": report.get("counts", {}),
-            "counts_by_label_presence": report.get("counts_by_label_presence", {}),
-            "split_report_sha256": sha256_file(report_path),
-        }
-    )
-    for split in ("train", "val"):
-        manifest_path = dataset_dir / f"manifest_{split}.csv"
-        if manifest_path.is_file():
-            result[f"manifest_{split}_sha256"] = sha256_file(manifest_path)
-    return result
 
 
 def portable_repo_path(path_like: str | Path | None, repo_root: str | Path) -> str | None:

@@ -46,16 +46,28 @@ class HACQIModel(nn.Module):
         )
         self.aux_heads = MultiScaleAuxiliaryHead(fpn_channels)
 
+    def extract_change_features(self, x1, x2) -> dict[str, tuple[torch.Tensor, ...]]:
+        """导出可诊断的多尺度特征；训练主路径与诊断共用同一计算。"""
+        pre_pyramid = self.encoder(x1)
+        post_pyramid = self.encoder(x2)
+        aligned_pre, aligned_post = self.ha(pre_pyramid, post_pyramid)
+        change_primitives = self.cqi(aligned_pre, aligned_post)
+        return {
+            "pre_pyramid": pre_pyramid,
+            "post_pyramid": post_pyramid,
+            "aligned_pre": aligned_pre,
+            "aligned_post": aligned_post,
+            "change_primitives": change_primitives,
+        }
+
     @torch.inference_mode()
     def predict_logits(self, x1, x2):
         logits, _ = self.forward(x1, x2)
         return logits
 
     def forward(self, x1, x2):
-        pre_pyramid = self.encoder(x1)
-        post_pyramid = self.encoder(x2)
-        aligned_pre, aligned_post = self.ha(pre_pyramid, post_pyramid)
-        change_primitives = self.cqi(aligned_pre, aligned_post)
+        feature_bundle = self.extract_change_features(x1, x2)
+        change_primitives = feature_bundle["change_primitives"]
         final_pred = self.decoder(change_primitives, x1.shape[-2:])
         aux_preds = self.aux_heads(change_primitives, x1.shape[-2:])
         return final_pred, aux_preds

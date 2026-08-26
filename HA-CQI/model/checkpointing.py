@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 from pathlib import Path
 from typing import Any
 
@@ -49,7 +50,7 @@ INFERENCE_MODEL_CONFIG_FIELDS = frozenset(
         "detail_levels",
         "dino_arch",
         "dino_weight",
-        "extract_ids",
+        "dino_fusion_layers",
         "dino_input_norm",
         "input_mean",
         "input_std",
@@ -60,7 +61,7 @@ LIST_MODEL_CONFIG_FIELDS = frozenset(
         "align_on_levels",
         "context_levels",
         "detail_levels",
-        "extract_ids",
+        "dino_fusion_layers",
         "input_mean",
         "input_std",
     }
@@ -133,9 +134,38 @@ def load_network_state(
 
 def checkpoint_model_config(payload: dict[str, Any]) -> dict[str, Any]:
     meta = validate_checkpoint_v2(payload)
-    model_config = meta.get("model_config")
-    if not isinstance(model_config, dict) or not model_config:
+    raw_model_config = meta.get("model_config")
+    if not isinstance(raw_model_config, dict) or not raw_model_config:
         raise ValueError("Checkpoint v2 inference requires non-empty meta.model_config")
+    model_config = dict(raw_model_config)
+    # 20260823/24 的 B2-OSCD v2 checkpoint 记录了抽取四层、adapter 再丢首层。
+    # 这里仅对这个精确且可证明等价的契约显式归一化，不接受其他旧格式或猜测。
+    legacy_extract_ids = model_config.get("extract_ids")
+    legacy_effective_layers = {
+        ("dinov3_vits16", (2, 5, 8, 11)): [5, 8, 11],
+        ("dinov3_vitb16", (2, 5, 8, 11)): [5, 8, 11],
+        ("dinov3_vitl16", (5, 11, 17, 23)): [11, 17, 23],
+    }.get(
+        (
+            model_config.get("dino_arch"),
+            tuple(legacy_extract_ids) if isinstance(legacy_extract_ids, list) else (),
+        )
+    )
+    if (
+        "dino_fusion_layers" not in model_config
+        and legacy_effective_layers is not None
+        and model_config.get("decoder") == "oscd_v1"
+        and model_config.get("backbone") == "efficientnet_b2"
+    ):
+        model_config["dino_fusion_layers"] = legacy_effective_layers
+        model_config.pop("extract_ids", None)
+        warnings.warn(
+            "Normalized an early B2-OSCD v2 checkpoint from "
+            f"extract_ids={legacy_extract_ids} to its actual effective fusion layers "
+            f"{legacy_effective_layers}.",
+            UserWarning,
+            stacklevel=2,
+        )
     if model_config.get("architecture") != "HA-CQI":
         raise ValueError("Checkpoint v2 meta.model_config.architecture must be 'HA-CQI'")
     if model_config.get("decoder") != "oscd_v1":
@@ -157,6 +187,24 @@ def checkpoint_model_config(payload: dict[str, Any]) -> dict[str, Any]:
     if mismatches:
         raise ValueError(
             "HA-CQI B2/OSCD-only model contract mismatch: " + "; ".join(mismatches)
+        )
+    fusion_layers = model_config.get("dino_fusion_layers")
+    try:
+        from .modules.dino_meta import resolve_dino_fusion_layers
+
+        resolved_fusion_layers = resolve_dino_fusion_layers(
+            str(model_config.get("dino_arch")),
+            fusion_layers if isinstance(fusion_layers, list) else None,
+        )
+    except (TypeError, ValueError) as error:
+        raise ValueError(
+            "Checkpoint model contract has invalid dino_fusion_layers: "
+            f"{fusion_layers!r}"
+        ) from error
+    if fusion_layers != resolved_fusion_layers:
+        raise ValueError(
+            "Checkpoint model contract requires three ordered unique "
+            f"dino_fusion_layers, got {fusion_layers!r}"
         )
     return model_config
 

@@ -28,7 +28,8 @@ Keep these artifact boundaries explicit. Do not mix manuscript prose, patent cla
   - `datasets/train_set/`: packaged training split manifests and stats.
 - `datasets/`: source data and prepared SAR change-detection data.
   - `S1GFloods/`: raw S1GFloods data.
-  - `S1GFloods_CD_DINO_BG_75_25/`: active prepared binary SAR change-detection dataset.
+  - `S1GFloods_CD_DINO_BG_75_25_/`: active, manually cleaned binary SAR change-detection dataset.
+  - `S1GFloods_CD_DINO_BG_75_25/`: archived pre-cleaning prepared dataset.
   - `S1GFloods_CD_DINO/`: archived pre-correction dataset; select explicitly only for historical analysis.
   - `S1GFloods_CD_DINO_/`: experiment-specific variant; select explicitly.
   - `GF3_Henan/`, `GF3_Henan_CD_infer/`: Zhengzhou/GF3 source and tiled inference inputs.
@@ -46,15 +47,16 @@ Keep these artifact boundaries explicit. Do not mix manuscript prose, patent cla
 - The active HA-CQI stack is:
   - shared pre/post CNN-DINO semantic encoder;
   - EfficientNet-B2-only CNN-FPN pyramid;
-  - frozen DINOv3 semantic features from explicit fusion layers `[2,8,11]` with fixed LVD ImageNet normalization;
+  - frozen DINOv3 semantic features from explicit fusion layers `[5,8,11]` with fixed LVD ImageNet normalization;
   - Harmonized Alignment on shallow features;
   - optional deformable soft alignment;
-  - default five-level Change Query Interaction; the `local_structural` ablation replaces only P1/P2 with query-free locally normalized change projection;
+  - fixed five-level Change Query Interaction;
   - MMSCoPE-inspired Omni-Scale State-Space Change Decoder (OSCD);
   - multi-scale auxiliary supervision for small waterlogging and large inundation regions.
 - Preserve HA-CQI's own architecture story. Do not back-port ChangeDINO Risk-Aware, HybridRefiner, topo-router, or micro-gate modules unless the user explicitly requests that experiment.
 - HA-CQI selects `best_primary` by validation Flood IoU while jointly calibrating threshold on the configured grid. `0.40` is only a validation diagnostic threshold.
 - Active code accepts checkpoint v2 only. The 20260427 checkpoints are disk archives and are intentionally unsupported.
+- Training membership is resolved from exact A/B/label filename equality in the live train/val directories. Historical manifests and fingerprints do not gate training or resume; `stats_mode=auto` recomputes cached normalization when train A/B members change.
 - CFDepth is the depth-estimation method. Change detection provides an upstream flood extent/support-region input; it is not the patent core unless the user changes the invention scope.
 
 ## Build, Train, and Inference Commands
@@ -70,9 +72,10 @@ Useful overrides:
 
 ```bash
 cd HA-CQI
-DATASET_NAME=S1GFloods_CD_DINO_BG_75_25 \
+DATASET_NAME=S1GFloods_CD_DINO_BG_75_25_ \
 DATA_ROOT=../datasets \
-RUN_NAME=S1GFloods-HA-CQI-B2-vits16 \
+STATS_MODE=auto \
+RUN_NAME=S1GFloods-HA-CQI-B2-OSCD-DINO5-8-11-CLEAN-s1 \
 BATCH_SIZE=12 \
 NUM_WORKERS=8 \
 LR=1e-4 \

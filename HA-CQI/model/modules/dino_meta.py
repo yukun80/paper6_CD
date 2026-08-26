@@ -8,19 +8,19 @@ DINO_ARCH_SPECS = {
         "embed_dim": 384,
         "num_layers": 12,
         "patch_size": 16,
-        "default_extract_ids": [2, 5, 8, 11],
+        "default_fusion_layers": [5, 8, 11],
     },
     "dinov3_vitb16": {
         "embed_dim": 768,
         "num_layers": 12,
         "patch_size": 16,
-        "default_extract_ids": [2, 5, 8, 11],
+        "default_fusion_layers": [5, 8, 11],
     },
     "dinov3_vitl16": {
         "embed_dim": 1024,
         "num_layers": 24,
         "patch_size": 16,
-        "default_extract_ids": [5, 11, 17, 23],
+        "default_fusion_layers": [11, 17, 23],
     },
 }
 
@@ -57,15 +57,31 @@ def get_dino_arch_spec(dino_arch: str) -> dict[str, object]:
     return DINO_ARCH_SPECS[dino_arch]
 
 
-def resolve_extract_ids(dino_arch: str, extract_ids: list[int] | None) -> list[int]:
+def resolve_dino_fusion_layers(
+    dino_arch: str,
+    fusion_layers: list[int] | None,
+) -> list[int]:
+    """解析真正进入 P3-P5 融合的三个 DINO 层，禁止静默丢层。"""
     spec = get_dino_arch_spec(dino_arch)
-    resolved = list(spec["default_extract_ids"]) if extract_ids is None else [int(v) for v in extract_ids]
-    if not resolved:
-        raise ValueError("extract_ids must not be empty")
+    resolved = (
+        list(spec["default_fusion_layers"])
+        if fusion_layers is None
+        else [int(v) for v in fusion_layers]
+    )
+    if len(resolved) != 3:
+        raise ValueError(
+            "dino_fusion_layers must contain exactly three layers for P3/P4/P5, "
+            f"got {resolved}"
+        )
+    if len(set(resolved)) != len(resolved) or resolved != sorted(resolved):
+        raise ValueError(
+            "dino_fusion_layers must be unique and ordered from shallow to deep, "
+            f"got {resolved}"
+        )
     invalid = [layer_id for layer_id in resolved if layer_id < 0 or layer_id >= int(spec["num_layers"])]
     if invalid:
         raise ValueError(
-            f"extract_ids {invalid} exceed layer range for {dino_arch} "
+            f"dino_fusion_layers {invalid} exceed layer range for {dino_arch} "
             f"(valid: 0..{int(spec['num_layers']) - 1})"
         )
     return resolved

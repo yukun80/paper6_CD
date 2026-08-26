@@ -20,6 +20,10 @@ import torch
 from tqdm import tqdm
 
 from data.cd_dataset import DataLoader
+from data.runtime_snapshot import (
+    build_runtime_data_snapshot,
+    warn_if_runtime_snapshot_changed,
+)
 from model.checkpointing import atomic_json_save
 from model.engine import build_hacqi_engine
 from option import Options
@@ -50,6 +54,8 @@ def setup_seed(seed: int, deterministic: bool = True) -> None:
 def _json_safe_options(opt) -> dict[str, Any]:
     result: dict[str, Any] = {}
     for key, value in vars(opt).items():
+        if key == "runtime_data_snapshot":
+            continue
         if isinstance(value, Path):
             result[key] = str(value)
         elif isinstance(value, torch.dtype):
@@ -75,15 +81,26 @@ class HACQITrainer:
                 "CUDA device does not support bf16, but the B2 baseline requires "
                 "--amp_dtype bf16. Use --amp_dtype fp16 explicitly for this device."
             )
-        self.data_provenance = load_dataset_provenance(opt.dataroot, opt.dataset)
-        if str(opt.dataset) == "S1GFloods_CD_DINO_BG_75_25" and not self.data_provenance.get(
-            "dataset_fingerprint"
-        ):
-            raise ValueError(
-                "Corrected dataset requires split_report.json with dataset_fingerprint: "
-                f"{self.data_provenance['split_report']}"
-            )
-
+        dataset_root = Path(opt.dataroot) / opt.dataset
+        self.runtime_data_snapshot = (
+            opt.runtime_data_snapshot
+            if isinstance(getattr(opt, "runtime_data_snapshot", None), dict)
+            else build_runtime_data_snapshot(dataset_root)
+        )
+        self.runtime_data_snapshot["normalization"] = {
+            "stats_mode": str(opt.stats_mode),
+            "stats_source": str(opt.stats_source),
+            "stats_file": str(opt.stats_file),
+            "mean": [float(value) for value in opt.mean],
+            "std": [float(value) for value in opt.std],
+        }
+        self.data_provenance = load_dataset_provenance(
+            opt.dataroot,
+            opt.dataset,
+            runtime_snapshot=self.runtime_data_snapshot,
+            stats_mode=str(opt.stats_mode),
+            stats_source=str(opt.stats_source),
+        )
         opt.phase = "train"
         self.train_loader = DataLoader(opt)
         self.train_data = self.train_loader.load_data()
@@ -96,6 +113,15 @@ class HACQITrainer:
         val_size = len(self.val_loader)
         print(f"#validation images = {val_size}")
         opt.phase = "train"
+        expected_train = int(self.runtime_data_snapshot["splits"]["train"]["samples"])
+        expected_val = int(self.runtime_data_snapshot["splits"]["val"]["samples"])
+        if (train_size, val_size) != (expected_train, expected_val):
+            raise RuntimeError(
+                "Dataset members changed while the training process was starting. "
+                "Hot deletion is unsupported; stop and restart so stats and loaders share "
+                f"one snapshot. snapshot={(expected_train, expected_val)}, "
+                f"loaders={(train_size, val_size)}"
+            )
 
         self.model = build_hacqi_engine(opt)
         self.optimizer = self.model.optimizer
@@ -130,15 +156,30 @@ class HACQITrainer:
         self.metrics_path = self.save_dir / "metrics.jsonl"
         snapshot_name = "resume_options.json" if opt.resume else "options.json"
         atomic_json_save(_json_safe_options(opt), self.save_dir / snapshot_name)
+        atomic_json_save(self.runtime_data_snapshot, self.save_dir / "data_snapshot.json")
 
         if opt.resume:
-            self.start_epoch, self.global_step, _ = self.model.restore_training_checkpoint(
+            self.start_epoch, self.global_step, payload = self.model.restore_training_checkpoint(
                 opt.resume,
-                expected_dataset_fingerprint=self.data_provenance.get("dataset_fingerprint"),
                 scaler=self.scaler,
                 data_loader_generator=self.train_loader.generator,
             )
-            self._restore_best_selection()
+            checkpoint_snapshot_id = (
+                payload.get("meta", {}).get("data_config", {}).get("runtime_snapshot_id")
+            )
+            current_snapshot_id = self.runtime_data_snapshot["runtime_snapshot_id"]
+            data_changed = warn_if_runtime_snapshot_changed(
+                checkpoint_snapshot_id,
+                current_snapshot_id,
+            )
+            if data_changed:
+                self.best_selection = None
+                print(
+                    "[WARN] reset in-memory best selection because validation members "
+                    "changed; the next completed validation establishes a new primary baseline."
+                )
+            else:
+                self._restore_best_selection()
             print(
                 f"[INFO] resumed from {opt.resume}: start_epoch={self.start_epoch}, "
                 f"global_step={self.global_step}"
@@ -325,6 +366,8 @@ class HACQITrainer:
             f"threshold={reference['threshold']:.2f} "
             f"background_tile_fp_rate={reference['background_tile_fp_rate'] * 100:.3f} "
             f"largest_fp_component={reference['largest_fp_component']} "
+            f"boundary_f1_tol2={reference['boundary_f1_tol2'] * 100:.3f} "
+            f"boundary_f1_tol4={reference['boundary_f1_tol4'] * 100:.3f} "
             f"tiny_cov10={reference['tiny_recall_cov10'] * 100:.3f} "
             f"tiny_cov25={reference['tiny_recall_cov25'] * 100:.3f}"
         )
@@ -358,7 +401,9 @@ class HACQITrainer:
             "precision_1": float(selected["precision_1"]),
             "recall_1": float(selected["recall_1"]),
             "threshold_grid": [float(value) for value in self.thresholds],
-            "dataset_fingerprint": self.data_provenance.get("dataset_fingerprint"),
+            "runtime_snapshot_id": self.runtime_data_snapshot["runtime_snapshot_id"],
+            "train_samples": int(self.data_provenance["counts"]["train"]),
+            "val_samples": int(self.data_provenance["counts"]["val"]),
         }
 
     def _save_epoch_checkpoints(self, epoch: int, validation: dict[str, Any]) -> None:
@@ -415,7 +460,11 @@ class HACQITrainer:
             "global_step": int(self.global_step),
             "train": train_metrics,
             "validation": validation,
-            "dataset_fingerprint": self.data_provenance.get("dataset_fingerprint"),
+            "data": {
+                "runtime_snapshot_id": self.runtime_data_snapshot["runtime_snapshot_id"],
+                "train_samples": int(self.data_provenance["counts"]["train"]),
+                "val_samples": int(self.data_provenance["counts"]["val"]),
+            },
         }
         with self.metrics_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
