@@ -1,0 +1,1872 @@
+/*******************************************************************************
+ * CFDepth v2
+ * Change-defined Flood Depth Estimation
+ *
+ * Core assumption
+ * ---------------------------------------------------------------------------
+ * Input `image` is a binary CHANGE-DEFINED flood extent:
+ *
+ *   1 = newly inundated area
+ *   0 = non-newly-inundated background
+ *
+ * Permanent/pre-existing water bodies have ALREADY been excluded from the
+ * change-defined flood extent upstream (e.g. HA-CQI/change detection).
+ *
+ * IMPORTANT:
+ * The permanent-water mask used below DOES NOT modify the flood support.
+ * It is used only as a boundary-semantic constraint to distinguish:
+ *
+ *   valid flood-dry boundary
+ *
+ * from:
+ *
+ *   invalid flood-permanent-water boundary
+ *
+ * Thus:
+ *
+ *   floodSupport = input change-defined flood extent
+ *
+ * rather than:
+ *
+ *   floodSupport = flood extent AND NOT permanent water
+ *
+ *
+ * Main workflow
+ * ---------------------------------------------------------------------------
+ * 1. Align change-defined flood extent to FABDEM.
+ *
+ * 2. Identify raw outer boundary.
+ *
+ * 3. Reject unreliable WSE boundary constraints:
+ *      - permanent-water-adjacent boundary;
+ *      - steep terrain boundary;
+ *      - local DEM outlier boundary.
+ *
+ * 4. Construct robust boundary WSE anchors using paired wet-side and
+ *    dry-side terrain elevations.
+ *
+ * 5. Propagate nearest reachable valid WSE anchor only as an INITIAL WSE.
+ *
+ * 6. Apply component-confined WSE continuity refinement.
+ *
+ * 7. Compute:
+ *
+ *      Depth = max(WSE - DEM, 0)
+ *
+ *
+ * Required GEE import
+ * ---------------------------------------------------------------------------
+ * `image`
+ *
+ * Uploaded 0/1 GeoTIFF:
+ *      1 = newly inundated area
+ *      0 = background
+ *
+ *
+ * Optional import
+ * ---------------------------------------------------------------------------
+ * `permanentWaterImage`
+ *
+ * Uploaded 0/1 permanent-water mask.
+ *
+ * If unavailable:
+ * JRC Global Surface Water is used ONLY for boundary filtering.
+ *
+ *
+ * For Brazos controlled validation
+ * ---------------------------------------------------------------------------
+ * Prefer an event/benchmark-consistent permanent-water mask and set:
+ *
+ *      useUploadedPermanentWater = true;
+ *
+ *******************************************************************************/
+
+
+// =============================================================================
+// 1. INPUTS AND PARAMETERS
+// =============================================================================
+
+
+// -----------------------------------------------------------------------------
+// Change-defined flood extent
+// -----------------------------------------------------------------------------
+
+var floodRaw = ee.Image(image2)
+  .select(0)
+  .rename('flood_raw');
+
+
+// -----------------------------------------------------------------------------
+// Permanent-water configuration
+// -----------------------------------------------------------------------------
+
+// false:
+//   use JRC Global Surface Water as ancillary permanent-water information.
+//
+// true:
+//   use imported 0/1 image `permanentWaterImage`.
+var useUploadedPermanentWater = false;
+
+
+// Example when using an uploaded permanent-water mask:
+//
+// var permanentWaterImage = ee.Image(
+//   'projects/your-project/assets/permanent_water'
+// );
+//
+// var useUploadedPermanentWater = true;
+
+
+// -----------------------------------------------------------------------------
+// Export
+// -----------------------------------------------------------------------------
+
+var exportName = 'CFDepth_v2';
+var exportFolder = 'FloodDepth';
+
+
+// -----------------------------------------------------------------------------
+// Boundary quality-control parameters
+// -----------------------------------------------------------------------------
+
+// Number of DEM pixels around permanent water that are forbidden from
+// contributing WSE boundary constraints.
+//
+// For FABDEM (~30 m):
+// 1 pixel is a conservative default.
+var permanentWaterBufferPixels = 1;
+
+
+// Maximum terrain slope allowed for a valid WSE boundary source.
+//
+// Unit: degree.
+//
+// A relatively conservative threshold is used because steep boundary pixels
+// can introduce large vertical errors when flood extent and DEM grids are
+// spatially mismatched.
+var maxBoundarySlopeDeg = 5;
+
+
+// Radius used to estimate local median and MAD of candidate boundary DEM.
+var boundaryMadRadiusPixels = 3;
+
+
+// Robust outlier criterion:
+//
+// |z - median(z)| <= multiplier * MAD
+var boundaryMadMultiplier = 3.0;
+
+
+// Prevent unrealistically small MAD values from rejecting nearly all pixels.
+var minBoundaryToleranceMeters = 0.25;
+
+
+// Radius for pairing wet-side and dry-side elevations near the flood boundary.
+var boundaryPairRadiusPixels = 2;
+
+
+// -----------------------------------------------------------------------------
+// WSE reconstruction parameters
+// -----------------------------------------------------------------------------
+
+// Minimum physically retained positive flood depth.
+var minPositiveDepth = 0.01;
+
+
+// Maximum distance used ONLY for nearest-anchor WSE initialization.
+//
+// This does not directly define final WSE because the initialized WSE is
+// subsequently continuity-refined.
+var maxPropagationDistanceMeters = 10000;
+
+
+// Number of WSE continuity iterations.
+var continuityIterations = 50;
+
+
+// Relaxation factor:
+//
+// 0   -> preserve current WSE
+// 1   -> use full local neighbor mean
+//
+// 0.85 provides relatively strong smoothing while preserving fixed
+// boundary WSE anchors.
+var continuityRelaxation = 0.85;
+
+
+// -----------------------------------------------------------------------------
+// AOI
+// -----------------------------------------------------------------------------
+
+var aoiBufferMeters = 1000;
+var aoiDetectionScale = 30;
+
+
+// -----------------------------------------------------------------------------
+// Visualization
+// -----------------------------------------------------------------------------
+
+var depthVis = {
+  min: 0,
+  max: 5,
+  palette: [
+    'white',
+    'blue',
+    'purple'
+  ]
+};
+
+
+// =============================================================================
+// 2. BUILD COMPACT AOI
+// =============================================================================
+
+
+// Convert input to strict binary.
+var flood01Raw = floodRaw
+  .gt(0)
+  .toByte()
+  .rename('flood01_raw');
+
+
+var floodMaskedRaw = flood01Raw
+  .selfMask();
+
+
+var floodLonLat = ee.Image.pixelLonLat()
+  .updateMask(floodMaskedRaw);
+
+
+var floodBoundsDict = floodLonLat.reduceRegion({
+  reducer: ee.Reducer.minMax(),
+  geometry: floodRaw.geometry(),
+  scale: aoiDetectionScale,
+  maxPixels: 1e13,
+  bestEffort: true,
+  tileScale: 4
+});
+
+
+var floodBounds = ee.Geometry.Rectangle(
+  [
+    ee.Number(
+      floodBoundsDict.get('longitude_min')
+    ),
+
+    ee.Number(
+      floodBoundsDict.get('latitude_min')
+    ),
+
+    ee.Number(
+      floodBoundsDict.get('longitude_max')
+    ),
+
+    ee.Number(
+      floodBoundsDict.get('latitude_max')
+    )
+  ],
+  null,
+  false
+);
+
+
+var aoi = floodBounds
+  .buffer(aoiBufferMeters)
+  .bounds();
+
+
+// =============================================================================
+// 3. LOAD FABDEM
+// =============================================================================
+
+
+var demCol = ee.ImageCollection(
+  'projects/sat-io/open-datasets/FABDEM'
+).filterBounds(aoi);
+
+
+var firstTile = ee.Image(
+  demCol.first()
+).select(0);
+
+
+var demProj = firstTile.projection();
+
+
+var demScale = demProj.nominalScale();
+
+
+var dem = demCol
+  .mosaic()
+  .select(0)
+  .rename('dem')
+  .setDefaultProjection(demProj)
+  .clip(aoi);
+
+
+// =============================================================================
+// 4. ALIGN CHANGE-DEFINED FLOOD SUPPORT TO DEM
+// =============================================================================
+
+
+// Use max aggregation to preserve narrow / fragmented detected inundation
+// during conversion to the DEM grid.
+var floodBinary = flood01Raw
+  .clip(aoi)
+  .reduceResolution({
+    reducer: ee.Reducer.max(),
+    bestEffort: true,
+    maxPixels: 4096
+  })
+  .reproject(demProj)
+  .unmask(0)
+  .toByte()
+  .rename('flood_binary');
+
+
+// -----------------------------------------------------------------------------
+// IMPORTANT
+//
+// The change-defined flood map has already excluded permanent water upstream.
+//
+// Therefore:
+//
+//     floodSupportBinary = floodBinary
+//
+// We DO NOT perform:
+//
+//     floodBinary.and(permanentWater.not())
+//
+// Permanent-water information is only used later to reject invalid WSE
+// boundary constraints.
+// -----------------------------------------------------------------------------
+
+var floodSupportBinary = floodBinary
+  .toByte()
+  .rename('flood_support_binary');
+
+
+var floodSupport = floodSupportBinary
+  .selfMask()
+  .rename('flood_support');
+
+
+// =============================================================================
+// 5. PERMANENT-WATER ANCILLARY MASK
+// =============================================================================
+
+
+// This mask DOES NOT redefine floodSupport.
+//
+// Its sole methodological purpose is:
+//
+// identify flood-permanent-water interfaces that must not be interpreted as
+// ordinary flood-dry terrain boundaries.
+
+
+var permanentWaterRaw;
+
+
+if (useUploadedPermanentWater) {
+
+  // ---------------------------------------------------------------------------
+  // User-provided benchmark/event-consistent permanent-water mask
+  // ---------------------------------------------------------------------------
+
+  permanentWaterRaw = ee.Image(
+    permanentWaterImage
+  )
+    .select(0)
+    .gt(0);
+
+} else {
+
+  // ---------------------------------------------------------------------------
+  // Generic fallback:
+  // JRC Global Surface Water
+  //
+  // seasonality >= 10 months/year
+  // OR
+  // occurrence >= 90%
+  //
+  // This is used ONLY for boundary semantics.
+  // ---------------------------------------------------------------------------
+
+  var gsw = ee.Image(
+    'JRC/GSW1_4/GlobalSurfaceWater'
+  );
+
+
+  permanentWaterRaw = gsw
+    .select('seasonality')
+    .gte(10)
+    .or(
+      gsw
+        .select('occurrence')
+        .gte(90)
+    );
+}
+
+
+// Align permanent-water mask to FABDEM.
+var permanentWater = permanentWaterRaw
+  .clip(aoi)
+  .reduceResolution({
+    reducer: ee.Reducer.max(),
+    bestEffort: true,
+    maxPixels: 4096
+  })
+  .reproject(demProj)
+  .unmask(0)
+  .gt(0)
+  .toByte()
+  .rename('permanent_water');
+
+
+// Buffer permanent water to avoid mixed/adjacent pixels acting as WSE sources.
+var permanentWaterBuffer = permanentWater
+  .focal_max(
+    permanentWaterBufferPixels,
+    'square',
+    'pixels'
+  )
+  .gt(0)
+  .rename('permanent_water_buffer');
+
+
+// =============================================================================
+// 6. HELPER FUNCTION:
+//    PROPAGATE NEAREST REACHABLE SOURCE VALUE
+// =============================================================================
+//
+// This function provides only the INITIAL WSE.
+//
+// It is NOT the final WSE reconstruction.
+//
+// Because the traversal mask contains only the change-defined flood support,
+// propagation cannot cross disconnected background regions.
+// =============================================================================
+
+
+function propagateNearestValue(
+  sourceValue,
+  traversalMask,
+  maxDistance,
+  outName
+) {
+
+  var source = sourceValue
+    .mask()
+    .gt(0)
+    .selfMask()
+    .rename('source');
+
+
+  // Large artificial value used by the cumulative-cost allocation formulation.
+  var largeCost = 1000000;
+
+
+  var travelCost = ee.Image
+    .constant(largeCost)
+    .clip(aoi)
+    .updateMask(traversalMask);
+
+
+  // ---------------------------------------------------------------------------
+  // Baseline cumulative cost
+  // ---------------------------------------------------------------------------
+
+  var cost0 = travelCost
+    .where(
+      source,
+      0
+    )
+    .cumulativeCost({
+      source: source,
+      maxDistance: maxDistance
+    });
+
+
+  // ---------------------------------------------------------------------------
+  // Unit-value cumulative cost
+  // ---------------------------------------------------------------------------
+
+  var cost1 = travelCost
+    .where(
+      source,
+      1
+    )
+    .cumulativeCost({
+      source: source,
+      maxDistance: maxDistance
+    });
+
+
+  // ---------------------------------------------------------------------------
+  // Source-value cumulative cost
+  // ---------------------------------------------------------------------------
+
+  var cost2 = sourceValue
+    .unmask(largeCost)
+    .clip(aoi)
+    .updateMask(traversalMask)
+    .cumulativeCost({
+      source: source,
+      maxDistance: maxDistance
+    });
+
+
+  // ---------------------------------------------------------------------------
+  // Recover nearest reachable source value
+  // ---------------------------------------------------------------------------
+
+  var denominator = cost1
+    .subtract(cost0);
+
+
+  var allocated = sourceValue
+    .unmask(0)
+    .add(
+      cost2
+        .subtract(cost0)
+        .divide(denominator)
+    )
+    .rename(outName);
+
+
+  return allocated
+    .updateMask(traversalMask);
+}
+
+
+// =============================================================================
+// 7. RAW OUTER BOUNDARY
+// =============================================================================
+//
+// Raw outer boundary:
+//
+// background pixels immediately adjacent to the change-defined flood support.
+//
+// At this stage, the algorithm DOES NOT assume that every outer boundary is
+// physically valid.
+// =============================================================================
+
+
+var rawOuterBoundary01 = floodSupportBinary
+  .focal_max(
+    1,
+    'square',
+    'pixels'
+  )
+  .subtract(floodSupportBinary)
+  .gt(0)
+  .and(
+    floodSupportBinary.eq(0)
+  )
+  .rename('raw_outer_boundary_01');
+
+
+var rawOuterBoundary = rawOuterBoundary01
+  .selfMask()
+  .rename('raw_outer_boundary');
+
+
+// =============================================================================
+// 8. TERRAIN SLOPE
+// =============================================================================
+
+
+var terrainSlopeDeg = ee.Terrain
+  .slope(dem)
+  .rename('terrain_slope_deg');
+
+
+// =============================================================================
+// 9. INITIAL VALID-BOUNDARY SELECTION
+// =============================================================================
+//
+// A raw boundary pixel is eligible only when:
+//
+// 1. it is NOT adjacent to permanent water;
+// 2. local terrain slope is acceptable;
+// 3. DEM value is valid.
+// =============================================================================
+
+
+var boundaryCandidate01 = rawOuterBoundary01
+
+  // ---------------------------------------------------------------------------
+  // Reject flood-permanent-water interfaces.
+  //
+  // This is the key distinction:
+  //
+  // flood-dry interface       -> potentially informative WSE constraint
+  // flood-permanent-water     -> wet-wet interface; invalid as terrain WSE source
+  // ---------------------------------------------------------------------------
+
+  .and(
+    permanentWaterBuffer.not()
+  )
+
+  // ---------------------------------------------------------------------------
+  // Reject steep terrain edges.
+  // ---------------------------------------------------------------------------
+
+  .and(
+    terrainSlopeDeg.lte(
+      maxBoundarySlopeDeg
+    )
+  )
+
+  // ---------------------------------------------------------------------------
+  // Require valid DEM.
+  // ---------------------------------------------------------------------------
+
+  .and(
+    dem.mask().gt(0)
+  )
+
+  .rename('boundary_candidate_01');
+
+
+var boundaryCandidate = boundaryCandidate01
+  .selfMask()
+  .rename('boundary_candidate');
+
+
+var boundaryElevationCandidate = dem
+  .updateMask(boundaryCandidate)
+  .rename('boundary_elevation_candidate');
+
+
+// =============================================================================
+// 10. ROBUST DEM OUTLIER FILTER ON BOUNDARY
+// =============================================================================
+//
+// Local robust statistics:
+//
+//     median
+//     MAD = median(|z - median(z)|)
+//
+// Accept boundary elevation if:
+//
+//     |z - median(z)|
+//       <=
+//     max( MAD_multiplier * MAD,
+//          minimum_tolerance )
+//
+// This avoids isolated DEM artifacts becoming WSE anchors.
+// =============================================================================
+
+
+// -----------------------------------------------------------------------------
+// Local boundary median
+// -----------------------------------------------------------------------------
+
+var boundaryMedian = boundaryElevationCandidate
+  .reduceNeighborhood({
+
+    reducer: ee.Reducer.median(),
+
+    kernel: ee.Kernel.square({
+      radius: boundaryMadRadiusPixels,
+      units: 'pixels',
+      normalize: false
+    }),
+
+    skipMasked: false
+
+  })
+  .rename('boundary_local_median');
+
+
+// -----------------------------------------------------------------------------
+// Absolute deviation from local median
+// -----------------------------------------------------------------------------
+
+var boundaryAbsDeviation = boundaryElevationCandidate
+  .subtract(boundaryMedian)
+  .abs()
+  .rename('boundary_abs_deviation');
+
+
+// -----------------------------------------------------------------------------
+// Local MAD
+// -----------------------------------------------------------------------------
+
+var boundaryMad = boundaryAbsDeviation
+  .reduceNeighborhood({
+
+    reducer: ee.Reducer.median(),
+
+    kernel: ee.Kernel.square({
+      radius: boundaryMadRadiusPixels,
+      units: 'pixels',
+      normalize: false
+    }),
+
+    skipMasked: false
+
+  })
+  .rename('boundary_local_mad');
+
+
+// -----------------------------------------------------------------------------
+// Robust tolerance
+// -----------------------------------------------------------------------------
+
+var boundaryTolerance = boundaryMad
+  .multiply(
+    boundaryMadMultiplier
+  )
+  .max(
+    minBoundaryToleranceMeters
+  )
+  .rename('boundary_tolerance');
+
+
+// -----------------------------------------------------------------------------
+// Local DEM robust-inlier flag
+// -----------------------------------------------------------------------------
+
+var robustBoundaryOk01 = boundaryAbsDeviation
+  .lte(boundaryTolerance)
+  .unmask(0)
+  .rename('robust_boundary_ok_01');
+
+
+// -----------------------------------------------------------------------------
+// Final valid outer boundary
+// -----------------------------------------------------------------------------
+
+var validOuterBoundary01 = boundaryCandidate01
+  .and(
+    robustBoundaryOk01
+  )
+  .rename('valid_outer_boundary_01');
+
+
+var validOuterBoundary = validOuterBoundary01
+  .selfMask()
+  .rename('valid_outer_boundary');
+
+
+// =============================================================================
+// 11. INNER WET BOUNDARY
+// =============================================================================
+//
+// Construct the wet-side edge of the change-defined flood support.
+//
+// This lets us estimate WSE from terrain information on BOTH sides of a valid
+// wet-dry boundary instead of directly using a single dry-side DEM pixel.
+// =============================================================================
+
+
+var erodedFlood = floodSupportBinary
+  .focal_min(
+    1,
+    'square',
+    'pixels'
+  );
+
+
+var innerWetBoundary01 = floodSupportBinary
+  .eq(1)
+  .and(
+    erodedFlood.eq(0)
+  )
+  .rename('inner_wet_boundary_01');
+
+
+var innerWetBoundary = innerWetBoundary01
+  .selfMask()
+  .rename('inner_wet_boundary');
+
+
+// =============================================================================
+// 12. ROBUST WSE ANCHORS
+// =============================================================================
+//
+// Principle:
+//
+// At a valid wet-dry boundary, the true local WSE should lie between
+// representative wet-side and dry-side terrain elevations.
+//
+// We therefore estimate:
+//
+//     Zwet  = robust local median terrain elevation on wet side
+//
+//     Zdry  = robust local median terrain elevation on dry side
+//
+// and define:
+//
+//     Sb = (Zwet + Zdry) / 2
+//
+// Then:
+//
+//     Sb >= DEM + dmin
+//
+// is enforced for retained flood pixels.
+//
+// This is more robust than directly propagating one dry-side DEM cell.
+// =============================================================================
+
+
+var pairKernel = ee.Kernel.square({
+  radius: boundaryPairRadiusPixels,
+  units: 'pixels',
+  normalize: false
+});
+
+
+// -----------------------------------------------------------------------------
+// Dry-side representative elevation transferred to wet-side boundary pixels
+// -----------------------------------------------------------------------------
+
+var dryBoundaryMedianAtWetSide = dem
+
+  .updateMask(
+    validOuterBoundary
+  )
+
+  .reduceNeighborhood({
+
+    reducer: ee.Reducer.median(),
+
+    kernel: pairKernel,
+
+    skipMasked: false
+
+  })
+
+  .rename(
+    'dry_boundary_median_at_wet_side'
+  )
+
+  .updateMask(
+    innerWetBoundary
+  );
+
+
+// -----------------------------------------------------------------------------
+// Wet-side representative terrain elevation
+// -----------------------------------------------------------------------------
+
+var wetBoundaryMedian = dem
+
+  .updateMask(
+    innerWetBoundary
+  )
+
+  .reduceNeighborhood({
+
+    reducer: ee.Reducer.median(),
+
+    kernel: pairKernel,
+
+    skipMasked: false
+
+  })
+
+  .rename(
+    'wet_boundary_median'
+  )
+
+  .updateMask(
+    innerWetBoundary
+  );
+
+
+// -----------------------------------------------------------------------------
+// Pixels with both valid wet-side and dry-side estimates
+// -----------------------------------------------------------------------------
+
+var pairedBoundaryMask = dryBoundaryMedianAtWetSide
+  .mask()
+  .and(
+    wetBoundaryMedian.mask()
+  )
+  .and(
+    innerWetBoundary01
+  )
+  .selfMask();
+
+
+// -----------------------------------------------------------------------------
+// Robust WSE boundary anchors
+// -----------------------------------------------------------------------------
+
+var boundaryWseAnchor = dryBoundaryMedianAtWetSide
+
+  .add(
+    wetBoundaryMedian
+  )
+
+  .multiply(0.5)
+
+  .updateMask(
+    pairedBoundaryMask
+  )
+
+  // Enforce minimum positive depth at retained flood pixels.
+  .max(
+    dem.add(
+      minPositiveDepth
+    )
+  )
+
+  .rename(
+    'boundary_wse_anchor'
+  );
+
+
+// =============================================================================
+// 13. INITIAL WSE:
+//     NEAREST REACHABLE VALID ANCHOR
+// =============================================================================
+//
+// IMPORTANT:
+//
+// Nearest-boundary propagation is retained ONLY as an initialization mechanism.
+//
+// It is no longer interpreted as the final reconstructed water surface.
+// =============================================================================
+
+
+// Traversal is restricted strictly to change-defined flood pixels.
+var supportTraversalMask = floodSupportBinary
+  .selfMask();
+
+
+// -----------------------------------------------------------------------------
+// Initial WSE
+// -----------------------------------------------------------------------------
+
+var nearestAnchorWse = propagateNearestValue(
+
+  boundaryWseAnchor,
+
+  supportTraversalMask,
+
+  maxPropagationDistanceMeters,
+
+  'wse_nearest_anchor_initial'
+
+)
+  .updateMask(
+    floodSupport
+  );
+
+
+// -----------------------------------------------------------------------------
+// Distance to nearest reachable valid WSE anchor
+// -----------------------------------------------------------------------------
+
+var nearestAnchorDistance = ee.Image
+  .constant(1)
+  .clip(aoi)
+  .updateMask(
+    supportTraversalMask
+  )
+  .cumulativeCost({
+
+    source: boundaryWseAnchor
+      .mask(),
+
+    maxDistance:
+      maxPropagationDistanceMeters
+
+  })
+  .rename(
+    'nearest_anchor_distance'
+  );
+
+
+// =============================================================================
+// 14. LOW-CONFIDENCE FALLBACK
+// =============================================================================
+//
+// A component may contain no valid WSE anchor because:
+//
+// - almost all its boundaries touch permanent water;
+// - boundaries are too steep;
+// - DEM boundary values are rejected as outliers;
+// - component is very small;
+// - valid anchor is outside maximum propagation distance.
+//
+// These pixels are NOT discarded.
+//
+// They are initialized with:
+//
+//     DEM + dmin
+//
+// but explicitly flagged as low-confidence.
+//
+// The QA flag should be retained for diagnosis.
+// =============================================================================
+
+
+var lowConfidenceFallback01 = floodSupportBinary
+  .and(
+    nearestAnchorWse
+      .mask()
+      .not()
+  )
+  .rename(
+    'low_confidence_fallback_01'
+  );
+
+
+// Minimum admissible water surface.
+var obstacleSurface = dem
+  .add(
+    minPositiveDepth
+  )
+  .updateMask(
+    floodSupport
+  )
+  .rename(
+    'obstacle_surface'
+  );
+
+
+// Fill missing initialization with DEM + dmin.
+var wseInitial = nearestAnchorWse
+
+  .unmask(
+    obstacleSurface
+  )
+
+  .updateMask(
+    floodSupport
+  )
+
+  .max(
+    obstacleSurface
+  )
+
+  .rename(
+    'wse_initial'
+  );
+
+
+// =============================================================================
+// 15. WSE CONTINUITY REFINEMENT
+// =============================================================================
+//
+// We refine WATER SURFACE ELEVATION, not depth.
+//
+// Discrete update:
+//
+//     S_(t+1)(p)
+//
+//       = max{
+//
+//           (1-w) S_t(p)
+//             +
+//           w mean[S_t(N(p))],
+//
+//           DEM(p) + dmin
+//
+//         }
+//
+// Valid WSE boundary anchors are re-imposed after every iteration.
+//
+// Because the image remains masked by floodSupport, disconnected flood patches
+// cannot exchange WSE values across background pixels.
+//
+// This removes most of the hard Voronoi-like partitions produced by direct
+// nearest-boundary assignment.
+// =============================================================================
+
+
+var continuityKernel = ee.Kernel.square({
+  radius: 1,
+  units: 'pixels',
+  normalize: false
+});
+
+
+// WSE anchor pixels remain fixed during all iterations.
+var fixedAnchorMask = boundaryWseAnchor
+  .mask()
+  .gt(0)
+  .selfMask();
+
+
+// Sequence of iterations.
+var iterationList = ee.List.sequence(
+  1,
+  continuityIterations
+);
+
+
+// -----------------------------------------------------------------------------
+// Iterative WSE continuity refinement
+// -----------------------------------------------------------------------------
+
+var wseRefined = ee.Image(
+
+  iterationList.iterate(
+
+    function(iteration, previous) {
+
+      var previousWse = ee.Image(
+        previous
+      );
+
+
+      // -----------------------------------------------------------------------
+      // Local water-surface neighborhood mean
+      // -----------------------------------------------------------------------
+
+      var neighborMean = previousWse
+        .reduceNeighborhood({
+
+          reducer: ee.Reducer.mean(),
+
+          kernel: continuityKernel,
+
+          inputWeight: 'mask',
+
+          skipMasked: false
+
+        })
+        .rename(
+          'neighbor_mean'
+        );
+
+
+      // -----------------------------------------------------------------------
+      // Relaxed harmonic update
+      // -----------------------------------------------------------------------
+
+      var updated = previousWse
+
+        .multiply(
+          1.0 - continuityRelaxation
+        )
+
+        .add(
+
+          neighborMean.multiply(
+            continuityRelaxation
+          )
+
+        )
+
+        // ---------------------------------------------------------------------
+        // Terrain obstacle:
+        //
+        // retained flooded pixels cannot have WSE below local terrain.
+        // ---------------------------------------------------------------------
+
+        .max(
+          obstacleSurface
+        )
+
+        // ---------------------------------------------------------------------
+        // Re-establish physical boundary anchors.
+        // ---------------------------------------------------------------------
+
+        .where(
+
+          fixedAnchorMask,
+
+          boundaryWseAnchor
+            .unmask(0)
+
+        )
+
+        // ---------------------------------------------------------------------
+        // Strictly remain inside change-defined flood support.
+        // ---------------------------------------------------------------------
+
+        .updateMask(
+          floodSupport
+        )
+
+        .rename(
+          'wse_refined_iteration'
+        );
+
+
+      return updated;
+    },
+
+    wseInitial
+
+  )
+
+)
+  .rename(
+    'wse_refined'
+  );
+
+
+// =============================================================================
+// 16. FINAL FLOOD DEPTH
+// =============================================================================
+//
+// The final depth definition remains physically transparent:
+//
+//     Depth = max(WSE - DEM, 0)
+//
+// No global calibration coefficient.
+// No global additive offset.
+// No reference-depth fitting.
+// =============================================================================
+
+
+var finalDepthRaw = wseRefined
+
+  .subtract(
+    dem
+  )
+
+  .rename(
+    'CFDepth_v2_raw'
+  );
+
+
+var finalDepth = finalDepthRaw
+
+  .max(0)
+
+  .updateMask(
+    floodSupport
+  )
+
+  .rename(
+    'CFDepth_v2'
+  );
+
+
+// Display only depth clearly greater than dmin.
+var finalDepthDisplay = finalDepth
+
+  .updateMask(
+    finalDepth.gt(
+      minPositiveDepth
+    )
+  );
+
+
+// =============================================================================
+// 17. QA / DIAGNOSTIC LAYERS
+// =============================================================================
+
+
+// -----------------------------------------------------------------------------
+// Invalid permanent-water-adjacent raw boundary
+// -----------------------------------------------------------------------------
+
+var permanentWaterAdjacentBoundary01 = rawOuterBoundary01
+
+  .and(
+    permanentWaterBuffer
+  )
+
+  .rename(
+    'permanent_water_adjacent_boundary_01'
+  );
+
+
+// -----------------------------------------------------------------------------
+// Steep rejected boundary
+// -----------------------------------------------------------------------------
+
+var steepRejectedBoundary01 = rawOuterBoundary01
+
+  .and(
+    terrainSlopeDeg.gt(
+      maxBoundarySlopeDeg
+    )
+  )
+
+  .and(
+    permanentWaterBuffer.not()
+  )
+
+  .rename(
+    'steep_rejected_boundary_01'
+  );
+
+
+// -----------------------------------------------------------------------------
+// DEM-outlier rejected boundary
+// -----------------------------------------------------------------------------
+
+var demOutlierRejectedBoundary01 = boundaryCandidate01
+
+  .and(
+    robustBoundaryOk01.not()
+  )
+
+  .rename(
+    'dem_outlier_rejected_boundary_01'
+  );
+
+
+// -----------------------------------------------------------------------------
+// WSE gradient diagnostic
+//
+// Unit:
+//     m / m
+//
+// Multiply by 1000 for permille.
+// -----------------------------------------------------------------------------
+
+var wseGradient = ee.Terrain
+  .slope(
+    wseRefined
+  )
+  .rename(
+    'wse_slope_deg'
+  );
+
+
+// =============================================================================
+// 18. EXPORT QA STACK
+// =============================================================================
+//
+// Export contains both the final result and diagnostic layers.
+//
+// Final depth band:
+//     CFDepth_v2
+//
+// Other bands support:
+//     boundary diagnosis,
+//     permanent-water adjacency diagnosis,
+//     WSE continuity analysis,
+//     low-confidence component diagnosis.
+// =============================================================================
+
+
+var qaBands = ee.Image.cat([
+
+  // ---------------------------------------------------------------------------
+  // Main outputs
+  // ---------------------------------------------------------------------------
+
+  finalDepth,
+
+  wseInitial,
+
+  wseRefined,
+
+  nearestAnchorDistance
+    .updateMask(
+      floodSupport
+    ),
+
+
+  // ---------------------------------------------------------------------------
+  // Flood domain
+  // ---------------------------------------------------------------------------
+
+  floodSupportBinary,
+
+
+  // ---------------------------------------------------------------------------
+  // Permanent-water ancillary layers
+  // ---------------------------------------------------------------------------
+
+  permanentWater,
+
+  permanentWaterBuffer,
+
+
+  // ---------------------------------------------------------------------------
+  // Boundary layers
+  // ---------------------------------------------------------------------------
+
+  rawOuterBoundary01,
+
+  validOuterBoundary01,
+
+  permanentWaterAdjacentBoundary01,
+
+  steepRejectedBoundary01,
+
+  demOutlierRejectedBoundary01,
+
+  innerWetBoundary01,
+
+
+  // ---------------------------------------------------------------------------
+  // Boundary WSE anchors
+  // ---------------------------------------------------------------------------
+
+  boundaryWseAnchor
+    .unmask(-9999),
+
+
+  // ---------------------------------------------------------------------------
+  // Low-confidence region
+  // ---------------------------------------------------------------------------
+
+  lowConfidenceFallback01,
+
+
+  // ---------------------------------------------------------------------------
+  // Terrain / QA
+  // ---------------------------------------------------------------------------
+
+  terrainSlopeDeg
+
+])
+  .toFloat();
+
+
+// =============================================================================
+// 19. MAP VISUALIZATION
+// =============================================================================
+
+
+Map.setOptions(
+  'HYBRID'
+);
+
+
+Map.centerObject(
+  aoi,
+  10
+);
+
+
+// -----------------------------------------------------------------------------
+// Change-defined flood support
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  floodSupport,
+
+  {
+    palette: [
+      'red'
+    ]
+  },
+
+  'change-defined flood support',
+
+  false
+
+);
+
+
+// -----------------------------------------------------------------------------
+// Permanent water
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  permanentWater
+    .selfMask(),
+
+  {
+    palette: [
+      'cyan'
+    ]
+  },
+
+  'permanent water - boundary constraint only',
+
+  false
+
+);
+
+
+// -----------------------------------------------------------------------------
+// Permanent-water buffer
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  permanentWaterBuffer
+    .selfMask(),
+
+  {
+    palette: [
+      '00FFFF'
+    ]
+  },
+
+  'permanent water buffer',
+
+  false
+
+);
+
+
+// -----------------------------------------------------------------------------
+// Raw outer boundary
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  rawOuterBoundary,
+
+  {
+    palette: [
+      'orange'
+    ]
+  },
+
+  'raw outer boundary',
+
+  false
+
+);
+
+
+// -----------------------------------------------------------------------------
+// Raw boundaries rejected because they are adjacent to permanent water
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  permanentWaterAdjacentBoundary01
+    .selfMask(),
+
+  {
+    palette: [
+      '00FFFF'
+    ]
+  },
+
+  'invalid flood-permanent-water boundary',
+
+  false
+
+);
+
+
+// -----------------------------------------------------------------------------
+// Steep rejected boundaries
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  steepRejectedBoundary01
+    .selfMask(),
+
+  {
+    palette: [
+      'FF0000'
+    ]
+  },
+
+  'steep rejected boundary',
+
+  false
+
+);
+
+
+// -----------------------------------------------------------------------------
+// DEM-outlier rejected boundaries
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  demOutlierRejectedBoundary01
+    .selfMask(),
+
+  {
+    palette: [
+      'FF00FF'
+    ]
+  },
+
+  'DEM-outlier rejected boundary',
+
+  false
+
+);
+
+
+// -----------------------------------------------------------------------------
+// Final valid WSE boundaries
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  validOuterBoundary,
+
+  {
+    palette: [
+      'yellow'
+    ]
+  },
+
+  'valid flood-dry boundary',
+
+  false
+
+);
+
+
+// -----------------------------------------------------------------------------
+// Robust boundary WSE anchors
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  boundaryWseAnchor,
+
+  {},
+
+  'robust boundary WSE anchors',
+
+  false
+
+);
+
+
+// -----------------------------------------------------------------------------
+// Initial nearest-anchor WSE
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  wseInitial,
+
+  {},
+
+  'initial WSE - nearest valid anchor',
+
+  false
+
+);
+
+
+// -----------------------------------------------------------------------------
+// Continuous refined WSE
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  wseRefined,
+
+  {},
+
+  'refined continuous WSE',
+
+  false
+
+);
+
+
+// -----------------------------------------------------------------------------
+// Distance to nearest valid WSE anchor
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  nearestAnchorDistance
+    .updateMask(
+      floodSupport
+    ),
+
+  {
+    min: 0,
+    max: maxPropagationDistanceMeters,
+    palette: [
+      'white',
+      'cyan',
+      'blue'
+    ]
+  },
+
+  'nearest valid anchor distance',
+
+  false
+
+);
+
+
+// -----------------------------------------------------------------------------
+// Low-confidence fallback
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  lowConfidenceFallback01
+    .selfMask(),
+
+  {
+    palette: [
+      'black'
+    ]
+  },
+
+  'low-confidence fallback',
+
+  false
+
+);
+
+
+// -----------------------------------------------------------------------------
+// Final CFDepth v2
+// -----------------------------------------------------------------------------
+
+Map.addLayer(
+
+  finalDepthDisplay,
+
+  depthVis,
+
+  'CFDepth v2 final depth',
+
+  true
+
+);
+
+
+// =============================================================================
+// 20. OPTIONAL SUMMARY DIAGNOSTICS
+// =============================================================================
+
+
+// -----------------------------------------------------------------------------
+// Area of change-defined flood support
+// -----------------------------------------------------------------------------
+
+var floodAreaKm2 = ee.Image
+  .pixelArea()
+  .updateMask(
+    floodSupport
+  )
+  .reduceRegion({
+
+    reducer: ee.Reducer.sum(),
+
+    geometry: aoi,
+
+    scale: demScale,
+
+    maxPixels: 1e13,
+
+    tileScale: 4
+
+  });
+
+
+print(
+  'Change-defined flood area (m2)',
+  floodAreaKm2
+);
+
+
+// -----------------------------------------------------------------------------
+// Number of valid boundary pixels
+// -----------------------------------------------------------------------------
+
+var validBoundaryCount = validOuterBoundary01
+  .reduceRegion({
+
+    reducer: ee.Reducer.sum(),
+
+    geometry: aoi,
+
+    scale: demScale,
+
+    maxPixels: 1e13,
+
+    tileScale: 4
+
+  });
+
+
+print(
+  'Valid outer-boundary pixel count',
+  validBoundaryCount
+);
+
+
+// -----------------------------------------------------------------------------
+// Permanent-water-adjacent rejected boundary count
+// -----------------------------------------------------------------------------
+
+var permanentBoundaryRejectedCount =
+  permanentWaterAdjacentBoundary01
+    .reduceRegion({
+
+      reducer: ee.Reducer.sum(),
+
+      geometry: aoi,
+
+      scale: demScale,
+
+      maxPixels: 1e13,
+
+      tileScale: 4
+
+    });
+
+
+print(
+  'Permanent-water-adjacent rejected boundary count',
+  permanentBoundaryRejectedCount
+);
+
+
+// -----------------------------------------------------------------------------
+// Low-confidence fallback count
+// -----------------------------------------------------------------------------
+
+var lowConfidenceCount = lowConfidenceFallback01
+  .reduceRegion({
+
+    reducer: ee.Reducer.sum(),
+
+    geometry: aoi,
+
+    scale: demScale,
+
+    maxPixels: 1e13,
+
+    tileScale: 4
+
+  });
+
+
+print(
+  'Low-confidence fallback pixel count',
+  lowConfidenceCount
+);
+
+
+// =============================================================================
+// 21. EXPORT
+// =============================================================================
+//
+// Main depth is the first band:
+//     CFDepth_v2
+//
+// Remaining bands are QA outputs.
+// =============================================================================
+
+
+Export.image.toDrive({
+
+  image: qaBands,
+
+  description: exportName,
+
+  folder: exportFolder,
+
+  fileNamePrefix: exportName,
+
+  region: aoi,
+
+  scale: demScale,
+
+  crs: demProj.crs(),
+
+  maxPixels: 1e13
+
+});
