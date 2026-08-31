@@ -1327,10 +1327,12 @@ var wseGradient = ee.Terrain
 
 
 // =============================================================================
-// 18. EXPORT QA STACK
+// 18. QA / DIAGNOSTIC STACK
 // =============================================================================
 //
-// Export contains both the final result and diagnostic layers.
+// Retained for interactive QA and diagnostic inspection.
+//
+// This multi-band stack is NOT used by the final GeoTIFF export.
 //
 // Final depth band:
 //     CFDepth_v2
@@ -1844,16 +1846,21 @@ print(
 // 21. EXPORT
 // =============================================================================
 //
-// Main depth is the first band:
+// Final GeoTIFF contains one water-depth band only:
 //     CFDepth_v2
-//
-// Remaining bands are QA outputs.
 // =============================================================================
+
+
+var finalDepthExport = finalDepth
+  .select(
+    'CFDepth_v2'
+  )
+  .toFloat();
 
 
 Export.image.toDrive({
 
-  image: qaBands,
+  image: finalDepthExport,
 
   description: exportName,
 
