@@ -1,0 +1,66 @@
+图2：ChatGPT网页端image2提示词——HarmoSSM与CFDepth两阶段洪水制图
+
+一、使用说明
+对应3.1总体框架及3.2—3.4技术小节。保持当前figure2.jpg上下两阶段、浅色背景、圆角虚线外框、蓝色标题、Times字体和特征／地形示意风格。科学内容更新为HarmoSSM（HCE＋OSCD）及当前范围—DEM驱动的CFDepth。第二部分整体复制即可独立使用，可附原图约束视觉风格。旧图仅作视觉参考，不能沿用其机制或箭头。本次仅更新TXT，不修改JPG、正文、方案或算法。
+
+二、英文主提示词（完整复制）
+Redraw a two-stage flood-mapping framework in the visual style of the attached original overview, using the scientific specification below as the authority. Use an approximately 1.25:1 canvas with two stacked rounded containers outlined by fine dashed borders. The upper stage occupies about 55% of the height with a very pale ivory background (#FFFCF0); the lower stage occupies about 45% with a very pale cyan background (#F1FAFB). Use Times New Roman-like labels, blue stage headings, thin dark connectors, restrained pastel operation boxes, and shallow axonometric feature slabs. Preserve the original's academic network-diagram and terrain-schematic character, not a plain text flowchart. No glossy effects, ornamental shadows or long explanatory paragraphs in boxes.
+
+UPPER TITLE
+“HarmoSSM for Bi-Temporal SAR Flood Change Detection”
+This is the entire detection stage. It contains HCE and OSCD, not separate competing detection methods. Remove the old urban-only title and Mask2Former head. Do not add an overall figure number.
+
+INPUTS AND HCE
+At the upper-stage left place two empty rectangular image placeholders labeled “Pre-event SAR” and “Post-event SAR”, each with the small note “Insert actual SAR”. These are reserved for later placement of real observations. Do not generate SAR texture, alter an attached observation, or invent satellite imagery.
+Both placeholders feed one larger container labeled “HCE”. Inside it show a short continuous chain:
+“Shared representations” → “HA” → “CQI”.
+Use paired feature slabs and compact operation labels rather than repeating the detailed graphs of Figures 3 and 4.
+Within Shared representations, show the concise labels “Shared CNN/FPN”, “Frozen DINOv3”, and “Semantic fusion”. Depict CNN spatial features combined with DINO semantic features within each time BEFORE HA. Both times use the same CNN/FPN weights and the same frozen DINO encoder, but CNN and DINO do not share weights with each other. Use only the note “Shared across times”; do not draw weight-sharing arrows between unlike encoders.
+HA has the short descriptor “Paired calibration + local alignment”. Its paired feature glyphs remain distinguishable by time. Local alignment uses post-event features as the reference and updates pre-event features; omit individual scale bypasses and attention internals in this overview.
+CQI has the short descriptor “States + differences; query interaction”. Show two paired feature glyphs and a small query strip connected through a compact interaction symbol, without object classes, matching, or independent mask-query outputs. Its terminal output is one five-level change-feature stack labeled “D₁–D₅”. These are change features, not two temporal pyramids. HCE encloses Shared representations, HA and CQI in that order.
+
+OSCD AND EXTENT OUTPUT
+Next to HCE place a compact “OSCD” container. D₁–D₅ enters it. Show only the essential split: “D₃–D₅” supplies “Regional context”; “D₂” then “D₁” supply successive short detail connections into “Local detail reconstruction”. Use a small stepped recovery glyph to show the order. Do not send D₁/D₂ into the context branch. Do not expand scan directions, reinjection arithmetic, loss terms or internal decoder formulas here.
+OSCD → “Dense prediction” → “Newly inundated extent M̂”. Dense prediction includes the classification and selected-threshold step without enumerating its operators. Draw the extent as a small abstract grid with a clearly simplified support shape, labeled “Schematic”. No realistic map, location, metric or purported model result is allowed.
+Draw one explicit solid connector FROM this extent output TO the extent input of the first lower-stage unit. Route it through a clear perimeter channel and across the stage boundary. If necessary, use the gap between stages as a return route to the lower-left input. Do not draw an unconnected decorative arrow from the middle of the upper container. Keep the extent's identity unchanged across stages.
+
+LOWER TITLE
+“CFDepth for Change-Defined Flood Depth Estimation”
+Use four compact side-by-side illustrated units, connected left to right. Preserve the original's use of grids, boundary points and water-surface wireframes, but replace its old mechanism completely. The whole lower stage is an explanatory schematic, not an experimental product. Add “Schematic illustrations” once below its title.
+
+UNIT 1 — “Support and terrain”
+The extent M̂ arrives from the upper-stage output. A separate “DEM Z” input, represented by a small abstract terrain glyph, enters this unit. These are the only two scientific inputs to CFDepth.
+Show a simple support grid labeled “Ωf”, obtained from the detected extent intersected with valid DEM pixels. Use a blue support shape, a thin orange outer-boundary trace and neutral outside cells. Do not draw permanent-water classes, an external water dataset, real geographic imagery or missing-region completion. Use the short note “Extent ∩ valid terrain”. Carry the support and terrain information forward to the remaining units.
+
+UNIT 2 — “Boundary screening and anchors”
+Reuse the same support outline and show candidate points on the exterior boundary in gray. Mark retained exterior candidates in orange and pair them locally with adjacent interior boundary positions shown as dark-blue anchor dots. Include the short screening label “DEM validity, slope, local elevation”. A tiny terrain-profile glyph may show the inner/outer neighborhood elevations feeding the anchor symbol, without a numeric axis or invented measurements. Use the short note “Terrain-derived anchors”. Anchors are inferred from terrain, not measured water levels. Do not imply that screening identifies permanent-water interfaces.
+
+UNIT 3 — “WSE initialization”
+Show a few retained inner-boundary anchors and short reachable propagation paths to interior locations inside the SAME support. Paths must remain inside the support; do not use straight arrows crossing excluded areas or propagating through a disconnected outside region. Represent the resulting initial water surface with a small wireframe labeled “S⁽⁰⁾”. The surface is initialized by nearest reachable anchors, not by selecting the lowest boundary anywhere in the scene. Use the brief note “Reachable anchor propagation”. A small footnote may read “No reachable anchor: terrain-floor fallback”, without depicting an extent repair or a validated confidence map.
+
+UNIT 4 — “WSE refinement and depth”
+Show the initial wireframe S⁽⁰⁾ followed by a SINGLE refinement arrow to a refined wireframe “S⁽ᴷ⁾”. Keep boundary-anchor dots fixed between the two and draw a faint terrain base beneath the surface to communicate the terrain lower bound. Use the short note “Fixed anchors + terrain floor”. This is local continuity refinement of one initialized surface, NOT fusion of an initial surface with a separately generated boundary surface.
+Then show terrain subtraction leading to a small abstract depth-color grid labeled “Depth schematic”. It has no numeric depths, coordinates, geographic texture, quantitative colorbar or claimed prediction accuracy. Use a modest sequential blue palette and simple “shallow” / “deep” labels if needed.
+Print only this final depth relation:
+“d̂ = max(S⁽ᴷ⁾ − Z, 0),  p ∈ Ωf”.
+Add the brief legend note “Outside Ωf: NoData”. Do not depict outside-support values as measured zero depth. Keep DEM Z available to this subtraction and to the terrain-floor constraint, either through a short labeled terrain connector within the lower stage or clear repeated Z symbols that denote the same input, not additional datasets.
+
+CONNECTIONS AND SYMBOLS
+The four CFDepth units express support/terrain → screening/anchors → initialization → refinement/depth. Support constrains all depth computation; terrain supplies screening, anchor elevations, the lower bound and final subtraction. The schematic maps in the four units are repeated views of the same support, not four independent events.
+Do not add a training lane, labels, objectives, auxiliary heads, depth loss, DEM-to-detector input, or any reverse arrow from CFDepth into HarmoSSM. Do not restore old permanent-water exclusion, unresolved-pixel completion, S₀/Snb fusion or hydraulic-solver mechanisms. Do not imply joint end-to-end optimization or guaranteed simultaneous extent/depth accuracy.
+Use concise English labels and legible text at journal page width. The visual hierarchy is two stages first, HCE/OSCD and four depth steps second, small descriptive glyphs third. The original image is a style reference only; all old names, mechanisms and connectors that disagree with these instructions must be replaced.
+
+FINAL AUDIT
+Verify HCE contains shared representations → HA → CQI; semantic fusion precedes HA; D₁–D₅ connects HCE to OSCD; only D₃–D₅ forms regional context, with D₂/D₁ used later. Trace the actual extent-output connector into CFDepth. Confirm the two lower-stage inputs are extent and DEM, the four terrain-based steps are correct, propagation remains within support, and the surface is refined rather than fused with a second independently estimated surface. Preserve fixed anchors and the terrain floor and restrict the depth equation to Ωf. Distinguish real-SAR placeholders from all abstract support/terrain/depth schematics. Deliver one coherent overview image.
+
+三、原图参考说明
+保留figure2.jpg上下浅米色／浅青色圆角虚线大框、蓝色标题、Times字体、特征薄片、网格边界点及水面线框风格；不沿用其城市限定、Mask2Former、HA后语义融合、永久水体输入及旧水面融合机制。原图只作为风格示例，图3—5用于理解模块职责，不将内部细节再次全部展开。SAR位置留空待嵌入真实影像，生成的范围与水深图形明确标为Schematic，不作为实验结果。HarmoSSM、HCE和OSCD采用当前正文命名。
+
+四、英文局部修订提示词
+Preserve the approved two-stage layout, ivory/cyan backgrounds, blue headings, Times-style typography and schematic glyphs. Correct only the named connections and scientific content.
+HCE must contain Shared representations → HA → CQI, with within-time DINO/CNN semantic fusion before HA. HCE outputs D₁–D₅ to OSCD. D₃–D₅ supplies regional context; D₂ then D₁ supplies local reconstruction. Remove any Mask2Former or CNN-to-DINO weight-sharing arrow.
+Connect the actual newly inundated extent output to the lower Support and terrain input. CFDepth uses only extent and DEM. Its sequence is support/terrain → screened boundary and terrain-derived anchors → reachable-anchor WSE initialization → continuity refinement with fixed anchors and terrain floor → subtraction of DEM. Remove permanent-water input, missing-extent repair, two-surface fusion and reverse training connections. Propagation remains inside the support. The final depth relation applies inside Ωf, with NoData outside.
+Keep SAR placeholders empty for real imagery. Preserve only explicitly labeled schematic support and depth glyphs, with no invented measurements. Keep all unaffected elements unchanged.
+
+五、验收清单
+对照当前两稿总体框架与CFDepth介绍核对HarmoSSM—HCE/OSCD命名、HA/CQI归属、语义融合顺序、D₁—D₅接口及OSCD层级分工。核对范围输出跨阶段连接、范围与DEM两个输入、地形筛选／锚点／可达传播／连续性细化／地形相减及域外NoData。检查无永久水体辅助输入或旧双水面融合，无训练区；示意图与真实影像占位身份明确。生成后再检查箭头和两阶段配比、图中文字以及论文宽度下可读性。文本检查不代替图件科学验收。本轮仅改本TXT，不修改JPG、正文、方案或算法，不运行编译。

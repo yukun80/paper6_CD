@@ -1,17 +1,23 @@
 \begin{table*}[htbp]
-  \centering
-  \caption{Summary of the GF3 evaluation data used in this study.}
-  \label{tab:gf3_eval}
-  \scriptsize
-  \setlength{\tabcolsep}{4pt}
-  \begin{adjustbox}{width=\textwidth}
-    \begin{tabular}{p{2.6cm}p{4.4cm}ccccp{2.2cm}p{2.2cm}}
-      \toprule
-      City/Event & Flood occurrence time & Sensor & Mode & Resolution & Polarization & Pre-event date & Post-event date \\
-      \midrule
-      Zhengzhou & \makecell[l]{Extreme urban flooding on\\July~20, 2021} & GF3 & FSII & 10 m & HV & 2020-07-20 & 2021-07-20 \\
-      Zhuozhou & \makecell[l]{Late Jul.~2023 rainstorm;\\major inundation during\\Jul.~30--Aug.~1, 2023} & GF3 & FSII & 10 m & HV & 2022-07-20 & 2023-07-31 \\
-      \bottomrule
-    \end{tabular}
-  \end{adjustbox}
+\centering
+\captionsetup{name=Table}
+\caption{SAR observations and terrain data.}
+\label{tab:gf3_eval}
+\small
+\begin{tabular}{lccccc}
+\toprule
+\multicolumn{6}{l}{(a) GF3 observations} \\
+\midrule
+Scene & Mode & Pixel spacing & Polarization & Pre-event & Post-event \\
+\midrule
+Zhengzhou & FSII & 10 m & HV & 2020-07-20 & 2021-07-20 \\
+Zhuozhou & FSII & 10 m & HV & 2022-07-20 & 2023-07-31 \\
+\midrule
+\multicolumn{6}{l}{(b) Terrain data} \\
+\midrule
+Product & \multicolumn{2}{c}{Sampling} & \multicolumn{3}{l}{Role and source} \\
+FABDEM & \multicolumn{2}{c}{Approximately 30 m} & \multicolumn{3}{l}{Terrain input for depth estimation} \\
+ & \multicolumn{2}{c}{} & \multicolumn{3}{l}{\citet{hawker2022fabdem}} \\
+\bottomrule
+\end{tabular}
 \end{table*}

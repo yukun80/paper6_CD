@@ -1,4 +1,3 @@
-%% 中文对照稿：翻译自 elsarticle-template-harv_2.tex
 \documentclass[authoryear,preprint,12pt]{elsarticle}
 
 \usepackage[
@@ -9,7 +8,18 @@
   bottom=20mm
 ]{geometry}
 
-\usepackage[UTF8,fontset=fandol]{ctex}
+\usepackage[UTF8,fontset=none]{ctex}
+\defaultCJKfontfeatures{Script=CustomDefault}
+\setCJKmainfont{FandolSong-Regular}[
+  Extension=.otf,
+  BoldFont=FandolSong-Bold,
+  ItalicFont=FandolKai-Regular
+]
+\setCJKsansfont{FandolHei-Regular}[
+  Extension=.otf,
+  BoldFont=FandolHei-Bold
+]
+\setCJKmonofont{FandolFang-Regular}[Extension=.otf]
 \usepackage{amssymb}
 \usepackage{amsmath}
 \usepackage{algorithm}
@@ -25,6 +35,7 @@
 \usepackage{lineno}
 \modulolinenumbers[1]
 \usepackage{setspace}
+\setlength{\emergencystretch}{2em}
 \usepackage{threeparttable}
 \usepackage{threeparttablex}
 \usepackage{tikz}
@@ -33,6 +44,8 @@
 \usepackage{textcomp}
 \usepackage{hyperref}
 \usepackage{graphicx}
+\usepackage[section]{placeins}
+\usepackage{float}
 
 \captionsetup[figure]{name=图}
 \captionsetup[table]{name=表,font=small,labelfont=bf}
@@ -67,7 +80,7 @@
 
 \hypersetup{
   hidelinks,
-  pdftitle  = {HA-CQI 与 CFDepth：基于双时相 SAR 影像的城市洪水范围制图与变化定义洪水水深估计},
+  pdftitle = {HarmoSSM 双时相 SAR 洪水变化检测及新增淹没范围内的水深估算},
   pdfauthor = {Yukun Fan, Zhongqi Shi, Hong Zhang, Yuzhou Liu, Mingyang Song, Yazhe Xie, Yixian Tang}
 }
 
@@ -77,7 +90,8 @@
 \makeatother
 \setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
 
-\journal{Journal of Hydrology}
+\newcommand{\paperlang}[2]{#2}
+\journal{Remote Sensing of Environment}
 
 \begin{document}
 \doublespacing
@@ -86,7 +100,7 @@
 
 \begin{frontmatter}
 
-\title{HA-CQI 与 CFDepth：基于双时相 SAR 影像的城市洪水范围制图与变化定义洪水水深估计}
+\title{HarmoSSM 双时相 SAR 洪水变化检测\\及新增淹没范围内的水深估算}
 
 \author[inst1,inst2,inst3]{Yukun Fan}
 \author[inst4,inst5]{Zhongqi Shi}
@@ -135,539 +149,487 @@
   country={China}
 }
 
+\begin{abstract}
+快速洪灾评估需要同时掌握淹没范围和水深信息。合成孔径雷达（SAR）可在恶劣天气下开展观测，但复杂地表背景增加了时相特征比较的难度，而大范围淹没可能与小面积或弱对比斑块、狭窄通道及破碎边缘共存。此外，变化检测确定的淹没范围排除了原有水体，因此并非所有边界都能提供干湿岸线高程约束。本文构建由HarmoSSM变化检测与基于新增淹没范围的水深估算（CFDepth）组成的两阶段洪水制图方法。HarmoSSM通过协调变化编码联合成对状态与差异信息，再通过全尺度状态空间解码结合区域上下文与浅层细节重建新增洪水范围。CFDepth 将该范围、筛选后的边界高程与数字高程模型（DEM）结合，在给定淹没支撑区内进行一阶水深估算。郑州和涿州的参考图覆盖建成区、农田及河流邻近地形，展示了局部与狭窄淹没同大范围受淹区域及破碎边缘并存的特征。另对 Brazos 既有水深产物开展独立于检测评价的比较，在参考水深为正的评价域内，标记为 CFDepth 的产物正水深覆盖比例为95.81\%，洪水水深估算工具（FwDET）为41.91\%；两者在共同有效像元上的平均绝对误差分别为1.016 m和1.673 m，但均表现出较低的空间相关性和负 Nash--Sutcliffe 效率。该方法将洪水变化制图与以给定范围和地形为条件的水深估算相结合，为认识淹没分布及其严重程度提供互补信息。
+\end{abstract}
+
+\begin{keyword}
+SAR 洪水变化检测 \sep 双时相遥感 \sep 复杂景观 \sep 多尺度表征 \sep DEM 约束水深
+\end{keyword}
+
 \end{frontmatter}
 \linenumbers
 
-\noindent\textbf{摘要}\par
-\medskip
-城市洪水应急快速解译需要同时获取洪水范围和水深信息。合成孔径雷达（SAR）能够在不利天气条件下观测新增淹没区域，但复杂建成环境中的强散射、阴影、斑点噪声及残余配准误差会削弱灾前与灾后特征的可比性。与此同时，由变化检测得到的洪水范围主要描述新增淹没区域，通常不包含永久水体，因此其边界高程条件不同于完整洪水期水面，从而限制了直接基于数字高程模型（DEM）的水深估计。本文提出一个面向双时相 SAR 影像的“范围—水深”城市洪水制图框架，该框架由协调对齐与变化查询交互（HA-CQI）以及变化定义洪水水深估计（CFDepth）组成。HA-CQI 通过协调对齐提高双时相特征的可比性，并通过变化查询交互聚合洪水相关变化，从而生成洪水范围图。随后，CFDepth 将该范围输入与 DEM 约束相结合，在变化定义洪水支撑区的连通分量内估计一阶洪水水深。在公共 SAR 洪水数据集以及郑州 2021 年和涿州 2023 年两个 GF3 城市洪水案例上的实验表明，HA-CQI 分别取得 73.38\% 和 86.23\% 的 IoU，优于具有代表性的变化检测基线。在相同洪水支撑区和 DEM 条件下，CFDepth 将有效水深覆盖率分别由 74.65\% 和 65.92\% 提高至 97.83\% 和 96.38\%，且八个现场照片参考点周边的水深等级与照片估计的水深区间总体一致。结果表明，所提出框架能够为复杂城市洪水事件提供更稳定的洪水范围制图和 DEM 约束一阶水深估计。源代码见 \texttt{https://github.com/SAR-Disaster/HA-CQI-CFDepth}。
-\par
-\medskip
-\noindent\textit{关键词：}城市洪水制图，双时相 SAR，变化检测，DEM 约束洪水水深估计
-
 \section{引言}
 
-城市洪水是全球破坏性最强、影响最严重的自然灾害之一。气候变化驱动的极端降雨增多与持续城市化共同作用，进一步加剧了城市洪水对人身安全、基础设施和社会经济系统的影响 \citep{balaian2024urbanForm,feng2021urbanizationFloodRisk,li2023urbanFloodRiskReview}。对于灾害响应和风险管理而言，快速获取洪水空间信息至关重要：洪水范围图回答淹没发生在何处，而洪水水深则进一步描述淹没程度。二者共同支撑灾情解译、资源调配、恢复规划和长期洪泛区管理 \citep{mudashiru2021floodHazardReview,liu2025floodDepthReview,brown2016operationalSarLidar}。然而，洪水发生后，地面调查和现场报告往往难以及时覆盖大范围城市区域；光学遥感又会受到云、降雨、弱光和夜间条件的影响，限制了连续、快速且空间完整的灾害观测 \citep{zhang2025opticalFloodReview,notti2018potentialLimitations}。相比之下，合成孔径雷达（SAR）能够在不利天气和无太阳照明条件下稳定获取地表散射信息。因此，SAR 已成为城市洪水快速制图的重要观测来源，并为利用双时相 SAR 影像开展洪水范围制图和水深估计提供了关键数据基础 \citep{amitrano2024sarFloodReview,brown2016operationalSarLidar}。
+频繁发生的洪水灾害广泛威胁生命安全和社会经济活动\citep{tellman2021exposure}。其影响涵盖建设用地、耕地和植被覆盖区等不同地表，受淹区域人口暴露比例的增加进一步凸显了及时获取灾情信息的必要性。淹没范围表明受淹位置，水深反映范围内部的受淹程度，二者共同描述洪水的空间分布与垂向特征。地面调查难以迅速覆盖整个受灾区域，光学影像又易受云层和光照条件限制。合成孔径雷达（SAR）能够在云层覆盖和无日照条件下获取观测\citep{wagner2026gfm}，有利于持续开展洪水监测。SAR通过主动发射微波并接收地表返回的散射信号成像，影像亮度与后向散射强度有关。当积水使地表趋于光滑时，入射微波更多地向远离传感器的方向反射，返回信号随之减弱，因而受淹区域可在影像中表现为暗色\citep{amitrano2024sarFloodReview}。这种散射变化为洪水范围判别提供了观测依据，但影像明暗并不直接对应水深，仍需结合地形信息估算范围内部的受淹程度\citep{cian2018flood}。因此，将新增淹没范围识别与范围内水深估算相结合，是获取洪水水平分布与垂向信息、支持精细制图和灾情评估的重要环节。
 
-\begin{sloppypar}
-公共 SAR 洪水数据集与深度学习模型推动洪水制图由经验阈值和规则解译转向数据驱动方法。Sen1Floods11 为 Sentinel-1 SAR 洪水检测提供了标准化训练与评估基础，使 FCN/CNN 模型能够系统学习淹没区域的后向散射响应 \citep{bonafilia2020sen1floods11}。后续研究进一步改进了 SAR 洪水检测的上下文表征、边界勾画和先验引导建模。例如，DMCF-Net 通过多尺度特征聚合、跨尺度注意力融合和深层特征优化，增强复杂 SAR 洪水区域的特征建模 \citep{wang2025dmcf}。洪水指数增强深度模型将比值影像等先验嵌入网络，以提高对 SAR 淹没响应的识别能力 \citep{chen2025flood}。尽管这些方法显著提高了 SAR 洪水范围提取性能，但复杂城市环境仍包含永久水体、低后向散射地物、建筑阴影、叠掩、道路积水和强散射背景。
-\end{sloppypar}
+双时相SAR洪水制图利用灾前观测建立参考，将新增淹没识别与灾后水体分类区分开来。早期研究通过灾前参考识别持续存在的背景，说明了时相比较对于新增淹没判别的作用\citep{giustarini2013urbanFloodCd}。深度学习方法进一步在特征层面组织这种比较：DAM-Net融合变化特征与水体变化语义，AWCA-Net则结合邻域信息和差异引导注意力，利用变化发生的空间环境辅助判断\citep{saleh2024dam,du2026high}。这些研究将地表状态与时相联系纳入洪水判别，但已有全球SAR变化检测研究仍需在后处理中借助地表覆盖资料剔除永久水体，以减少预测中的噪声\citep{misra2025globalFloods}。同一地表在不同观测中的外观差异可能干扰变化判断，使原有水体与新增淹没的区分仍需结合灾前、灾后的状态信息。因此，如何建立可比较的成对表征，并协调利用状态与差异信息，仍是新增洪水判别需要处理的问题。
 
-双时相遥感变化检测同时利用灾前和灾后影像，将洪水识别由灾后表观分割转向跨时相关系建模。早期孪生 FCN 证明了共享或双分支编码器在变化检测中的有效性；BIT 则进一步利用语义标记对双时相上下文进行建模，推动变化检测由局部差异响应转向高层交互 \citep{daudt2018fully,chen2021remote}。针对 SAR 洪水场景，近期研究采用差分注意力和上下文感知建模，提高噪声、相似散射及复杂背景条件下的洪水变化识别能力 \citep{saleh2024dam,du2026high}。视觉基础模型和 DINO 风格自监督特征也为变化检测提供了更稳定的语义先验 \citep{li2024new,dong2026peftcd}。然而，这些进展并不意味着完成配准的双时相 SAR 特征天然具有可比性。复杂城市场景仍可能存在浅层散射统计偏移、建筑与道路边缘附近的残余错位，以及不稳定的中高层语义。如果将这些不可比因素直接输入差分、注意力或标记交互，模型仍可能把成像偏移和非洪水扰动放大为伪变化。
+新增淹没的识别还需适应受淹区域在大小和形态上的差异。洪水既可形成大范围连片淹没，也可表现为零散积水和狭长受淹带，因而需要结合局部细节与较大范围的周围信息。多层特征融合与不同尺度的特征提取提供了几种互补路线：MS-Deeplab融合不同层次的水体特征，Siam-DWENet在双时相比较中引入多尺度金字塔，SISCNet则并行提取不同邻域的影像信息\citep{wu2022msdeeplab,zhao2023siamdwenet,tahermanesh2025siscnet}。其中，MS-Deeplab先提取各时相水体再比较变化，后两者直接利用成对影像识别淹没，体现了多尺度信息在不同制图流程中的使用。获取这些信息之后，还需选择对洪水判别有用的特征；单时相SAR制图中的注意力U-Net对不同位置和通道的信息进行加权，AWCA-Net则在变化检测中采用自适应窗口组织多尺度特征\citep{yadav2022attentive,du2026high}。地表条件为信息选择提供另一类依据：RAFNet针对开阔区域与城市洪水采用差异化处理，Zhu等将地表覆盖、历史水体和水文信息作为概率制图的辅助约束\citep{li2026rafnet,zhu2025globalfloodsar}；这类处理补充了地表背景信息，但区域差异化并不等同于对淹没区域大小的适配。较大范围的信息聚合可能削弱小片积水和狭长受淹带的特征，过于局部的判断又难以利用连片淹没的周围环境。因此，识别连片受淹区域的整体分布，同时保留小片和狭长淹没区域，仍是多尺度洪水制图需要协调的要求。
 
-城市 SAR 洪水变化表现出由多种散射机制引起的复杂跨时相响应。在开阔水面或平坦淹没区域，镜面反射通常会使洪水后的后向散射降低。在建成区，建筑墙体、道路、水面与雷达视线之间的几何关系还会引入阴影、叠掩以及建筑—水体二次散射，因此新增淹没区域既可能表现为强度变化，也可能表现为邻域散射重组 \citep{mason2010urbanFloodTgrs,giustarini2013urbanFloodCd,mason2014doubleScattering}。相应地，现有城市洪水研究通常结合多时相强度、干涉相干性和场景先验，以提高建成区的淹没识别能力，这表明城市洪水响应具有多样性且依赖上下文 \citep{li2019urbanFloodAslcnn,zhao2022urbanAwareUnet}。这些观察说明，城市 SAR 洪水检测依赖于在可比双时相特征中识别关系失配模式。因此，需要一种机制从双时相配对表征中自适应聚合真实变化模式，并更加稳定地捕获微弱、狭窄和破碎的淹没区域。
+洪水变化检测不仅需要识别不同尺度的受灾区域，还需要将双时相影像中的变化信息转化为准确的空间覆盖与边缘描绘。连片、狭长和破碎的受灾区域对区域判断与局部定位提出了共同要求，使变化语义与空间细节的结合成为范围重建的重要环节。专用变化检测网络通过特征比较与解码建立这种联系：FC-Siam将成对特征的拼接或差异传递到解码过程，BIT则将双时相语义上下文反馈至像元特征，使区域信息参与密集变化预测\citep{daudt2018fully,chen2021remote}。在变化范围重建中，ChangeFormer通过层次编码与解码融合多层差异，CGNet利用深层变化先验引导特征融合，分别从解码组织和变化引导的角度协调语义信息与空间定位\citep{bandara2022changeformer,han2023change}；SemT-Former进一步将时相关系与语义表征用于SAR洪水变化识别\citep{saleh2024high}。在这些面向任务的变化建模路线之外，如何将大规模预训练获得的表征用于双时相变化分析，也成为值得探索的方向。
 
-洪水范围制图回答淹没发生在何处，但城市洪水分析还需要刻画已识别淹没支撑区内的垂向差异。与二值范围图相比，洪水水深是一种面向影响的淹没属性，可为损失评估、应急资源调配和风险沟通提供更细致的空间线索 \citep{liu2025floodDepthReview}。因此，在识别城市洪水范围之后，在淹没支撑区内形成 DEM 约束水深估计并用于快速应急解译，是由洪水范围制图走向水深感知解译的关键一步。
+基础模型变化检测通过适配与特征整合，将预训练表征用于变化信息提取和空间重建。TTP在基础模型特征中组织双时相交互，BAN通过桥接模块将冻结的通用表征注入双时相适配分支\citep{chen2023ttp,li2024new}。SAM-CD将FastSAM表征适配到变化检测，ASS-CD通过适配器融合FastSAM与Swin的互补特征，再用于变化重建\citep{ding2024adapting,wei2025ass}；PeftCD则对SAM2或DINOv3孪生编码器进行参数高效微调，并以简约解码器生成变化图\citep{dong2026peftcd}。这些研究表明，预训练语义与任务特定变化信息可以通过不同方式结合，但一般地物变化任务中的验证尚不能直接说明其在SAR洪水场景中的适用性。对于新增洪水范围的重建，仍需使区域层面的变化判断与局部影像证据相互协调，在准确表达受灾区域整体分布的同时，保留狭窄受灾带、曲折边缘及真实分离斑块。
 
-基于洪水范围与地形开展水深估计，是利用遥感图件快速获取垂向淹没信息的重要途径。这类方法通常根据洪水边界、水面线索或地形关系推断水面高程，然后减去数字高程模型（DEM）或数字地形模型（DTM）以获得洪水水深。\citet{cian2018flood} 表明，可将 SAR 提取的洪水范围与 LiDAR DEM 相结合，利用边界高程统计量估计水面高程。FwDET 及其扩展进一步证明，仅利用遥感淹没范围和 DEM 即可进行快速洪水水深估计 \citep{cohen2018estimating,cohen2019floodwater}。后续评估和扩展研究表明，HAND、TVD 和 FwDET 等简化模型的适用性会随地形条件、DEM 数据源和边界质量而变化 \citep{teng2022comprehensive}。卫星淹没图的水深估计与范围增强同样依赖地形约束和输入支撑区的可靠性 \citep{betterle2024water}。这些研究说明，DEM 约束水深估计的关键在于将二维淹没边界转化为稳定的局部水面高程。然而，当输入来自城市 SAR 变化检测时，检测到的洪水范围仅描述新增淹没区域，通常不包含既有永久水体。若将现有方法直接应用于这种变化定义洪水支撑区，外边界高程可能落在低洼或缺乏代表性的地形位置，导致重建水面减去 DEM 高程后出现非正水深、无法求解水深和局部空间不连续。
+淹没范围及其边界不仅描述洪水的水平分布，也为结合地形获取内部水深提供了条件。基于范围与数字高程模型（DEM）的估深通常利用适宜干湿边界处的高程约束水面，再由水面与地面的高差推算水深。Cian等将SAR淹没信息与激光雷达地形结合，建立了从遥感范围获取水深的应用路线\citep{cian2018flood}；FwDET进一步发展了边界高程分配方法，并处理海岸及永久水体相关条件\citep{cohen2019floodwater}。对于观测范围不完整的情况，FLEXTH将水深估计与范围增强结合，RS-FloodXDepth则通过边界高程分析和水文引导的区域生长重建水面并扩展淹没范围\citep{betterle2024water,tian2026floodxdepth}。这些方法表明，范围可以作为估深的输入，也可以在地形约束下被进一步调整，而两种用途都依赖边界信息的解释。变化检测定义的新增淹没掩膜排除了原有水体，其与永久水体相邻的界面可能位于两个有水区域之间，并非可直接赋予地形高程的干湿岸线。误检可能引入错误锚点，遗漏和破碎范围可能移除有效约束，DEM伪差也会改变边界高程。因此，检测边缘的清晰程度不能单独决定其估深价值；在给定新增淹没范围内，仍需依据边界的含义与可靠性筛选高程约束，形成以该范围和地形为条件的水深估计。
 
-为解决变化检测洪水范围输入条件下的水深估计问题，本文提出一个面向双时相 SAR 影像的“范围—水深”城市洪水制图框架。该框架首先利用协调对齐与变化查询交互（HA-CQI）开展城市洪水范围制图：协调对齐在差分和交互之前提高灾前与灾后特征的可比性；变化查询交互从可比特征中建模与洪水相关的双时相变化关系，并生成多尺度变化表征；Mask2Former 预测头则生成最终洪水掩膜。在此基础上，本文进一步提出变化定义洪水水深估计（CFDepth），这是一种面向变化检测洪水范围输入的 DEM 约束水深估计方法。当新增淹没支撑区缺少永久水体和低高程连接时，CFDepth 可在连通分量内提供局部一致的一阶水深表征，从而支持快速应急解译。本文的主要贡献如下：
-\begin{enumerate}[label=\arabic*)]
-  \item 构建了一个“范围—水深”城市洪水制图框架，将城市洪水范围制图与变化定义洪水水深估计组织为任务边界清晰的统一工作流。
-  \item 针对城市洪水范围制图，设计了 HA-CQI：通过协调对齐提高跨时相特征可比性，通过变化查询交互建模与洪水相关的双时相变化，并利用 Mask2Former 预测头从多尺度变化表征中预测洪水掩膜。
-  \item 提出 CFDepth，这是一种面向变化检测洪水范围输入的 DEM 约束一阶水深估计方法，可在新增淹没支撑区缺少永久水体和低高程连接时，为连通分量内的应急解译提供局部一致的信息。
-  \item 在两个真实城市洪水事件上对该框架进行了评估，验证了其在洪水范围制图和变化定义洪水水深估计两方面的有效性。
+针对复杂地表背景下洪水范围与水深的制图需求，本文构建由双时相SAR变化检测和范围内水深估算组成的两阶段方法，分别采用HarmoSSM识别新增受灾范围、采用CFDepth估算其内部水深。HarmoSSM以协调变化编码与全尺度状态空间解码为核心设计：HCE在成对协调的基础上联合状态与差异信息，形成多尺度变化表征；OSCD通过深层区域聚合和浅层逐级恢复，将变化表征重建为新增洪水范围。第一阶段识别的新增洪水范围作为第二阶段水深估算的空间输入，CFDepth结合地形与筛选后的有效边界高程估计水面，进而获得给定范围内的一阶水深分布。研究由此围绕新增洪水的位置、范围及内部水深组织变化检测与水深估算，使水平分布识别与垂向信息获取形成相互衔接的制图过程。
 
+围绕洪水范围识别与水深估算两个阶段，本文的主要贡献包括：
+\begin{enumerate}
+  \item 面向新增洪水判别的协调变化编码。HCE将共享空间表征与语义辅助、成对协调及查询交互组织为连续处理，联合灾前、灾后状态及其差异，为范围重建提供多尺度变化特征。
+  \item 面向洪水范围的区域上下文与局部细节重建。OSCD以深层变化特征聚合区域信息，再逐级引入浅层位置线索，将多尺度变化表征转化为密集范围预测，为连片、狭长和破碎受灾区域的空间描绘提供处理机制。
+  \item 面向新增洪水范围的水深估算。通过CFDepth筛选有效边界高程、初始化并细化水面，在变化检测确定的范围和DEM条件下估算内部水深，与第一阶段的范围识别共同描述洪水的水平分布与垂向特征。
 \end{enumerate}
+\clearpage
 
-\section{相关工作}
+\section{研究区与数据}
 
-\subsection{SAR 洪水变化检测}
+\subsection{研究区与洪水场景}
 
-SAR 洪水变化检测建立在遥感变化检测方法持续发展的基础之上。主流深度变化检测方法以孪生全卷积网络为基本框架，从配准后的双时相影像中学习差异表征 \citep{daudt2018fully}。时空注意力、语义标记建模和分层 Transformer 架构进一步增强了长距离双时相交互和多尺度变化表征 \citep{chen2020spatial,chen2021remote,bandara2022changeformer}。在 SAR 洪水制图中，近期方法逐渐由通用差分转向面向洪水的交互与注意力设计。DAM-Net 利用差分注意力度量增强 SAR 洪水检测 \citep{saleh2024dam}；LiST-Net 通过轻量化 SAR Transformer 和维度注意力改进边界勾画 \citep{saleh2024list}；SemT-Former 利用语义标记建模多时相 SAR 洪水变化 \citep{saleh2024high}；AWCA-Net 则将自适应窗口与上下文感知注意力相结合，以适应复杂洪水场景 \citep{du2026high}。此外，DMCF-Net 和洪水指数增强 SAR 洪水检测进一步探索多尺度上下文融合和洪水指数先验，以提高异质后向散射条件下的淹没提取性能 \citep{wang2025dmcf,chen2025flood}。这些研究表明，变化检测已由孪生差异学习发展为基于注意力、Transformer 和标记的双时相表征，而 SAR 洪水检测也日益重视噪声抑制、时相交互、语义抽象以及跨复杂场景的泛化能力。
+研究区1为河南省郑州市区，以下简称郑州研究区。本研究选取郑州研究区2021年7月洪水和河北涿州2023年7月底至8月初洪水作为研究场景，两地位置见图~\ref{fig:dataset}。两地具有不同的地表格局及受灾环境。郑州研究区内，建设用地较为集中，周边及其间分布有耕地、植被和水体（图~\ref{fig:dataset}a）。P1和P2展示建筑及车辆周围的积水，P3和P4展示道路、沿路植被及车辆附近的受淹情形，为认识建设用地中的局部受灾环境提供直观示例。
 
-\subsection{用于变化检测的基础模型}
-
-基础模型能够为遥感变化检测提供可迁移的语义先验。一类方法利用 SAM 等模型的潜在知识增强双时相特征表征。TTP 引入 SAM 的潜在知识，以促进跨域知识迁移和多时相特征融合 \citep{chen2023ttp}；SAM-CD 则通过轻量适配器将 FastSAM 适配于超高分辨率遥感变化检测，并缩小视觉基础模型直接用于遥感影像时出现的成像域差异 \citep{ding2024adapting}。另一类方法强调冻结基础模型后的任务特定注入与桥接。例如，BAN 冻结 CLIP 等基础模型，并设计双时相适配分支和桥接模块，对通用语义表征进行选择、对齐和注入 \citep{li2024new}。ASS-CD 进一步结合 SAM/Swin 特征、适配器和交叉注意力，将全局语义迁移与局部变化细节联系起来 \citep{wei2025ass}。近期研究还关注更强的基础模型和更高效的适配策略。SAM2-CD 利用激活选择门和全局—局部上下文注意力抑制无关语义干扰，并增强细粒度变化表征 \citep{qin2025sam2}。PeftCD 通过参数高效微调，将 SAM2 和 DINOv3 等视觉基础模型（VFM）适配到变化检测框架中 \citep{dong2026peftcd}；SAM-MSCD 则结合 LoRA、多尺度双时相交互和变化特征增强，提高对多尺度目标的感知能力 \citep{liu2026multi}。总体而言，这些研究表明，基础模型特征可以补充传统变化检测模型的语义表征，但其有效性仍取决于面向任务的适配。
-
-\begin{figure*}[!t]
+\begin{figure}[H]
   \centering
-  \includegraphics[width=\textwidth,height=0.52\textheight,keepaspectratio]{figure/figure1.jpg}
-  \caption{从 SAR 洪水范围到水深的城市洪水制图总体框架。HA-CQI 从配对 SAR 影像中提取洪水范围；CFDepth 将基于 DEM 的水面初始化与变化定义洪水支撑区内的最近外边界传播相结合，估计洪水水深。}
-  \label{fig:framework}
-\end{figure*}
-
-\subsection{DEM 约束洪水水深估计}
-
-DEM 约束洪水水深估计是利用遥感洪水范围图和地形数据快速获取垂向淹没信息的重要途径。早期研究将 SAR 提取的淹没区域、高精度地形和流量相关信息相结合，用于近实时洪水管理 \citep{matgen2007integration}。高分辨率 SAR 洪水范围也被用于结合 LiDAR DEM，通过边界高程统计推断水面高程 \citep{cian2018flood}。其他研究表明，多频 SAR 提取的洪水边界可与 DEM 数据耦合，用于低起伏或植被覆盖洪泛区的水深估计 \citep{surampudi2023flood}。HAND 通过到最近排水通道的垂向距离对 DEM 高程进行归一化，以表征地形控制的局部排水潜势和水文连通性 \citep{nobre2011height}。FwDET 以洪水淹没多边形和 DEM 为主要输入，将最近洪水边界单元的高程指定为每个淹没像元的局部水面高程，再减去地形高程以估计水深 \citep{cohen2018estimating}。FwDET v2.0 通过移除海岸线或海洋一侧的无效边界，进一步改进海岸洪水的边界识别，并采用最近边界高程赋值，减少跨永久水体的错误分配 \citep{cohen2019floodwater}。\citet{teng2022comprehensive} 还通过系统评估表明，HAND、TVD 和 FwDET 对地形条件、DEM 数据源、洪水尺度和边界质量较为敏感。\citet{betterle2024water} 对卫星淹没图的水深估计和洪水范围增强进行了联合处理。FlDepth 提出了一套自动化 GIS 工作流，利用近实时多源卫星淹没范围和 DEM/DTM，在连续淹没斑块中心线两侧生成横断面，根据边界高程插值水面高程，并减去地形高程得到水深 \citep{akkimi2026fldepth}。总体而言，DEM 约束洪水水深估计已形成一条快速、低数据依赖的技术路线，但仍在很大程度上依赖洪水期相对完整且稳定的淹没范围或边界条件。
-
-
-\section{方法}
-
-如图~\ref{fig:framework} 所示，本研究设计了一个利用双时相 SAR 影像实现城市洪水由范围到水深制图的两阶段框架。给定完成配准的灾前、灾后单极化灰度 SAR 影像 \(\mathbf{I}_{\mathrm{pre}}, \mathbf{I}_{\mathrm{post}} \in \mathbb{R}^{H \times W}\)，该框架首先利用 HA-CQI 预测新增淹没洪水范围图 \(\hat{\mathbf{M}}\)。随后，CFDepth 引入 DEM 信息，并在由 \(\hat{\mathbf{M}}\) 指定的变化定义洪水支撑区内生成 DEM 约束一阶水深估计 \(\hat{\mathbf{d}}\)。
-
-具体而言，HA-CQI 采用权重共享编码器和特征金字塔网络（FPN），分别从灾前和灾后 SAR 影像中提取多尺度特征，记为 \(\{\mathbf{P}_i^{(\mathrm{pre})}\}_{i=1}^{5}\) 和 \(\{\mathbf{P}_i^{(\mathrm{post})}\}_{i=1}^{5}\)。在复杂城市 SAR 场景中，直接对双时相特征作差容易受到散射统计偏移、局部错位和城市伪变化的影响。因此，协调对齐（HA）首先协调浅层风格统计、中层局部几何位置和高层语义上下文，使灾前与灾后特征位于更具可比性的表征空间。在此基础上，变化查询交互（CQI）构建配对标记，并利用可学习变化查询聚合与洪水相关的跨时相不一致性，从而生成多尺度变化表征。随后，Mask2Former 预测头将这些表征组织为基于集合的掩膜预测，并输出新增淹没洪水范围图 \(\hat{\mathbf{M}}\)。基于上游网络给出的变化定义洪水支撑区，CFDepth 以 \(\hat{\mathbf{M}}\) 和 FABDEM 为输入，将外部约束初始水面估计与最近可达边界传播相结合，在每个连通分量内生成 DEM 约束一阶水深估计 \(\hat{\mathbf{d}}\)。
-
-\subsection{用于城市洪水范围制图的 HA-CQI}
-
-\begin{figure}[!t]
-  \centering
-  \includegraphics[width=0.95\linewidth,height=0.56\textheight,keepaspectratio]{figure/figure2.jpg}
-  \caption{由配对共享风格校准、可变形对齐和语义校准组成的 HA 模块。}
-  \label{fig:ha}
+  \includegraphics[width=\textwidth,height=.65\textheight,keepaspectratio]{figure/figure1.jpg}
+  \caption{研究区位置、地表覆盖格局与局部受灾照片。(a)和(b)分别为郑州与涿州，红线为原图标示的城市范围；P1--P4和P5--P8分别对应两景照片。照片中的水深区间尚未经核验，仅作场景示例，不用于定量验证。}
+  \label{fig:dataset}
 \end{figure}
 
-\subsubsection{协调对齐（HA）}\label{sec:ha}
+涿州图示范围内，耕地与建设用地交错分布，水体和植被穿插其间（图~\ref{fig:dataset}b）。P5和P7展示道路及交通设施所在区域的受淹情形，P6展示建筑周围及道路空间的积水，P8展示沿路树木与车辆附近的受淹环境。\citet{lan2025haihe}对2023年海河流域洪水的研究提供了该事件的区域背景。两地分别呈现建设用地集中和耕地与居民地交错的地表格局，为研究不同背景下的洪水范围识别与水深估算提供了场景。
 
-HA 的目标是在变化交互之前建立可比较的双时相特征基础，而不是直接对洪水变化进行分类。如图~\ref{fig:ha} 所示，HA 依次执行 PSC、可变形对齐和语义校准：首先减小浅层成像统计偏移，随后处理局部几何偏移，最后引入稳定语义锚点以增强中高层上下文。
+\subsection{遥感观测与地形资料}\label{sec:depth_data}
 
-PSC 作用于 \(\mathbf{P}_1/\mathbf{P}_2\)。它首先估计灾前—灾后配对共享的通道统计量，再将两个时相的浅层特征映射至由源域原型统计量定义的稳定空间。对于任意浅层尺度 \(i \in \{1,2\}\)，共享统计量写为
-\begin{equation}\label{eq:ha_stat}
-  \left[\boldsymbol{\mu}_{\mathrm{pair}}^{(i)}, \boldsymbol{\sigma}_{\mathrm{pair}}^{(i)}\right]
-  =
-  \mathrm{Stat}\!\left(\left[\mathbf{P}_i^{(\mathrm{pre})}, \mathbf{P}_i^{(\mathrm{post})}\right]\right),
-\end{equation}
-随后将当前特征重映射至由源域原型统计量定义的稳定空间：
-\begin{equation}\label{eq:ha_remap}
-  \tilde{\mathbf{P}}_i^{(t)}
-  =
-  \frac{\mathbf{P}_i^{(t)} - \boldsymbol{\mu}_{\mathrm{pair}}^{(i)}}{\boldsymbol{\sigma}_{\mathrm{pair}}^{(i)} + \epsilon}
-  \odot \boldsymbol{\sigma}_{\mathrm{src}}^{(i)}
-  \oplus \boldsymbol{\mu}_{\mathrm{src}}^{(i)},
-  \quad t \in \{\mathrm{pre},\mathrm{post}\},
-\end{equation}
-其中，\(\boldsymbol{\mu}_{\mathrm{src}}^{(i)}\) 和 \(\boldsymbol{\sigma}_{\mathrm{src}}^{(i)}\) 是训练期间获得的源域浅层原型统计量，\(\epsilon\) 用于保证数值稳定性。为避免统计重映射抹除局部 SAR 散射纹理，在 PSC 后加入轻量残差保真映射 \(\mathcal{R}_i(\cdot)\)，得到浅层协调特征 \(\hat{\mathbf{P}}_i^{(t)}=\tilde{\mathbf{P}}_i^{(t)}+\mathcal{R}_i(\tilde{\mathbf{P}}_i^{(t)})\)。对于后续几何对齐，将基础特征记为 \(\mathbf{B}_i^{(t)}\)：当 \(i\in\{1,2\}\) 时，\(\mathbf{B}_i^{(t)}=\hat{\mathbf{P}}_i^{(t)}\)；当 \(i\in\{3,4,5\}\) 时，\(\mathbf{B}_i^{(t)}=\mathbf{P}_i^{(t)}\)。
+本研究采用GF3灾前、灾后SAR影像观测两地的地表变化，观测信息见表~\ref{tab:gf3_eval}。郑州研究区的影像对对应2020年7月20日和2021年7月20日，涿州影像对对应2022年7月20日和2023年7月31日。两景均选用灾前一年同期（7月）的影像作为参考，以减小季节差异及相关农业活动（如灌溉）对变化判别的干扰。GF3影像采用精细条带II模式（FSII）和HV极化，具体观测信息见表~\ref{tab:gf3_eval}。灾前观测提供地表参考，灾后观测记录受灾期状况，为识别新增洪水范围提供成对资料。
 
-可变形对齐用于处理两个时相之间残余的局部几何偏移。对于尺度 \(i \in \{1,2\}\)，灾后特征作为查询，在灾前特征的局部邻域中进行自适应搜索，以得到与灾后结构在局部更加一致的灾前表征 \(\mathbf{A}_i^{(\mathrm{pre})}\)：
-\begin{equation}\label{eq:ha_align}
-  \mathbf{A}_i^{(\mathrm{pre})}(\mathbf{p})
-  =
-  \sum_{k=1}^{K}
-  \alpha_k^{(i)}(\mathbf{p})\,
-  \mathbf{B}_i^{(\mathrm{pre})}\!\left(\mathbf{p} + \Delta\mathbf{o}_k^{(i)}(\mathbf{p})\right),
-\end{equation}
-其中，\(\mathbf{p}\) 为空间位置，\(\Delta\mathbf{o}_k^{(i)}(\mathbf{p})\) 为第 \(k\) 个采样点的可学习偏移，\(\alpha_k^{(i)}(\mathbf{p})\) 为对应的归一化权重。将几何协调后的特征记为 \(\mathbf{C}_i^{(t)}\)：当 \(i\in\{1,2\}\) 时，\(\mathbf{C}_i^{(\mathrm{pre})}=\mathbf{A}_i^{(\mathrm{pre})}\)，且 \(\mathbf{C}_i^{(\mathrm{post})}=\mathbf{B}_i^{(\mathrm{post})}\)；当 \(i\in\{3,4,5\}\) 时，\(\mathbf{C}_i^{(t)}=\mathbf{B}_i^{(t)}\)。
+\input{tables/table_gf3_eval_dataset.tex}
 
-语义校准将稳定语义锚点引入完成几何协调的中高层特征。该过程作用于 \(\mathbf{C}_3\)--\(\mathbf{C}_5\)，利用冻结的 DINOv3 特征提供区域上下文，同时避免基础模型特征直接主导洪水边界解码。令 \(\mathbf{V}_i^{(t)}\) 表示相应尺度的 DINOv3 语义表征，则经过语义校准的中高层特征为
-\begin{equation}\label{eq:ha_sem}
-  \bar{\mathbf{P}}_i^{(t)} = \mathbf{C}_i^{(t)} + \phi_i\!\left(\mathbf{V}_i^{(t)}\right),
-  \quad i \in \{3,4,5\},\; t \in \{\mathrm{pre},\mathrm{post}\},
-\end{equation}
-其中，\(\phi_i(\cdot)\) 为尺度自适应语义映射函数。该过程并非简单叠加 ViT 语义，而是在统计协调和局部对齐之后提高中高层区域上下文的稳定性，使 CQI 在建筑、道路和水体周边接收到更具可比性的双时相特征。HA 的最终输出由可比特征 \(\mathbf{X}_i^{(\mathrm{pre})}\) 和 \(\mathbf{X}_i^{(\mathrm{post})}\) 组成：当 \(i\in\{1,2\}\) 时，\(\mathbf{X}_i^{(t)}=\mathbf{C}_i^{(t)}\)；当 \(i\in\{3,4,5\}\) 时，\(\mathbf{X}_i^{(t)}=\bar{\mathbf{P}}_i^{(t)}\)。
+地形资料采用FABDEM，该全球高程产品旨在减弱建筑和森林高度造成的偏差，采样间距约为30 m\citep{hawker2022fabdem}。地形高程用于提供受灾范围内的地面起伏信息，并为有效边界处的水面高程估计提供约束。将估计水面高程与地面高程相减，可获得给定范围内部的水深。SAR识别的新增洪水范围与地形资料共同支持洪水水平分布和垂向信息的获取。
 
+\section{方法}\label{sec:methodology}
 
-\subsubsection{变化查询交互（CQI）}\label{sec:cqi}
+\subsection{总体框架}\label{sec:overview}
 
-如图~\ref{fig:cqi} 所示，CQI 首先在各尺度构建双时相配对标记。给定 HA 输出的可比特征 \(\mathbf{X}_i^{(\mathrm{pre})}\) 和 \(\mathbf{X}_i^{(\mathrm{post})}\)，第 \(i\) 层的配对标记为
-\begin{equation}\label{eq:cqi_pair}
-  \mathbf{Z}_i =
-  \mathrm{MLP}_i\!\left(
-  \left[
-  \mathbf{X}_i^{(\mathrm{pre})},
-  \mathbf{X}_i^{(\mathrm{post})},
-  \mathbf{X}_i^{(\mathrm{post})}-\mathbf{X}_i^{(\mathrm{pre})},
-  \left|\mathbf{X}_i^{(\mathrm{post})}-\mathbf{X}_i^{(\mathrm{pre})}\right|
-  \right]\right).
-\end{equation}
-前两项保留灾前和灾后状态，第三项保留变化方向，第四项提供稳定的幅度差异基础。与单一绝对差相比，\(\mathbf{Z}_i\) 是面向交互的双时相描述符，能够表征变暗、变亮和局部结构重组。
+复杂地表背景下的洪水制图需要同时描述新增受灾区域的位置及其内部受淹程度。为此，本文构建由双时相SAR变化检测和范围内水深估算组成的两阶段框架（图~\ref{fig:framework}）。配准的灾前、灾后SAR影像分别记为\(\mathbf{I}^A\)和\(\mathbf{I}^B\)，用于识别新增洪水范围，DEM提供估算水深所需的地形高程。第一阶段采用HarmoSSM生成新增洪水范围\(\hat{\mathbf{M}}\)，第二阶段采用CFDepth结合该范围与DEM估算内部水深，使范围识别与受淹程度估计在空间上相衔接。
 
-在配对标记之上，CQI 在各尺度维护一组可学习变化查询 \(\mathbf{Q}_i\)。这些查询不对应预定义地物类别，而是作为变化模式原型，从 \(\mathbf{Z}_i\) 中读取与洪水相关的跨时相不一致性：
-\begin{equation}\label{eq:cqi_query}
-  \hat{\mathbf{Q}}_i
-  =
-  \mathbf{Q}_i
-  +
-  \mathrm{Attn}_{q\leftarrow z}^{(i)}(\mathbf{Q}_i,\mathbf{Z}_i).
-\end{equation}
-随后，更新后的变化查询将变化感知上下文写回稠密配对标记：
-\begin{equation}\label{eq:cqi_token}
-  \tilde{\mathbf{Z}}_i
-  =
-  \mathbf{Z}_i
-  +
-  \mathrm{Attn}_{z\leftarrow q}^{(i)}(\mathbf{Z}_i,\hat{\mathbf{Q}}_i).
-\end{equation}
-这种双向交互首先利用少量查询概括当前尺度的变化模式，再利用这些模式调制所有空间位置。不同于直接在灾前与灾后特征之间进行无约束交叉注意力，CQI 在配对标记与变化查询之间执行注意力，从而减少复杂城市场景中伪变化的干扰。
+在变化检测阶段，HarmoSSM由协调变化编码器（HCE）与全尺度状态空间变化解码器（OSCD）组成。HCE将共享空间表征、语义辅助、成对协调和查询交互组织为连续的变化编码过程，输出五级变化特征。OSCD先聚合深层区域上下文，再逐级结合浅层局部细节，将这些特征重建为像元级新增洪水预测。检测采用二值目标，其中\(y=1\)表示新增淹没，\(y=0\)表示背景。二分类logits经softmax转换为前景概率，再依据所选阈值在有效输入像元上生成\(\hat{\mathbf{M}}\)，作为下一阶段水深估算的空间输入。
 
-最后，CQI 将变化感知配对标记映射为多尺度变化表征：
-\begin{equation}\label{eq:cqi_representation}
-  \mathbf{D}_i
-  =
-  \Phi_i\!\left(\tilde{\mathbf{Z}}_i\right)
-  =
-  \Phi_i\!\left(
-  \mathbf{Z}_i+
-  \mathrm{Attn}_{z\leftarrow q}^{(i)}
-  \left(\mathbf{Z}_i,\mathbf{Q}_i+\mathrm{Attn}_{q\leftarrow z}^{(i)}(\mathbf{Q}_i,\mathbf{Z}_i)\right)
-  \right).
-\end{equation}
-\(\mathbf{D}_i\) 表示经变化查询解释的双时相不一致响应。因此，CQI 将 HA 提供的可比特征转换为对洪水敏感、对复杂城市伪变化更加鲁棒的多尺度变化表征，并将其输入 Mask2Former 预测头以完成最终掩膜预测。
+在水深估算阶段，CFDepth首先将检测范围与有效DEM区域相交，依据坡度和局部高程筛选边界，并利用边界及其内侧邻域的地形高程构建水面锚点。锚点高程沿范围内可达路径传播以初始化水面，随后在保留锚点和地形下界约束的条件下进行局部连续性细化。最终将水面高程（WSE）与DEM相减，得到给定范围内的水深分布。两个阶段分别提供洪水的水平分布与垂向信息，其中水深估计以检测范围、有效地形及筛选后的边界约束为条件。
 
-\subsubsection{用于掩膜预测的 Mask2Former 预测头}
-
-\begin{figure}[!t]
+\begin{figure}[H]
   \centering
-  \includegraphics[width=0.95\linewidth,height=0.56\textheight,keepaspectratio]{figure/figure3.jpg}
-  \caption{CQI 模块：利用双时相配对标记和可学习变化查询生成多尺度变化表征。}
+  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/figure2.jpg}
+  \caption{HarmoSSM与CFDepth总体流程的旧版示意图，临时展示；当前方法以正文为准。}
+  \label{fig:framework}
+\end{figure}
+
+\subsection{协调变化编码器（HCE）}\label{sec:encoder}\label{sec:ha}\label{sec:cqi}
+
+新增洪水判别需要同时了解两时相的地表状态及其变化，并在可比较的表征上建立二者的联系。协调变化编码器（Harmonized Change Encoder, HCE）将共享表征提取、成对协调和变化查询交互组织为连续过程：先提取各时相的多尺度特征，再处理统计参照与局部对应，最后联合状态和差异信息形成变化表征。HCE由此输出供解码器使用的五级变化特征，将双时相比较落实到不同空间尺度，为后续洪水范围重建提供输入。
+
+共享空间表征用于保留位置线索，语义辅助则为区域内的地表解释提供补充。共享卷积编码器与特征金字塔网络提取\(P1\)--\(P5\)空间表征\citep{tan2019efficientnet,lin2017fpn}，其分辨率逐级降低：浅层保留较细的位置与纹理线索，深层组织较大区域的信息。冻结的DINOv3表征经适配后融入\(P3\)--\(P5\)\citep{simeoni2025dinov3}，与对应CNN特征通过拼接、卷积及CBAM融合\citep{woo2018cbam}；\(P1/P2\)保留卷积特征。图~\ref{fig:encoder_ha}上部展示这些尺度路径。CNN与语义分支各自在灾前、灾后之间共享权重，而融合分别在各时相内部完成，使两时相沿同一映射提取表征并保留各自的状态信息。以下以\(\mathbf P_i^t\)表示该阶段第\(i\)级、时相\(t\)的输出。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/figure3.jpg}
+  \caption{HCE的共享表征与成对协调。上部展示双时相共享CNN--FPN、DINO语义融合及\(P1\)--\(P5\)尺度路径，下部展开成对统计校准与局部软对齐。\(A/B\)表示灾前/灾后，\(Q\)来自灾后特征，采样的\(K/V\)来自灾前特征；局部对齐更新灾前分支。工作图局部连线待修正，计算关系以正文为准。}
+  \label{fig:encoder_ha}
+\end{figure}
+
+成对统计校准为浅层特征比较建立由当前影像对决定的共同参照。协调对齐（Harmonized Alignment, HA）在\(P1/P2\)上，将两时相及空间位置共同纳入逐通道均值\(\boldsymbol\mu_i^{AB}\)和方差\(\mathbf v_i^{AB}\)的计算，再以相同的统计量归一化两侧特征，并映射至共享的可学习仿射空间：
+\begin{equation}\label{eq:ha_calibration}
+ \mathbf{G}_i^t=\frac{\mathbf{P}_i^t-\boldsymbol\mu_i^{AB}}{\sqrt{\mathbf{v}_i^{AB}+\epsilon}}
+ \odot\left[\operatorname{softplus}(\mathbf{s}_i^c)+\epsilon\right]+\boldsymbol\mu_i^c,
+ \qquad \mathbf{U}_i^t=\mathbf{G}_i^t+\mathcal{R}_i(\mathbf{G}_i^t).
+\end{equation}
+其中\(t\in\{A,B\}\)分别表示灾前和灾后，\(i\in\{1,2\}\)，\(\epsilon\)为数值稳定项；\(\boldsymbol\mu_i^c\)与\(\mathbf s_i^c\)为训练中学习的仿射位置与尺度参数。共同统计量随输入影像对计算，使成对特征使用同一归一化参照；仿射参数则学习这一共同空间的尺度与偏置。卷积映射\(\mathcal R_i\)以仿射后的\(\mathbf G_i^t\)为输入，输出残差并与\(\mathbf G_i^t\)相加，为校准后的局部表征提供可学习的恢复路径，得到\(\mathbf U_i^t\)。
+
+局部对应处理进一步在有限邻域内联系两时相的空间特征。统计校准作用于共同参照，局部软对齐则以灾后特征为查询，在灾前特征中采样键和值，形成灾前表征的局部修正。\(P1/P2\)先校准后对齐，取\(\mathbf B_i^t=\mathbf U_i^t\)；\(P3\)直接对语义融合后的\(\mathbf B_3^t=\mathbf P_3^t\)进行对齐。灾前更新为
+\begin{equation}\label{eq:ha_alignment}
+  \tilde{\mathbf{P}}_{i}^{A}(\mathbf{p})
+  =
+  \mathbf{B}_{i}^{A}(\mathbf{p})
+  +
+  \mathcal{O}_{i}\!\left[
+  \sum_{k=1}^{K}
+  a_{ik}(\mathbf{p})\,
+  \mathbf{V}_{i}^{A}
+  \!\left(\mathbf{p}+\mathbf{r}_{k}+\Delta\mathbf{o}_{ik}(\mathbf{p})\right)
+  \right],
+  \quad i\in\{1,2,3\}.
+\end{equation}
+其中\(\mathbf p\)为网格位置，\(\mathbf r_k\)为第\(k\)个参考采样偏移，\(\Delta\mathbf o_{ik}\)为学习的局部偏移，\(\mathbf V_i^A\)为灾前值映射。成对特征及其有向差共同预测偏移与注意力偏置：偏移改变灾前键值的采样位置，偏置加入灾后查询与采样键的匹配得分，经局部softmax得到\(a_{ik}\)。\(\mathcal O_i\)组合各头的加权值，并以残差形式更新灾前特征。局部对齐阶段保持灾后输入\(\mathbf B_i^B\)不变，\(P4/P5\)保留该阶段之前的特征，形成后续交互所用的\(\{\mathbf X_i^A,\mathbf X_i^B\}_{i=1}^5\)。这一区分将浅层统计协调与局部空间对应衔接起来，同时明确各尺度的处理范围。
+
+变化查询交互（Change Query Interaction, CQI）在协调后的成对表征上共同组织状态与差异信息（图~\ref{fig:cqi}）。灾前、灾后特征分别保留变化发生前后的地表状态；有向差保留特征变化的方向，绝对差提供不依赖符号的变化幅度线索。各尺度通过卷积投影\(\mathcal P_i\)组合这四类输入，得到密集配对特征\(\mathbf Z_i\)：
+\begin{equation}\label{eq:cqi_pair}
+  \mathbf{Z}_{i}
+  =
+  \mathcal{P}_{i}\!\left(
+  \left[
+  \mathbf{X}_{i}^{A},
+  \mathbf{X}_{i}^{B},
+  \mathbf{X}_{i}^{B}-\mathbf{X}_{i}^{A},
+  \left|\mathbf{X}_{i}^{B}-\mathbf{X}_{i}^{A}\right|
+  \right]\right),
+  \quad i=1,\ldots,5,
+\end{equation}
+方括号表示通道拼接。状态信息为差异解释提供前后背景，差异信息则显式表征两时相的特征关系；这些量属于学习到的表征，不直接等同于后向散射差或水深。将\(\mathbf Z_i\)展平为空间token \(\mathbf T_i=\operatorname{Flatten}(\mathbf Z_i)\)，使每个token与原网格位置保持对应，为后续信息汇聚及空间恢复提供同一密集基础。
+
+查询交互通过“空间信息汇聚到查询、查询信息返回空间”两步，将配对特征的区域联系用于密集变化编码。每个尺度的可学习查询\(\mathbf Q_i^0\)首先从\(\mathbf T_i\)汇聚信息，更新后的\(\mathbf Q_i^1\)再作为键和值向原始token返回上下文。两次多头注意力（MHA）因此具有不同的信息方向：
+\begin{align}
+ \mathbf{Q}_{i}^{1}
+ &=\operatorname{LN}_{q,i}\!\left[\mathbf{Q}_{i}^{0}
+ +\operatorname{MHA}_{q\leftarrow t}(\mathbf{Q}_{i}^{0},\mathbf{T}_{i},\mathbf{T}_{i})\right],\label{eq:cqi_query}\\
+ \mathbf{T}_{i}^{1}
+ &=\operatorname{LN}_{t,i}\!\left[\mathbf{T}_{i}
+ +\operatorname{MHA}_{t\leftarrow q}(\mathbf{T}_{i},\mathbf{Q}_{i}^{1},\mathbf{Q}_{i}^{1})\right].\label{eq:cqi_token}
+\end{align}
+\(\operatorname{LN}_{q,i}\)与\(\operatorname{LN}_{t,i}\)分别为查询和token层归一化。第一步使有限数量的查询汇集该尺度的空间信息，第二步保留原token作为查询端，使返回的信息对应到各自的位置。两个注意力更新均保留各自输入的残差；随后token经残差前馈网络（FFN）更新，并复用\(\operatorname{LN}_{t,i}\)。恢复为空间网格后，再与原密集特征\(\mathbf Z_i\)相加，经输出卷积及CBAM得到
+\begin{equation}\label{eq:cqi_output}
+ \mathbf{D}_i=\mathcal{O}_i\!\left[
+ \operatorname{Reshape}\!\left(\operatorname{LN}_{t,i}\left[\mathbf{T}_{i}^{1}+\operatorname{FFN}_i(\mathbf{T}_{i}^{1})\right]\right)+\mathbf{Z}_i\right].
+\end{equation}
+这里\(\mathcal O_i\)表示CQI的输出映射。密集残差为查询交互之外的原始配对信息保留直接路径。五个尺度各自具有独立的查询与交互参数，在尺度内完成信息交换，输出\(\mathbf D_1\)--\(\mathbf D_5\)供OSCD重建洪水范围。输入转换和数值配置见第~\ref{sec:eval_protocol}节。
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/figure4.jpg}
+  \caption{HCE中的变化查询交互。成对状态、有向差和绝对差经投影形成密集特征\(Z_i\)，展平为\(T_i\)后依次进行查询更新与空间token更新，再经残差FFN和密集残差生成变化输出\(D_i\)。\(Q_i^0/Q_i^1\)为更新前后的查询，\(C\)与加号分别表示拼接与相加。工作图局部连线待修正，计算关系以正文为准。}
   \label{fig:cqi}
 \end{figure}
 
-\begin{figure}[!t]
+\subsection{全尺度状态空间变化解码器（OSCD）}\label{sec:oscd}\label{sec:loss}
+
+洪水范围重建需要将区域性的变化判别落实到受灾区域的空间覆盖和局部位置。全尺度状态空间变化解码器（Omni-Scale State-Space Change Decoder, OSCD）将深层上下文聚合与浅层细节恢复依次组织：\(\mathbf D_3\)--\(\mathbf D_5\)建立区域表征\(\mathbf R_3\)，再结合\(\mathbf D_2\)和\(\mathbf D_1\)逐级恢复至较细网格。图~\ref{fig:oscd}左侧展示从HCE变化特征到范围预测的完整路径，使大范围变化联系与局部定位在线路上衔接。
+
+深层融合首先为不同尺度的变化信息建立共同的空间网格。\(\mathbf D_3\)--\(\mathbf D_5\)分别经通道投影\(\rho_i^c\)，再调整至\(\mathbf D_3\)网格，得到\(\mathbf E_3,\mathbf E_4,\mathbf E_5\)；拼接融合后得到\(\mathbf F\)：
+\begin{equation}\label{eq:oscd_deep_fusion}
+ \mathbf E_i=\operatorname{Resize}_{3}\!\left(\rho_i^c(\mathbf D_i)\right),
+ \quad i\in\{3,4,5\},\qquad
+ \mathbf F=\operatorname{Fuse}\!\left[\mathbf E_3,\mathbf E_4,\mathbf E_5\right].
+\end{equation}
+其中\(\operatorname{Resize}_3\)表示调整至第三级空间尺寸，\(\operatorname{Fuse}\)为拼接后的卷积融合。统一网格使三个层级的信息可以逐位置组合，分别保留的\(\mathbf E_i\)还将用于后续上下文再注入。该上下文结构采用SegMAN的多尺度组织方式\citep{fu2025segman}，在本文中接收HCE输出的深层变化特征，服务于双时相洪水范围重建。
+
+多分辨率输入构建进一步从融合特征中组织不同空间覆盖的信息，对应图~\ref{fig:oscd}右下部分。\(\mathbf F\)分别经过原尺度、二倍降采样和四倍降采样路径；前两路经pixel unshuffle将局部空间位置重排到通道维，使三路落在同一较粗网格，再分别压缩通道并拼接为扫描输入\(\mathbf G\)：
+\begin{equation}\label{eq:oscd_scan_input}
+ \mathbf G=\left[
+ \rho_0\!\left(\operatorname{PU}_{4}(\mathbf F)\right),
+ \rho_1\!\left(\operatorname{PU}_{2}(\mathcal C_{2}(\mathbf F))\right),
+ \rho_2\!\left(\mathcal C_{4}(\mathbf F)\right)
+ \right].
+\end{equation}
+其中\(\mathcal C_2\)和\(\mathcal C_4\)分别表示步长为2和4的卷积，\(\operatorname{PU}_r\)将每个\(r\times r\)空间块重排到通道维，\(\rho_0,\rho_1,\rho_2\)为各路通道压缩。空间重排使原尺度的局部排列与降采样后的区域信息在共同网格中表达，随后交由同一上下文模块处理。公式省略必要的边缘填充；具体尺寸、卷积核和填充规则见第~\ref{sec:eval_protocol}节。
+
+状态空间上下文在共同网格上汇聚区域信息，再将其返回深层变化表征。\(\operatorname{SSContext}\)沿水平、垂直及其反向展开四路序列，进行选择性状态空间扫描，并恢复与合并到空间网格\citep{gu2023mamba,liu2024vmamba}，输出\(\mathbf O\)。\(\mathbf O\)上采样至上下文网格得到\(\mathbf S\)，再经投影\(\rho^r\)得到与\(\mathbf E_i\)通道匹配的\(\mathbf J\)。区域表征按下式构建：
+\begin{equation}\label{eq:oscd_context_flow}
+ \mathbf O=\operatorname{SSContext}(\mathbf G),\qquad
+ \mathbf S=\operatorname{Up}_{3}(\mathbf O),\qquad
+ \mathbf J=\rho^r(\mathbf S).
+\end{equation}
+\begin{equation}\label{eq:oscd_context_reconstruction}
+ \begin{aligned}
+ \mathbf R_3=\operatorname{Reconstruct}\!\big[&\mathbf S,\operatorname{Short}(\mathbf F),
+ \operatorname{Global}_{3}(\mathbf F),\\
+ &\mathbf E_3+\mathbf J,\mathbf E_4+\mathbf J,\mathbf E_5+\mathbf J\big].
+ \end{aligned}
+\end{equation}
+\(\operatorname{Short}\)为直接作用于\(\mathbf F\)的短卷积分支，\(\operatorname{Global}_3\)包含全局池化、投影及恢复至上下文网格的尺寸调整。上采样结果\(\mathbf S\)直接参与拼接，\(\mathbf J\)则分别加入三个\(\mathbf E_i\)，为各深层特征提供同一上下文补充。图~\ref{fig:oscd}右上部分对应这六路特征的汇聚：扫描表征、局部卷积、全局信息和三个再注入后的深层特征经拼接重建为\(\mathbf R_3\)。因此，上下文返回与原层级信息保留在同一汇聚结构中完成。
+
+浅层细节恢复将\(\mathbf R_3\)依次传递到更高分辨率，并在每一级引入相应的局部位置线索。先将\(\mathbf R_3\)上采样到\(\mathbf D_2\)网格，与投影后的\(\mathbf D_2\)拼接并重建\(\mathbf R_2\)，再以相同方式结合\(\mathbf D_1\)得到\(\mathbf R_1\)：
+\begin{equation}\label{eq:oscd_reconstruction}
+  \mathbf{R}_{2}
+  =
+  \mathcal{R}_{2}\!\left[
+  \operatorname{Up}(\mathbf{R}_{3}),\rho_{2}^{d}(\mathbf{D}_{2})
+  \right],
+  \qquad
+  \mathbf{R}_{1}
+  =
+  \mathcal{R}_{1}\!\left[
+  \operatorname{Up}(\mathbf{R}_{2}),\rho_{1}^{d}(\mathbf{D}_{1})
+  \right].
+\end{equation}
+其中\(\rho_i^d\)为细节投影，\(\mathcal R_i\)为对应级别的卷积重建映射，\(\operatorname{Up}\)按当前浅层特征的尺寸进行调整。拼接将已汇聚的区域信息与该级细节共同交给重建映射，使范围判别逐步落实到较细位置。卷积头将\(\mathbf R_1\)映射为二分类logits，再经双线性插值恢复至输入网格；softmax和选定阈值随后将其转换为新增洪水范围。
+
+\begin{figure}[H]
   \centering
-  \includegraphics[width=0.95\linewidth,height=0.45\textheight,keepaspectratio]{figure/figure4.jpg}
-  \caption{Mask2Former 预测头：利用 CQI 生成的多尺度变化表征预测洪水掩膜。}
-  \label{fig:mask2former}
+  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/figure5.jpg}
+  \caption{OSCD的洪水范围重建结构。左侧展示\(D_3\)--\(D_5\)的区域聚合、结合\(D_2/D_1\)的逐级恢复及范围输出；右上展开区域上下文汇聚，右下展开融合特征\(F\)到多分辨率输入\(G\)的构建。\(O\)、\(S\)与\(J\)分别为上下文输出、上采样结果与再注入投影，\(R_i\)为重建特征，PU表示pixel unshuffle。重绘工作图右上局部连线待修正，计算关系以正文为准。}
+  \label{fig:oscd}
 \end{figure}
 
-如图~\ref{fig:mask2former} 所示，首先对 CQI 输出的变化表征进行尺度和通道适配，得到预测头输入特征 \(\{\mathbf{F}_i\}_{i=1}^{5}\)。像素解码器对这些多尺度特征进行融合和上采样，生成稠密掩膜特征 \(\mathbf{F}_{\mathrm{mask}}\)。同时，Transformer 解码器以一组可学习掩膜查询 \(\mathbf{Q}_{\mathrm{mask}}\) 为输入，通过与多尺度特征交互逐层更新查询表征：
-\begin{equation}\label{eq:mask_decoder}
-  \mathbf{H}
+训练目标同时约束最终范围预测及HCE的五级变化特征，使范围重建与多尺度变化编码共同接受监督。五个辅助头直接接收\(\mathbf D_1\)--\(\mathbf D_5\)，主、辅助预测共同用于像元分类和前景重叠损失。浅层辅助预测形成停止梯度的支撑参照：支撑保持项用于约束主输出在有支撑位置的响应，粗尺度一致性项用于约束低支撑位置的过度响应。总目标为
+\begin{equation}\label{eq:total_loss}
+  \mathcal{L}
   =
-  \mathcal{T}_{\mathrm{dec}}
-  \left(
-  \mathbf{Q}_{\mathrm{mask}},\,
-  \mathcal{P}_{\mathrm{dec}}\left(\{\rho_i(\mathbf{D}_i)\}_{i=1}^{5}\right)
-  \right),
-\end{equation}
-其中，\(\rho_i(\cdot)\) 表示对第 \(i\) 个变化表征进行尺度和通道适配，\(\mathcal{P}_{\mathrm{dec}}(\cdot)\) 表示像素解码器，\(\mathcal{T}_{\mathrm{dec}}(\cdot)\) 表示 Transformer 解码器，\(\mathbf{H}\) 为更新后的掩膜查询表征。
-
-随后，分类分支预测每个可学习掩膜查询的类别置信度；掩膜分支则将掩膜查询表征投影为掩膜嵌入，并与稠密掩膜特征共同生成候选掩膜：
-\begin{equation}\label{eq:mask_pred}
-  \mathbf{s}_q = \mathrm{MLP}_{\mathrm{cls}}(\mathbf{H}_q),
-  \qquad
-  \mathbf{m}_q =
-  \sigma\!\left(
-  \psi(\mathbf{H}_q)^{\top}\mathbf{F}_{\mathrm{mask}}
-  \right),
-\end{equation}
-其中，\(\mathbf{s}_q\) 和 \(\mathbf{m}_q\) 分别为第 \(q\) 个掩膜查询的类别得分和候选掩膜，\(\psi(\cdot)\) 表示掩膜嵌入投影。最终通过掩膜分类得到二值洪水范围图 \(\hat{\mathbf{M}}\)。
-
-\subsection{变化定义洪水水深估计}
-
-CFDepth 通过在新增淹没支撑区上重建局部水面高程，并减去数字高程模型（DEM）表面来估计洪水水深。与基于完整洪水期水面进行水深估计不同，此处的输入支撑区由变化检测产生，主要表示新增淹没区域。针对这一输入条件，CFDepth 将外部约束初始水面、平滑外边界水面以及各洪水连通分量内的最近可达边界传播相结合。
-
-\subsubsection{变化定义洪水水深的形式化描述}
-
-第一步利用 HA-CQI 洪水范围定义水深估计域。令 \(\hat{\mathbf{M}}\) 为预测的变化定义洪水图，\(\mathbf{Z}\) 为 DEM 高程场。CFDepth 首先将两个栅格置于共同分析网格上，并将变化定义洪水支撑区定义为 \(\Omega_f=\{\mathbf{p}\mid \hat{\mathbf{M}}(\mathbf{p})=1\}\)。该支撑区被分解为 \(N_c\) 个连通分量 \(\{\Omega_f^{(c)}\}_{c=1}^{N_c}\)，使局部水面构建在各分量内部完成，而不跨越被背景分隔的淹没斑块。对于第 \(c\) 个分量，其局部外边界为
-\begin{equation}\label{eq:cfdepth_boundary}
-  \mathcal{B}_{\mathrm{out}}^{(c)}
-  =
-  \left\{\mathbf{q}\mid \mathbf{q}\in \mathrm{Dilate}(\Omega_f^{(c)}),\; \mathbf{q}\notin\Omega_f^{(c)}\right\},
-  \quad c=1,\ldots,N_c,
-\end{equation}
-其中，\(\mathcal{B}_{\mathrm{out}}^{(c)}\) 表示紧邻 \(\Omega_f^{(c)}\) 外侧的非洪水像元。最终水深由重建水面 \(\mathbf{S}\) 计算得到，即 \(\hat{\mathbf{d}}=\max(\mathbf{S}-\mathbf{Z},0)\odot\hat{\mathbf{M}}\)。因此，CFDepth 的核心任务是在由变化定义而非完整洪水支撑区提供的边界条件下，构建合理的局部 \(\mathbf{S}\)。
-
-
-\subsubsection{边界约束水面构建}
-
-CFDepth 以两种互补形式构建水面高程。第一种形式是由支撑区外部地形约束的初始水面。CFDepth 以非洪水 DEM 像元作为水面传播源，分别计算基准代价、单位代价和高程加权代价，记为 \(\mathbf{C}_0\)、\(\mathbf{C}_1\) 和 \(\mathbf{C}_z\)。初始水面 \(\mathbf{S}_0\) 及其对应原始水深 \(\mathbf{d}_0\) 为
-\begin{equation}\label{eq:wd_init}
-  \mathbf{S}_0
-  =
-  \mathbf{Z}_{\mathrm{out}}
+  \mathcal{L}_{\mathrm{seg}}
   +
-  \frac{\mathbf{C}_z-\mathbf{C}_0}{\mathbf{C}_1-\mathbf{C}_0+\epsilon},
-  \qquad
-  \mathbf{d}_0
-  =
-  \max(\mathbf{S}_0-\mathbf{Z},0)\odot\hat{\mathbf{M}},
+  \lambda_{\mathrm{sup}}(e)\mathcal{L}_{\mathrm{sup}}
+  +
+  \lambda_{\mathrm{coarse}}(e)\mathcal{L}_{\mathrm{coarse}}.
 \end{equation}
-其中，\(\mathbf{Z}_{\mathrm{out}}\) 表示支撑区外部的 DEM 高程，\(\epsilon\) 用于避免除零。该水面提供广域地形约束估计，但当变化定义洪水支撑区排除了永久水体或低高程连接区域时，它仍可能低于内部 DEM。因此，将初始水深不大于最小正水深阈值的位置标记为未解析位置：
-\begin{equation}\label{eq:wd_unstable}
-  \mathcal{U}_0^{(c)}
-  =
-  \left\{\mathbf{p}\in\Omega_f^{(c)} \mid \mathbf{S}_0(\mathbf{p})-\mathbf{Z}(\mathbf{p}) \le d_{\min}\right\}.
-\end{equation}
+其中\(\mathcal L_{\mathrm{seg}}\)组合主、辅助输出的Focal与Tversky损失，\(\mathcal L_{\mathrm{sup}}\)和\(\mathcal L_{\mathrm{coarse}}\)分别为支撑保持和粗尺度一致性项，\(e\)为训练轮次。辅助监督连接到HCE变化特征，使其在进入解码器前受到任务约束；支撑相关项则联系浅层预测与最终或粗尺度输出。各项定义、权重和调度见第~\ref{sec:eval_protocol}节。
 
-第二种形式是用于稳定这些未解析位置的边界约束水面。为降低孤立 DEM 异常的影响，CFDepth 首先对外边界高程进行局部中值平滑：
-\begin{equation}\label{eq:wd_search}
-  \tilde{z}_{\mathrm{out}}(\mathbf{q})
-  =
-  \mathrm{median}
-  \left\{
-  z(\mathbf{u})\mid
-  \mathbf{u}\in\mathcal{N}_{r_b}(\mathbf{q})\cap\mathcal{B}_{\mathrm{out}}^{(c)}
-  \right\},
-  \quad
-  \mathbf{q}\in\mathcal{B}_{\mathrm{out}}^{(c)}.
-\end{equation}
-随后，对于每个 \(\mathbf{p}\in\Omega_f^{(c)}\)，CFDepth 在 \(\Omega_f^{(c)}\cup\mathcal{B}_{\mathrm{out}}^{(c)}\) 内确定最近可达外边界像元：
-\begin{equation}\label{eq:wd_update_boundary}
-  \mathbf{q}^{*}(\mathbf{p})
-  =
-  \arg\min_{\mathbf{q}\in\mathcal{B}_{\mathrm{out}}^{(c)}}
-  D_{\Omega_f^{(c)}\cup\mathcal{B}_{\mathrm{out}}^{(c)}}(\mathbf{q},\mathbf{p}),
-\end{equation}
-其中，\(D_{\Omega_f^{(c)}\cup\mathcal{B}_{\mathrm{out}}^{(c)}}\) 表示限制在当前洪水连通分量及其外边界内的地理距离。该限制可避免较远的低高程边界覆盖同一支撑分量内更近的可达边界。由此将边界约束水面定义为
-\begin{equation}\label{eq:wd_completion}
-  \mathbf{S}_{\mathrm{nb}}(\mathbf{p})
-  =
-  \max\left\{
-  \tilde{z}_{\mathrm{out}}\!\left(\mathbf{q}^{*}(\mathbf{p})\right),
-  \mathbf{Z}(\mathbf{p})+d_{\min}
-  \right\}.
-\end{equation}
-一旦某像元被保留为洪水像元，\(\mathbf{Z}(\mathbf{p})+d_{\min}\) 项即可强制其具有物理上可解释的正水深。
+\subsection{范围与地形约束的一阶水深估算（CFDepth）}\label{sec:cfdepth}
 
-\subsubsection{水深生成与算法概要}
+范围内估深需要将洪水的水平分布与地形高程联系起来。CFDepth以新增洪水范围\(\hat{\mathbf M}\)和DEM \(Z\)为输入，将检测范围与有效地形区域\(\Omega_Z\)相交，定义估深支撑区\(\Omega_f=\{p:\hat{\mathbf M}(p)=1\}\cap\Omega_Z\)。范围确定参与计算的位置，DEM提供水面相对地面的高程约束。通过膨胀和腐蚀构建紧邻支撑区的外侧候选边界\(\mathcal B_{\mathrm{raw}}\)与内侧边界\(\mathcal B_{\mathrm{in}}\)：
+\begin{equation}\label{eq:cfdepth_boundary}
+ \mathcal B_{\mathrm{raw}}=\operatorname{Dilate}(\Omega_f)\setminus\Omega_f,
+ \qquad
+ \mathcal B_{\mathrm{in}}=\Omega_f\setminus\operatorname{Erode}(\Omega_f).
+\end{equation}
+两种边界分别提供外侧地形样本及内侧配对位置，为后续筛选和水面锚点构建界定空间范围。
 
-CFDepth 根据初始水面和边界约束水面的有效性对二者进行融合，以生成最终水深。对于未解析位置，使用最近边界水面补全水面估计；对于初始水深有效的位置，CFDepth 保留初始水面，同时执行相同的最小正水深约束：
-\begin{equation}\label{eq:wd_surface_fusion}
-  \mathbf{S}_1(\mathbf{p})
+候选边界筛选用于避免无效地形、陡坡和局部异常高程直接参与水面约束。首先保留DEM有效且坡度\(\theta\)不超过\(\theta_{\max}\)的候选像元，得到\(\mathcal B_c\)。在局部邻域\(\mathcal N_b(p)\)内计算候选高程的中位数\(m(p)\)，形成逐位置绝对偏差\(e(p)\)，再对该偏差场计算局部中位数\(a(p)\)，筛选得到有效外边界\(\mathcal B_v\)：
+\begin{equation}\label{eq:cfdepth_boundary_screen}
+ \begin{aligned}
+ \mathcal B_c&=\{p\in\mathcal B_{\mathrm{raw}}\cap\Omega_Z:
+       \theta(p)\text{ is finite},\ \theta(p)\leq\theta_{\max}\},\\
+ m(p)&=\operatorname{median}_{q\in\mathcal N_b(p)\cap\mathcal B_c} Z(q),
+ \qquad e(p)=|Z(p)-m(p)|,\\
+ a(p)&=\operatorname{median}_{\substack{q\in\mathcal N_b(p)\cap\mathcal B_c\\e(q)\text{ is finite}}}e(q),\\
+ \mathcal B_v&=\{p\in\mathcal B_c:e(p),a(p)\text{ are finite},\
+ e(p)\leq\max[\kappa a(p),\tau_{\min}]\}.
+ \end{aligned}
+\end{equation}
+其中\(\kappa\)为偏差倍数，\(\tau_{\min}\)为最小高程容差。第二次中位数计算使用各候选位置相对于其自身局部中位数的偏差，因此体现了“局部高程参照、偏差场、局部容差”的处理次序。最小容差为偏差较小的邻域保留非零筛选范围。该筛选仅约束地形样本的有效性与局部高程一致性，不判别边界邻接地物的水体类型。
+
+水面锚点由内、外边界的局部地形样本在内边界位置配对构建。对每个\(p\in\mathcal B_{\mathrm{in}}\)，分别取配对邻域内\(\mathcal B_v\)与\(\mathcal B_{\mathrm{in}}\)的高程中位数，记为\(Z_{\mathrm{dry}}(p)\)与\(Z_{\mathrm{wet}}(p)\)。内侧统计仅使用内边界样本。两侧中位数均有效的位置组成锚点集合\(\mathcal A\)，其水面高程为
+\begin{equation}\label{eq:cfdepth_anchor}
+  S_{b}
+  =
+  \max\!\left(
+  \frac{Z_{\mathrm{wet}}+Z_{\mathrm{dry}}}{2},
+  \mathbf{Z}+d_{\min}
+  \right).
+\end{equation}
+式中各高程均在同一配对位置\(p\in\mathcal A\)取值，\(d_{\min}\)为水面相对地形的数值下界。两侧中位数的平均值提供边界处的地形参照，下界保证锚点不低于该位置的地面加最小深度。锚点是由检测边界及地形推得的水面约束，其适用性取决于给定范围与边界样本。
+
+初始水面通过支撑区内最近可达锚点传播得到。对支撑像元\(p\)，按\(\Omega_f\)内八邻域可达路径的距离选取最近锚点\(b(p)\)，并在设置最大传播距离时满足该距离条件。存在可用锚点时，初始化为\(S^{(0)}(p)=\max[S_b(b(p)),Z(p)+d_{\min}]\)；无可达锚点或超过传播范围时，以\(Z(p)+d_{\min}\)回退并保留低置信标记。支撑区内的路径条件限定锚点信息可以到达的位置，地形下界作用于全部初始化像元。传播结果为后续连续性细化提供起点。
+
+连续性细化在有效支撑区内协调相邻水面高程，并保留锚点与地形约束。对于支撑像元，局部邻域均值与当前水面按松弛系数\(\eta\)组合：
+\begin{equation}\label{eq:cfdepth_continuity}
+ S^{(k+1)}(p)=\max\!\left[(1-\eta)S^{(k)}(p)+\eta\operatorname{mean}_{q\in\mathcal{N}(p)\cap\Omega_f}S^{(k)}(q),\ Z(p)+d_{\min}\right].
+\end{equation}
+\(\mathcal N(p)\)为包含中心像元的局部邻域，均值仅统计\(\Omega_f\)中的有效水面像元。每次更新先施加地形下界，再将\(p\in\mathcal A\)处恢复为固定锚点\(S_b(p)\)；其余支撑像元参与细化，初始化时的低置信标记继续保留。经过\(K\)次更新后，水深由最终水面减去地形得到：
+\begin{equation}\label{eq:cfdepth_depth}
+  \hat{\mathbf{d}}(\mathbf{p})
   =
   \begin{cases}
-    \mathbf{S}_{\mathrm{nb}}(\mathbf{p}), & \mathbf{p}\in\mathcal{U}_0^{(c)},\\
-    \max\left\{\mathbf{S}_0(\mathbf{p}),\mathbf{Z}(\mathbf{p})+d_{\min}\right\}, & \mathrm{otherwise}.
+    \max\!\left(\mathbf{S}^{(K)}(\mathbf{p})-\mathbf{Z}(\mathbf{p}),0\right),
+      & \mathbf{p}\in\Omega_f,\\
+    \text{NoData}, & \text{otherwise}.
   \end{cases}
 \end{equation}
-最终 CFDepth 估计为
-\begin{equation}\label{eq:wd_final}
-  \hat{\mathbf{d}}
-  =
-  \max(\mathbf{S}_1-\mathbf{Z},0)\odot\hat{\mathbf{M}}.
-\end{equation}
-完整流程见算法~\ref{alg:cfdepth}。该算法始终受预测的变化定义洪水支撑区约束：它提高每个连通分量内的水深可用性，但不会在互不连通的淹没斑块之间强制采用同一水位。
+支撑区外保留NoData，使估算范围与有效地形条件一致。该过程形成给定范围和边界约束下的一阶水深估计；传播初始化、连续性细化及最终水深是依次衔接的不同阶段。网格处理、筛选阈值、邻域与迭代配置见第~\ref{sec:eval_protocol}节。
 
-\begin{algorithm}[!t]
-\footnotesize
-\caption{CFDepth 流程}
-\label{alg:cfdepth}
-\begin{algorithmic}[1]
-\Statex \textbf{输入：}
-\Statex \quad \(\hat{\mathbf{M}}\)：变化定义洪水图；\(\mathbf{Z}\)：DEM。
-\Statex \quad \(d_{\min}\)：最小正水深；\(r_b\)：边界平滑半径。
-\Statex \quad \(D_{\max}\)：最大传播距离。
-\Statex \textbf{输出：}洪水水深估计 \(\hat{\mathbf{d}}\)
-\State 将 \(\hat{\mathbf{M}}\) 和 \(\mathbf{Z}\) 对齐至共同分析网格。
-\State 定义 \(\Omega_f=\{\mathbf{p}\mid \hat{\mathbf{M}}(\mathbf{p})=1\}\)，并将其分解为连通分量 \(\{\Omega_f^{(c)}\}_{c=1}^{N_c}\)。
-\For{每个连通分量 \(\Omega_f^{(c)}\)}
-  \State 利用式~\eqref{eq:cfdepth_boundary} 提取局部外边界 \(\mathcal{B}_{\mathrm{out}}^{(c)}\)。
-  \State 利用式~\eqref{eq:wd_init} 构建地形约束初始水面 \(\mathbf{S}_0\)。
-  \State 利用式~\eqref{eq:wd_unstable} 识别未解析像元 \(\mathcal{U}_0^{(c)}\)。
-  \State 利用式~\eqref{eq:wd_search} 平滑外边界高程，得到 \(\tilde{z}_{\mathrm{out}}\)。
-  \State 利用式~\eqref{eq:wd_update_boundary} 在 \(D_{\max}\) 内寻找最近可达边界像元 \(\mathbf{q}^{*}(\mathbf{p})\)。
-  \State 利用式~\eqref{eq:wd_completion} 构建边界约束水面 \(\mathbf{S}_{\mathrm{nb}}\)。
-  \State 利用式~\eqref{eq:wd_surface_fusion} 融合 \(\mathbf{S}_0\) 与 \(\mathbf{S}_{\mathrm{nb}}\)，得到 \(\mathbf{S}_1\)。
-\EndFor
-\State 利用式~\eqref{eq:wd_final} 计算 \(\hat{\mathbf{d}}=\max(\mathbf{S}_1-\mathbf{Z},0)\odot\hat{\mathbf{M}}\)。
-\State \Return \(\hat{\mathbf{d}}\)
-\end{algorithmic}
-\end{algorithm}
+\clearpage
+\section{实验与结果}
 
-\subsection{损失函数}\label{sec:loss}
+\subsection{实验配置与评价协议}\label{sec:eval_protocol}
 
-训练目标仅优化 HA-CQI 变化检测模型。总损失为
-\begin{equation}\label{eq:loss}
-  \mathcal{L} = \mathcal{L}_{\mathrm{main}} + \lambda_{\mathrm{aux}}\mathcal{L}_{\mathrm{aux}} + \lambda_{\mathrm{cons}}\mathcal{L}_{\mathrm{cons}},
-\end{equation}
-其中，\(\mathcal{L}_{\mathrm{main}}\) 监督 Mask2Former 预测头输出的最终洪水范围预测 \(\hat{\mathbf{M}}\)，\(\mathcal{L}_{\mathrm{aux}}\) 监督由 CQI 多尺度变化表征生成的辅助掩膜预测，\(\mathcal{L}_{\mathrm{cons}}\) 则约束高分辨率支撑区域与粗尺度响应之间的一致性。\(\mathcal{L}_{\mathrm{main}}\) 和 \(\mathcal{L}_{\mathrm{aux}}\) 均采用 Focal 损失与前景优先 Tversky 损失的线性组合，以在稀疏前景条件下平衡分类稳定性、召回保持能力和区域重叠质量。
+\subsubsection{数据集与数据准备}\label{sec:experiment_data}
 
-\subsection{实现细节}
+实验资料分别服务于双时相洪水变化学习、GF3场景比较和给定范围内的水深评价。关联训练快照由S1GFloods \citep{saleh2024dam}、VarFloods \citep{du2026high}及河南GF3样本组成，训练与验证成员见表~\ref{tab:training_split}。训练集包含4,737对影像，验证集包含1,593对影像；两种来源的公开数据与少量GF3样本共同构成该混合数据记录。河南GF3样本同时出现在训练和验证划分中，其窗口与郑州评价域的空间关系尚未闭合，因此本研究不将郑州比较定义为独立的跨传感器迁移测试。
 
-HA-CQI 以 EfficientNet-B0 和 FPN 作为共享编码结构，并在中高层阶段引入冻结的 DINOv3 特征作为语义校准来源。双时相金字塔特征依次通过 HA、CQI 和 Mask2Former 预测头，生成最终洪水范围掩膜。模型在一块 NVIDIA GeForce RTX 4090 GPU 上训练，输入尺寸为 \(256\times256\)，批量大小为 16，共训练 100 个 epoch。优化器采用 AdamW，初始学习率为 \(5\times10^{-4}\)，权重衰减为 \(5\times10^{-4}\)，并使用余弦退火将学习率降至 \(1\times10^{-7}\)。CFDepth 在 Google Earth Engine（GEE）中实现。
+\input{tables/table_training_split.tex}
 
-\begin{figure*}[!t]
+学习样本采用\(256\times256\)影像块，将现有SAR单波段表示为三通道，并以二值标签描述新增淹没区域。归一化统计来自所选数据集；语义分支另行恢复输入值域并转换至预训练模型要求的归一化空间，具体过程见第~\ref{sec:experiment_implementation}节。逐景预处理版本、标签来源、无效像元规则及配准记录仍需与相应评价产物对应，样本尺寸和输入通道本身不能代替这一记录。
+
+GF3比较采用郑州和涿州的双时相影像及现有二值洪水变化参考图（图~\ref{fig:gf3_eval_data}），观测与地形资料见表~\ref{tab:gf3_eval}。两景均采用跨年影像对，因而评价对象包含洪水变化判别与非洪水地表变化的区分。图中检查窗口用于局部空间对照；参考掩膜的判读流程、辅助影像时相及不确定像元处理尚未完整记录，这些条件限制了结果的外推范围。
+
+\begin{figure}[H]
   \centering
-  \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{figure/Figure5.jpg}
-  \caption{研究区、土地覆盖背景与现场照片水深参考。地图面板标示郑州和涿州的位置及其土地覆盖环境。郑州的 P1--P4 和涿州的 P5--P8 标记现场照片参考位置，水深区间根据汽车、行人和交通标志等可见物体估计。}
-  \label{fig:dataset}
-\end{figure*}
-
-
-\section{实验}
-
-\subsection{数据集与研究区}
-
-\subsubsection{训练数据集}
-
-训练数据由 VarFloods 和 S1GFloods 两个公共 SAR 洪水数据集整合而成，用于训练开展城市洪水范围制图的 HA-CQI 网络。这些数据集覆盖不同的洪水形态、背景土地覆盖和成像条件，提供了多样化的双时相洪水变化样本。联合使用这些数据有助于模型学习更稳健的变化表征，并降低迁移至城市评估场景时对单一数据源的依赖。
-
-\subsubsection{研究区与评估数据集}
-
-评估数据由郑州 2021 年和涿州 2023 年两个城市洪水案例组成。它们用于评估洪水范围制图，并为生成 DEM 约束一阶水深近似提供洪水支撑区。图~\ref{fig:dataset} 展示两个研究区的位置、土地覆盖背景及现场照片水深参考点 P1--P8。图~\ref{fig:gf3_eval_data} 展示灾前与灾后 GF3 SAR 影像、洪水标签和 ROI 切片位置。表~\ref{tab:gf3_eval} 进一步汇总两个案例的洪水发生时间、传感器模式、空间分辨率、极化方式以及灾前和灾后影像获取日期。
-
-\begin{figure*}[!t]
-  \centering
-  \includegraphics[width=\textwidth,height=0.70\textheight,keepaspectratio]{figure/Figure6.jpg}
-  \caption{郑州和涿州的 GF3 评估数据。左列为郑州，右列为涿州：（a1）/（b1）为灾前 SAR 影像，并标示图~\ref{fig:qual_zhengzhou} 和图~\ref{fig:qual_zhuozhou} 所用 ROI1--ROI6；（a2）/（b2）为灾后 SAR 影像；（a3）/（b3）为洪水标签。}
+  \includegraphics[width=.78\textwidth,height=.56\textheight,keepaspectratio]{figure/figure6.jpg}
+  \caption{郑州（左）与涿州（右）的GF3影像及洪水变化参考掩膜。各组依次展示灾前SAR、灾后SAR和参考掩膜，框线标示局部检查窗口。}
   \label{fig:gf3_eval_data}
-\end{figure*}
+\end{figure}
 
-\begin{table*}[htbp]
-  \centering
-  \caption{本研究所用 GF3 评估数据汇总。}
-  \label{tab:gf3_eval}
-  \scriptsize
-  \setlength{\tabcolsep}{4pt}
-  \begin{adjustbox}{width=\textwidth}
-    \begin{tabular}{p{2.6cm}p{4.4cm}ccccp{2.2cm}p{2.2cm}}
-      \toprule
-      城市/事件 & 洪水发生时间 & 传感器 & 模式 & 分辨率 & 极化方式 & 灾前日期 & 灾后日期 \\
-      \midrule
-      郑州 & \makecell[l]{2021 年 7 月 20 日\\极端城市洪水} & GF3 & FSII & 10 m & HV & 2020-07-20 & 2021-07-20 \\
-      涿州 & \makecell[l]{2023 年 7 月下旬暴雨；\\主要淹没发生于\\2023 年 7 月 30 日至 8 月 1 日} & GF3 & FSII & 10 m & HV & 2022-07-20 & 2023-07-31 \\
-      \bottomrule
-    \end{tabular}
-  \end{adjustbox}
-\end{table*}
+水深资料采用独立的评价安排。GF3水深示例使用给定淹没支撑区及第~\ref{sec:depth_data}节介绍的FABDEM；Brazos河流--泛滥平原比较采用既有CFDepth、FwDET水深产物与归于USGS来源的参考栅格。Brazos比较评价给定域内的水深产物，不评价HarmoSSM的洪水检测。参考产品、垂直基准、准确支撑区及生成实现尚未完整对应，相关结论限定于所提供产物。
 
-郑州 2021 年案例对应 2021 年 7 月 20 日的极端城市暴雨洪水事件。2021 年 7 月 17 日 20:00 至 7 月 20 日 20:00，郑州累计降雨量达到 617.1 mm，接近当地年平均降雨量；7 月 20 日 16:00 至 17:00 记录到 201.9 mm 的小时降雨量，造成大范围城市内涝和交通中断 \citep{xinhua2021henanEmergency,li2023zhengzhou720Flood}。该研究区包含密集建成区、道路网络、城市河流和复杂 SAR 散射背景，用于检验模型区分极端城市内涝与非洪水扰动的能力。涿州 2023 年案例对应 2023 年 7 月下旬至 8 月上旬强降雨后的城市洪水场景。该研究区包含临河区域、城乡过渡土地覆盖、农田与建成区混合背景以及大面积连通淹没斑块，适合评估城市—农田混合结构和复杂土地覆盖转变条件下的洪水检测能力。
+\subsubsection{实现与优化设置}\label{sec:experiment_implementation}
 
-\subsection{评估指标}
+表~\ref{tab:method_config}集中列出HarmoSSM表征与重建、训练选择以及CFDepth的配置。模型与水深参数描述当前实现，优化和选择参数来自已识别训练记录；该记录与全部GF3比较行的对应关系仍需核验。以下据此说明输入转换、损失和推理设置，避免将单一训练记录扩展为所有比较方法的共同协议。
 
-对于洪水范围制图，将洪水类别视为正类，\(TP\)、\(FP\)、\(FN\) 和 \(TN\) 分别表示真阳性、假阳性、假阴性和真阴性像元。各指标定义为
-\begin{equation}\label{eq:precision}
-\mathrm{Precision} = \dfrac{TP}{TP+FP}.
-\end{equation}
-\begin{equation}\label{eq:recall}
-\mathrm{Recall} = \dfrac{TP}{TP+FN}.
-\end{equation}
-\begin{equation}\label{eq:f1}
-\mathrm{F1} = \dfrac{2\,\mathrm{Precision}\,\mathrm{Recall}}{\mathrm{Precision}+\mathrm{Recall}}.
-\end{equation}
-\begin{equation}\label{eq:iou}
-\mathrm{IoU} = \dfrac{TP}{TP+FP+FN}.
-\end{equation}
-\begin{equation}\label{eq:oa}
-\mathrm{OA} = \dfrac{TP+TN}{TP+FP+FN+TN}.
-\end{equation}
+\input{tables/table_method_configuration.tex}
 
-对于水深评估，令 \(\Omega\) 表示开展水深评估的洪水支撑区，\(d(p)\) 表示任意水深图在像元 \(p\) 处的水深值。当 \(d_{\min}=\SI{0.01}{m}\) 时，有效、有限且为正的水深像元及有效水深覆盖率定义为
+共享EfficientNet-B2编码器与FPN生成\(P1\)--\(P5\)五级128通道特征，空间下采样倍率为2、4、8、16和32。冻结DINOv3 ViT-S/16使用独立的输入转换：对数据集归一化输入\(\mathbf{x}^t=(\mathbf{r}^t-\boldsymbol\mu_d)/\boldsymbol\sigma_d\)，先恢复影像值域，再应用LVD预训练模型对应的固定ImageNet归一化：
+\begin{equation}\label{eq:dino_input}
+  \tilde{\mathbf{r}}^{t}
+  =
+  \operatorname{clip}\!\left(
+  \mathbf{x}^{t}\odot\boldsymbol{\sigma}_{d}+\boldsymbol{\mu}_{d},0,1
+  \right),
+  \qquad
+  \mathbf{x}_{\mathrm{DINO}}^{t}
+  =
+  \frac{\tilde{\mathbf{r}}^{t}-\boldsymbol{\mu}_{\mathrm{IM}}}
+       {\boldsymbol{\sigma}_{\mathrm{IM}}}.
+\end{equation}
+语义输入随后调整至\(512\times512\)，这一尺寸不同于学习样本的\(256\times256\)。第5、8和11层语义特征分别适配至\(P3\)、\(P4\)和\(P5\)，与CNN特征经拼接、卷积及CBAM融合后进入HA；\(P1/P2\)保留CNN表征。HA的数值稳定项、局部对齐头数及采样点数，以及各尺度CQI的查询配置均列于表~\ref{tab:method_config}。
+
+OSCD按式~\ref{eq:oscd_deep_fusion}和式~\ref{eq:oscd_scan_input}组织深层变化信息。必要时在右侧与下侧进行复制填充，使上下文网格可被四整除；三个\(\mathbf E_i\)应用相同填充，并在\(\mathbf R_3\)重建后裁去填充区域。\(\mathcal C_2\)采用核大小3、步长2，\(\mathcal C_4\)采用核大小5、步长4，三路分别压缩为128通道。对于无需填充且可整除的\(H\times W\)输入，\(\mathbf G\in\mathbb R^{384\times H/32\times W/32}\)。上下文模块依次包含位置编码、四方向选择性状态空间扫描及逐通道前馈更新，再按式~\ref{eq:oscd_context_reconstruction}和式~\ref{eq:oscd_reconstruction}完成上下文汇聚与细节恢复。
+
+训练通过像元分类和前景重叠共同约束检测输出。对\(N\)个标签像元及目标类概率\(p_{n,y_n}\)，Focal损失\citep{lin2017focal}采用类别权重\(w_0=0.25,w_1=0.75\)：
+\begin{equation}\label{eq:focal_loss}
+  \mathcal{L}_{\mathrm{focal}}
+  =
+  -\frac{1}{N}
+  \sum_{n=1}^{N}
+  w_{y_n}\left(1-p_{n,y_n}\right)^{\gamma}
+  \log p_{n,y_n},
+  \qquad \gamma=2.
+\end{equation}
+Tversky损失\citep{salehi2017tversky}使用前景概率计算软TP、FP与FN：
+\begin{equation}\label{eq:tversky_loss}
+ \mathcal{L}_{\mathrm{Tv}}=1-\frac{1}{B}\sum_{b=1}^{B}
+ \frac{\mathrm{TP}_b+\epsilon_{\mathrm{Tv}}}{\mathrm{TP}_b+\alpha(e)\mathrm{FP}_b+\beta(e)\mathrm{FN}_b+\epsilon_{\mathrm{Tv}}},\qquad\alpha(e)=1-\beta(e).
+\end{equation}
+其中\(B\)为批量大小，各图分别计算软计数，\(\epsilon_{\mathrm{Tv}}=10^{-6}\)。假阴性权重\(\beta(e)\)从第1轮的0.70线性降至第20轮的0.55，此后保持不变。主头与五级辅助头使用相同损失形式：
+\begin{equation}\label{eq:segmentation_loss}
+  \mathcal{L}_{\mathrm{seg}}
+  =
+  \frac{1}{2}\mathcal{L}_{\mathrm{focal}}^{\mathrm{main}}
+  +
+  \mathcal{L}_{\mathrm{Tv}}^{\mathrm{main}}
+  +
+  \sum_{i=1}^{5}\omega_i(e)
+  \left(
+  \frac{1}{2}\mathcal{L}_{\mathrm{focal}}^{(i)}
+  +
+  \mathcal{L}_{\mathrm{Tv}}^{(i)}
+  \right).
+\end{equation}
+辅助比例\((1,1,0.5,0.25,0.25)\)按总和归一化，共同系数在第5轮及之前为1，第20轮线性降至0.5，此后保持0.5。浅层支撑\(s=\max(p_{D1},p_{D2})\)停止梯度，\(\mathcal L_{\mathrm{sup}}\)为\(s>0.60\)位置上\(\max(s-p_{\mathrm{main}},0)\)的均值。粗尺度项先在\(s<0.35\)位置平均\(\max(p_j-s-0.15,0)\)，再对\(j\in\{\mathrm{main},D4,D5\}\)取均值，空掩膜贡献为零。完整目标见式~\ref{eq:total_loss}；两个一致性权重在第6轮及之前为零，随后线性增至第15轮的0.03和0.02并保持不变，对应五轮预热后、起始值为零的十轮渐增。上述设置给出实际损失定义，不构成单组件收益的验证。
+
+对应实现仍以HA-CQI标识保存。关联记录采用表~\ref{tab:method_config}所列的80轮训练与优化设置，随机种子为1，辐射扰动模式为双时相共享。验证集洪水IoU联合选择检查点与阈值，记录选中第77轮和0.80；该验证选择不能等同于GF3整景比较结果。八种比较方法为FC-Siam-Diff \citep{daudt2018fully}、HANet \citep{han2023hanet}、SNUNet \citep{fang2022snunet}、BIT \citep{chen2021remote}、ChangeFormer \citep{bandara2022changeformer}、CGNet \citep{han2023change}、TTP \citep{chen2023ttp}和ChangeDINO \citep{cheng2025changedino}，与HarmoSSM共同构成表~\ref{tab:main_comparison}的九种方法。比较表按作者提供的结果记录整理，各行的检查点、预测、阈值与有效域尚未完成独立核验，因此不据当前配置表宣称所有方法采用完全一致的训练设置。
+
+CFDepth以最大值聚合将范围映射至DEM网格，并与有效DEM掩膜相交。候选外边界取八邻域相邻像元，在表~\ref{tab:method_config}所列坡度与局部偏差阈值下筛选；局部偏差依次由候选高程中位数、逐位置绝对偏差及偏差场中位数确定。半径两像元的内外边界邻域用于锚点配对。最近可达锚点沿八连通支撑区传播，超过10 km或无可达锚点的位置回退至\(Z+0.01\) m并保留低置信标记。连续性细化使用含中心像元的\(3\times3\)窗口，每次施加地形下界并恢复固定锚点；域外及无有效DEM位置为NoData。CFDepth不参与检测模型的损失优化。
+
+\subsubsection{评价指标与协议}\label{sec:experiment_metrics}
+
+洪水变化制图以洪水为正类，\(TP\)、\(FP\)、\(FN\)和\(TN\)表示有效标签域内的混淆矩阵计数。Precision（P）衡量预测洪水中的正确比例，Recall（R）衡量参考洪水被识别的比例，F1与IoU分别反映综合检测表现及前景重叠，OA反映所有有效像元的总体正确比例：
+\begin{align}
+ \mathrm{Precision}&=\frac{TP}{TP+FP}, & \mathrm{Recall}&=\frac{TP}{TP+FN},\label{eq:precision}\\
+ \mathrm{F1}&=\frac{2TP}{2TP+FP+FN}, & \mathrm{IoU}&=\frac{TP}{TP+FP+FN},\label{eq:f1}\\
+ \mathrm{OA}&=\frac{TP+TN}{TP+FP+FN+TN}.\label{eq:oa}
+\end{align}
+五指标均以百分数报告。OA受到背景像元比例影响，因而主要结合IoU和F1评价洪水区域重叠，并以P和R解释误报与遗漏之间的取舍。第四章比较只使用作者指定的20260902结果表；其数值转录与指标间关系可以检查，但这些检查不替代原始预测、标签、阈值和有效域的评价链核验。
+
+水深覆盖与误差采用不同的统计域。既有Brazos评价对参考数据重采样时采用0.50的有效面积比例阈值，并以有限正水深像元定义参考域：
 \begin{equation}\label{eq:valid_depth_ratio}
-\begin{aligned}
-V &= \{p\in\Omega\mid d(p)>d_{\min},\ d(p)\ \mathrm{is\ finite}\},\\
-R_{\mathrm{valid}} &= \frac{|V|}{|\Omega|}\times 100\%.
-\end{aligned}
+ \Omega_r=\{p:\ d_r(p)>0.01\,\mathrm{m},\ d_r(p)\text{ finite}\},\qquad
+ R_j=100\frac{|V_j|}{|\Omega_r|},
 \end{equation}
-该指标衡量洪水支撑区内有效正水深估计的覆盖程度。
+其中方法\(j\)的有效集合为\(V_j=\{p:\ p\in\Omega_r,\ d_j(p)>0.01\,\mathrm{m},\ d_j(p)\text{ finite}\}\)。\(R_j\)衡量该参考域内的正水深覆盖比例；MAE、RMSE、Bias、Pearson相关系数平方\(r^2\)及Nash--Sutcliffe效率系数（NSE）均在\(V_{\mathrm{CFDepth}}\cap V_{\mathrm{FwDET}}\)上计算。NoData不替换为零，以避免将未提供估计的位置当成零深度误差。
 
-为诊断重建水面高程（WSE）场的局部变化，本文进一步计算 WSE 梯度的经验累积分布函数（ECDF）。给定 DEM 高程 \(Z(p)\)，相关量为
-\begin{equation}\label{eq:wse_gradient_ecdf}
-\begin{aligned}
-S(p) &= Z(p)+d(p), \quad
-G(p)=|\nabla S(p)|, \quad
-G^{\mathrm{permil}}(p)=1000\,G(p),\\
-\mathcal{G} &= \{G^{\mathrm{permil}}(p)\mid p\in V,\ G^{\mathrm{permil}}(p)\ \mathrm{is\ finite}\},\\
-F(g) &= \frac{1}{|\mathcal{G}|}\sum_{x\in\mathcal{G}}\mathbf{1}(x\le g)\times 100\%.
-\end{aligned}
-\end{equation}
-低 WSE 梯度像元所占比例越高，表明重建水面高程场中的局部不连续越少。
+Bias为预测值减参考值；Pearson \(r^2\)表示线性相关程度，NSE则将平方误差与参考值相对其均值的变异比较。因此，较小总体误差、较高覆盖与较好空间一致性需要分别判断。评价脚本本身未剔除永久水体，可能存在的前序掩膜处理仍属于待核实的产物来源。上述协议将水深产物比较与洪水范围检测区分开来。
 
-\begin{table*}[htbp]
-  \centering
-  \caption{郑州和涿州评估场景城市洪水范围勾画的定量比较。}
-  \label{tab:main_comparison}
-  \scriptsize
-  \setlength{\tabcolsep}{4pt}
-  \begin{adjustbox}{width=\textwidth}
-    \begin{tabular}{lcccccccccc}
-      \toprule
-      \multirow{2}{*}{方法} & \multicolumn{5}{c}{郑州} & \multicolumn{5}{c}{涿州} \\
-      \cmidrule(lr){2-6}\cmidrule(lr){7-11}
-      & IoU$\uparrow$ & F1$\uparrow$ & 精确率$\uparrow$ & 召回率$\uparrow$ & OA$\uparrow$
-      & IoU$\uparrow$ & F1$\uparrow$ & 精确率$\uparrow$ & 召回率$\uparrow$ & OA$\uparrow$ \\
-      \midrule
-      FC-Siam-Diff & 62.59 & 76.99 & 80.05 & 74.16 & 99.41 & 70.87 & 82.95 & 86.95 & 79.30 & 97.11 \\
-      HANet & 49.10 & 65.86 & 61.86 & 70.41 & 99.03 & 62.95 & 77.26 & 81.26 & 73.63 & 96.15 \\
-      SNUNet & 50.39 & 67.01 & 71.01 & 63.44 & 99.17 & 70.09 & 82.41 & 86.41 & 78.77 & 97.02 \\
-      BIT & 54.72 & 70.73 & 74.73 & 67.14 & 99.26 & 72.23 & 83.88 & 87.88 & 80.23 & 97.26 \\
-      ChangeFormer & 50.99 & 67.54 & 71.54 & 63.97 & 99.18 & 67.21 & 80.39 & 84.39 & 76.75 & 96.68 \\
-      CGNet & 62.76 & 77.12 & 73.12 & 81.58 & 99.35 & 82.20 & 90.23 & 94.23 & 86.56 & 98.34 \\
-      TTP & 54.44 & 70.50 & 74.50 & 66.91 & 99.25 & 79.59 & 88.63 & 92.63 & 84.96 & 98.07 \\
-      ChangeDINO & 33.65 & 50.35 & 54.17 & 47.03 & 98.76 & 71.72 & 83.53 & 87.53 & 79.88 & 97.20 \\
-      \textbf{本文方法（HA-CQI）} & \textbf{73.38} & \textbf{84.65} & \textbf{80.65} & \textbf{89.06} & \textbf{99.57} & \textbf{86.23} & \textbf{92.61} & \textbf{96.61} & \textbf{88.92} & \textbf{98.74} \\
-      \bottomrule
-    \end{tabular}
-  \end{adjustbox}
-\end{table*}
+\subsection{洪水变化定量比较}
 
-\subsection{城市洪水范围制图评估}
+为比较双时相洪水范围的识别表现，表~\ref{tab:main_comparison}汇总了郑州和涿州九种方法的P、R、F1、IoU与OA。表中数值转录自作者提供并确认为实测的20260902结果记录，未对原始预测进行重新评价。以下以IoU与F1为主要重叠指标，并结合P和R分析两景的误报与遗漏取舍；所有数值比较均限定于该表所列方法和结果。
 
-本文通过定量比较和空间 ROI 切片评估 HA-CQI 的城市洪水范围制图能力。为评估所提出框架在复杂城市洪水场景中的有效性，将其与具有代表性的变化检测方法进行比较，包括 FC-Siam-Diff \citep{daudt2018fcsiam}、HANet、SNUNet \citep{fang2022snunet}、BIT \citep{chen2022bit}、ChangeFormer \citep{bandara2022changeformer}、CGNet \citep{han2023change}、TTP \citep{chen2023ttp} 和 ChangeDINO \citep{cheng2025changedino}。表~\ref{tab:main_comparison} 给出郑州和涿州评估场景的定量结果。HA-CQI 在两个场景的 IoU、F1、Precision、Recall 和 OA 上均取得最高值：郑州分别为 73.38、84.65、80.65、89.06 和 99.57，涿州分别为 86.23、92.61、96.61、88.92 和 98.74。
+\input{tables/table_main_comparison.tex}
 
-与表现最强的竞争基线相比，HA-CQI 的优势主要体现在复杂洪水边界和低对比度淹没区域的整体召回能力与区域重叠质量。在郑州，HA-CQI 的 IoU、F1、Precision、Recall 和 OA 相比最强基线分别提高 10.62、7.53、0.60、7.48 和 0.16 个百分点；其中 IoU、F1 和 Recall 的增益更为显著，而 Precision 和 OA 的增幅较小。在涿州，CGNet 是表现最强的竞争基线，HA-CQI 在上述五项指标上仍分别保持 4.03、2.38、2.38、2.36 和 0.40 个百分点的提升。这些结果表明，HA 建立的可比特征、CQI 学习的多尺度变化表征以及 Mask2Former 预测头给出的最终掩膜预测共同提高了复杂城市洪水范围制图的稳定性。
+郑州结果中的主要特点是较高的洪水召回与较好的整体重叠同时出现。HarmoSSM的IoU为74.23\%、F1为85.21\%，分别高于CGNet的67.50\%和80.60\%达6.73和4.61个百分点。其Recall为91.59\%，接近HANet的92.74\%，而Precision为79.66\%，高于HANet的58.08\%。相比之下，ChangeFormer虽具有97.95\%的Precision，但Recall为49.24\%。这些表列数值说明，单独提高预测洪水的正确比例或覆盖比例并不保证较高重叠；HarmoSSM在保留较多参考洪水的同时控制了相对于高召回比较方法的误报，从而形成较高的F1与IoU。
 
-图~\ref{fig:qual_zhengzhou} 展示郑州的定性比较，其切片位置对应图~\ref{fig:gf3_eval_data}(a1) 中标示的 ROI1--ROI6。白色、蓝色、红色和黑色分别表示 TP、FN、FP 和 TN。郑州场景包含小型孤立积水斑块、道路附近低洼区域、圆形或规则水体边界以及线状河流/道路结构。这些条件容易导致低对比度区域漏检，或沿强散射边缘出现误报。在图~\ref{fig:qual_zhengzhou} 中，多数基线在小斑块和狭窄淹没区域周边出现大量蓝色 FN 像元，表明对局部微弱变化的召回能力不足。一些方法还在建筑边缘、道路或永久水体附近产生红色 FP 像元，反映出对城市伪变化的抑制不稳定。相比之下，HA-CQI 在多个切片中形成更加连续的白色 TP 区域，同时减少蓝色漏检和红色误报，说明协调对齐和变化查询交互有助于在复杂城市散射背景下保持洪水边界和小尺度淹没模式。
+涿州结果则表现为较高Precision条件下的覆盖差异。HarmoSSM的IoU和F1分别为86.71\%和92.88\%，比CGNet高4.31和2.53个百分点；其Precision为97.58\%，Recall为88.61\%。ChangeFormer的Precision更高，为99.39\%，但Recall为75.87\%；CGNet的Precision和Recall分别为93.08\%与87.78\%。因此，在该结果表中，HarmoSSM的重叠表现对应于较高预测正确比例与较充分参考洪水覆盖的共同作用，而非单项Precision达到最高。其OA为98.84\%，与前景指标方向一致，但OA本身不足以替代洪水区域评价。
+
+两景表列结果均将HarmoSSM列为IoU与F1最高的方法，但Precision和Recall的相对位置随场景变化。郑州更突出召回与误报的权衡，涿州则体现较高Precision条件下的覆盖能力。这些差异与洪水制图需要同时组织区域变化信息和局部定位线索的任务相联系，为后续空间图示分析提供量化背景；当前比较不能分离HCE、OSCD或某个内部处理的独立贡献，也不建立统计显著性或独立跨传感器泛化结论。
+
+\subsection{复杂场景定性比较}
+
+定性比较用于观察总体指标难以定位的空间误差。图~\ref{fig:qual_zhengzhou}与图~\ref{fig:qual_zhuozhou}分别展示郑州和涿州的灾前、灾后影像、参考图及存档输出。相对于参考图，白色为TP、蓝色为FN、红色为FP、黑色为TN。输出列与具体方法及检查点的对应尚未核实，因此以下按可定位的场景结构和误差现象解释制图需求，不将主表方法顺序直接套用于图中列号。
+
+郑州图示位置的主要问题是小片与窄条淹没在建成区和线性地物背景中的保留。参考列上部各行包含孤立斑块，下部各行可见由较少像元构成的狭窄结构；不同输出面板在其周边呈现位置不一的蓝色遗漏与红色误报。少量像元的遗漏即可削弱局部区域的表达，而邻近背景的误报又会扩大预测范围，这使召回与精确定位需要同时考虑。该现象解释了第4.2节为何结合P、R与重叠指标判断结果，但选定面板不能确定可检测宽度或弱对比专项精度。
 
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{figure/Figure7.jpg}
-  \caption{利用图~\ref{fig:gf3_eval_data} 标示的 ROI 切片进行郑州定性比较。（a）灾前 SAR；（b）灾后 SAR；（c）真实标签；（d）FC-Siam-Diff；（e）HANet；（f）SNUNet；（g）BIT；（h）ChangeFormer；（i）CGNet；（j）TTP；（k）ChangeDINO；（l）本文方法（HA-CQI）。对于（d）--（l），白色、蓝色、红色和黑色分别表示 TP、FN、FP 和 TN。}
+  \includegraphics[width=\textwidth,height=.76\textheight,keepaspectratio]{figure/figure7.jpg}
+  \caption{郑州洪水变化检测结果：（a）灾前SAR；（b）灾后SAR；（c）参考掩膜；（d）--（l）预测结果。白、蓝、红、黑分别表示TP、FN、FP和TN。}
   \label{fig:qual_zhengzhou}
 \end{figure*}
 
-
-图~\ref{fig:qual_zhuozhou} 展示涿州的空间切片比较，其切片位置对应图~\ref{fig:gf3_eval_data}(b1) 中标示的 ROI1--ROI6。该场景包含更大范围的连通淹没区、临河区域、农田/建成区混合背景和破碎边界。在图~\ref{fig:qual_zhuozhou} 中，一些基线在大型淹没斑块内部仍保留明显的蓝色 FN 像元，将连通水体分割开来；另一些方法则沿田块边界、道路和河流边缘产生红色 FP 像元，表现出过度扩张或伪变化响应。HA-CQI 在连通淹没区域内保留了更高比例的白色 TP 像元，并在边界过渡区同时减少红色 FP 和蓝色 FN 像元，使其预测更接近标签的空间形态。这说明 HA-CQI 不仅提高了总体定量指标，还增强了复杂城乡洪水结构中的淹没连通性和边界一致性。
-
-\subsection{DEM 约束水深评估}
-
-完成洪水范围提取后，本文进一步比较 CFDepth 与 FwDET 在变化定义洪水支撑区内生成 DEM 约束水深估计的能力。两种方法均以 HA-CQI 提取的新增淹没洪水支撑区和 FABDEM 为输入。为完整评估水深结果，本节从三个方面开展分析：郑州和涿州的空间水深分布及有效水深覆盖率；与图~\ref{fig:dataset} 中现场照片参考点 P1--P8 的区间一致性；以及由 WSE 梯度 ECDF 诊断的局部 WSE 一致性。
-
-\subsubsection{水深估计的空间比较}
-
-图~\ref{fig:depth_zhengzhou} 和图~\ref{fig:depth_zhuozhou} 分别展示郑州和涿州的一阶水深估计。各图中，（a）为 FwDET，（b）为 CFDepth；白色像元表示洪水支撑区内未返回有效正水深的位置。两种方法均使用 HA-CQI 提取的新增淹没洪水支撑区和 FABDEM。在此输入条件下，变化定义洪水支撑区仅表示新增淹没区域，通常缺少永久水体和部分低高程连接。因此，FwDET 更容易在永久水体、河流边缘和局部低洼连接附近产生漏估或未解析像元。相比之下，CFDepth 通过平滑外边界水面和最近可达边界传播，提高连通分量内的有效水深覆盖，同时避免跨越不连通淹没斑块之间的背景区域进行强制连接。
+涿州图示位置同时要求连续区域覆盖与局部分隔。参考面板第二行呈现较大淹没区域，后续各行展示田块边缘、居民地附近的破碎区域及更细的分隔。不同输出在内部覆盖与边缘误差上的差异说明，区域判别需要落实到具体的空间范围：填补内部遗漏与保留真实分隔并非同一要求。结合郑州示例，两景将区域上下文与局部位置线索置于同一洪水重建任务中；这些局部观察为解释场景需求提供依据，不构成全景形态分组统计或模块因果验证。
 
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\textwidth,height=0.78\textheight,keepaspectratio]{figure/Figure8.jpg}
-  \caption{利用图~\ref{fig:gf3_eval_data} 标示的 ROI 切片进行涿州定性比较。（a）灾前 SAR；（b）灾后 SAR；（c）真实标签；（d）FC-Siam-Diff；（e）HANet；（f）SNUNet；（g）BIT；（h）ChangeFormer；（i）CGNet；（j）TTP；（k）ChangeDINO；（l）本文方法（HA-CQI）。对于（d）--（l），白色、蓝色、红色和黑色分别表示 TP、FN、FP 和 TN。}
+  \includegraphics[width=\textwidth,height=.76\textheight,keepaspectratio]{figure/figure8.jpg}
+  \caption{涿州洪水变化检测结果：（a）灾前SAR；（b）灾后SAR；（c）参考掩膜；（d）--（l）预测结果。白、蓝、红、黑分别表示TP、FN、FP和TN。}
   \label{fig:qual_zhuozhou}
 \end{figure*}
 
+\subsection{条件水深估算结果}
+
+水深结果从空间可用性和参考域内误差两个方面评价给定范围内的条件估计。GF3示例用于观察既有水深产物的空间分布，Brazos比较则使用独立的参考栅格及共同有效像元计算定量指标。两类资料回答的问题不同，均不构成HarmoSSM检测与CFDepth估深整条流程的联合精度验证。
+
+图~\ref{fig:depth_zhengzhou}和图~\ref{fig:depth_zhuozhou}展示标为FwDET与CFDepth的GF3水深产物，其着色覆盖与未解析区域有所差异。能否输出深度同时取决于给定支撑区、有效DEM及可用边界约束，因此图示差异首先反映产物提供信息的位置。支撑掩膜与生成版本尚未完整对应，不据这些图件计算覆盖率、平滑性或照片验证精度。图~\ref{fig:wse_gradient_cdf}作为存档WSE梯度诊断供版面预览，统计来源未核验，不用于量化结论。
+
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figure/Figure9.jpg}
-  \caption{在 HA-CQI 提取的洪水支撑区内进行郑州洪水水深比较。（a）FwDET；（b）CFDepth。插图 p1--p4 对应图~\ref{fig:dataset} 中的现场照片参考点 P1--P4；白色像元表示没有有效正水深的漏估或未解析位置。}
+  \includegraphics[width=\textwidth,height=.69\textheight,keepaspectratio]{figure/figure9.jpg}
+  \caption{郑州洪水水深估算结果：（a）FwDET；（b）CFDepth。局部图p1--p4对应图~\ref{fig:dataset}中的照片位置，白色表示未解析水深区域。}
   \label{fig:depth_zhengzhou}
 \end{figure*}
 
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\textwidth,height=0.72\textheight,keepaspectratio]{figure/Figure10.jpg}
-  \caption{在 HA-CQI 提取的洪水支撑区内进行涿州洪水水深比较。（a）FwDET；（b）CFDepth。插图 p5--p8 对应图~\ref{fig:dataset} 中的现场照片参考点 P5--P8；白色像元表示没有有效正水深的漏估或未解析位置。}
+  \includegraphics[width=\textwidth,height=.69\textheight,keepaspectratio]{figure/figure10.jpg}
+  \caption{涿州洪水水深估算结果：（a）FwDET；（b）CFDepth。局部图p5--p8对应图~\ref{fig:dataset}中的照片位置，白色表示未解析水深区域。}
   \label{fig:depth_zhuozhou}
 \end{figure*}
 
-表~\ref{tab:valid_depth_ratio} 进一步量化两种方法在相同洪水支撑区内的有效水深覆盖率。由于变化定义洪水支撑区仅表示新增淹没区域，且缺少永久水体和部分低高程连接，直接使用常规边界高程传播更容易产生水深覆盖空缺。CFDepth 通过平滑外边界水面和最近可达边界传播缓解了这一问题。在郑州，有效水深覆盖率由 FwDET 的 74.65\% 提高至 CFDepth 的 97.83\%；在涿州，该指标由 65.92\% 提高至 96.38\%。这些结果表明，在变化定义洪水范围输入条件下，CFDepth 能够提供更完整的有效水深覆盖。
-
-\begin{table}[!t]
-  \centering
-  \caption{SAR 提取洪水支撑区内的有效水深覆盖率。}
-  \label{tab:valid_depth_ratio}
-  \scriptsize
-  \setlength{\tabcolsep}{8pt}
-  \begin{tabular}{lcc}
-    \toprule
-    研究区 & FwDET (\%) & CFDepth (\%) \\
-    \midrule
-    郑州 & 74.65 & 97.83 \\
-    涿州 & 65.92 & 96.38 \\
-    \bottomrule
-  \end{tabular}
-\end{table}
-
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\textwidth,height=0.45\textheight,keepaspectratio]{figure/Figure11.jpg}
-  \caption{FwDET 与 CFDepth 的 WSE 梯度经验累积分布函数。WSE 按 \(S=Z+d\) 重建，其中 \(Z\) 为 DEM 高程，\(d\) 为估计水深。WSE 梯度以千分比表示。各方法的 ECDF 均基于其有效 WSE 梯度像元计算，用于诊断连通洪水支撑分量内的局部 WSE 变化；有效水深覆盖率则在表~\ref{tab:valid_depth_ratio} 中单独评估。}
+  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/figure11.jpg}
+  \caption{FwDET与CFDepth水面高程（WSE）梯度的累积分布。虚线表示对应分布的中位数。}
   \label{fig:wse_gradient_cdf}
 \end{figure*}
 
-\subsubsection{现场照片参考验证}
+Brazos产物比较表明，覆盖范围与共同域误差可以呈现一致方向的差异（表~\ref{tab:cfdepth_validation}；图~\ref{fig:usgs_depth_validation}）。CFDepth标记产物的正水深比例为95.810\%，FwDET为41.910\%；在共同有效像元上，前者的MAE为1.016 m、RMSE为1.416 m，后者分别为1.673和2.454 m。Bias分别为0.316和1.030 m，均为正值。由此可见，CFDepth标记产物在该参考域内提供了更广的正水深覆盖，并在两者均输出有效深度的位置具有较低的绝对误差、平方误差及正偏差；覆盖增加本身不参与共同域误差的计算。
 
-图~\ref{fig:dataset} 中标示的现场照片参考点 P1--P8 提供了独立于 DEM 计算过程的区间参考，用于检验估计水深等级是否与观测到的淹没现象一致。水深区间根据照片中可识别的汽车、行人和交通标志等物体估计，并与图~\ref{fig:depth_zhengzhou} 和图~\ref{fig:depth_zhuozhou} 中相应点邻域的水深等级进行比较。
+\input{tables/table_cfdepth_validation.tex}
 
-比较结果表明，郑州 P1--P4 的估计水深分别为 0.4--1.0 m、0.7--1.0 m、0.4--0.8 m 和 0.6--1.0 m；涿州 P5--P8 的估计水深分别为 1.8--2.0 m、1.8--2.0 m、1.8--2.0 m 和 1.5--1.8 m。这些点周边的 CFDepth 水深等级总体落在相应区间或相邻等级内，既反映了郑州的浅至中等淹没，也反映了涿州的连通深水淹没。相比之下，FwDET 在部分参考点附近仍存在漏估或未解析像元，降低了点尺度水深的可读性。这些结果表明，P1--P8 为 CFDepth 水深等级提供了独立的区间一致性检验。
+较低总体误差并未同时带来充分的水深空间一致性。CFDepth与FwDET的Pearson \(r^2\)分别为0.150和0.053，NSE分别为\(-1.828\)和\(-7.493\)。较低相关与负NSE说明，产物对参考水深变化的刻画仍有限；特别是负NSE表示其平方误差高于以共同域参考均值作恒定预测的误差。因此，该比较支持所提供产物之间的相对覆盖和误差差异，同时限制其作为精细水深分布的解释。评价栅格与当前实现的版本链尚未闭合，不能将这些差异归因于CFDepth的具体处理或推广为城市实测水深精度。
 
-\subsubsection{WSE 一致性诊断}
-
-图~\ref{fig:wse_gradient_cdf} 进一步比较两种方法重建水面高程场的 WSE 梯度分布。WSE 梯度 ECDF 根据各方法的有效 WSE 梯度像元计算，反映连通洪水支撑分量内的局部水面不连续性。在两个研究区中，CFDepth 曲线相较 FwDET 均明显向左上方移动，表明低 WSE 梯度区间内的像元比例更高。具体而言，郑州的 WSE 梯度中位数由 FwDET 的 30.44 permille 降至 CFDepth 的 5.98 permille，降幅为 80.4\%；涿州则由 33.63 permille 降至 3.23 permille，降幅为 90.4\%。这些结果表明，CFDepth 减少了边界高程失配向变化定义洪水支撑区内部传播所造成的过大局部梯度。
-
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth,height=.43\textheight,keepaspectratio]{figure/figure12.jpg}
+  \caption{Brazos河流泛滥平原的水深空间分布：（a）参考水深；（b）CFDepth；（c）FwDET。}
+  \label{fig:usgs_depth_validation}
+\end{figure*}
 
 \section{讨论}
 
-实验结果表明，双时相 SAR 洪水范围制图与 DEM 约束一阶水深估计可以支撑城市洪水的连续应急解译。在郑州和涿州两个城市案例中，HA-CQI 均优于具有代表性的变化检测基线。在此基础上，CFDepth 将 HA-CQI 提取的变化定义洪水支撑区与 DEM 约束相结合，使二值洪水范围图能够进一步表达已识别新增淹没区域内的垂向差异。八个现场照片参考点为水深等级提供了区间参考，并增强了水深结果的可解释性。同时，复杂城市环境中的 SAR 洪水范围变化检测仍会受到建筑阴影、叠掩、永久水体邻近效应和残余配准误差的影响。CFDepth 还取决于 DEM 对城市地形的表征能力，以及变化定义洪水范围能否完整表达新增淹没区域及其低高程连接。FABDEM 的垂向误差、复杂城市地形和雨水排水细节均可能影响局部水面近似。因此，本研究中的现场照片比较应解释为基于视觉参考物的区间一致性验证，而不是利用水尺、水位站或现场水深测量开展的独立精度验证。有效水深覆盖率和 WSE 梯度 ECDF 主要诊断连通分量内的有效水深覆盖与局部水面一致性。
+\subsection{景观相关的制图与解释}
 
-未来工作可从数据质量、模型鲁棒性和验证三个方面进一步提高这一“范围—水深”框架的实用性。可引入更高质量的 UAV/LiDAR DTM、局部高程校正，或城市道路、涵洞和桥梁信息，以改善 DEM 对复杂城市微地形和边界过渡区的表征 \citep{trepekli2022uavLidarUrbanFlood}。此外，可利用灾后众源照片、有限现场水深测量、水位记录以及多城市多事件样本开展交叉验证和不确定性分析 \citep{hultquist2020crowdsourcedFloodDepth,teng2017floodInundationUncertainty}。通过这些扩展，未来研究有望在保持快速制图优势的同时，为不同城市形态、成像条件和洪水事件下的应急解译提供更稳健的洪水空间信息。
+两景反映了不同的洪水空间制图需求。在郑州面板中，建筑或线性地物旁的一处淹没可能仅由少量像元表示；涿州则需要在保留区域覆盖的同时分辨田块边缘与破碎过渡。同一场景因而可能同时需要上下文判断和细节勾画。这些观察为兼顾两类空间尺度提供动机，但选定窗口不能确定各类困难在全景中的出现频率。
+
+HarmoSSM先协调成对特征基础，再进行变化交互，并在密集重建中保留浅层细节，以此处理上述需求。有向差保留特征变化的正负方向，两时相状态则为变化解释提供背景。这些属于设计性质，不等于已经测量了伪变化减少或狭窄区域召回提高。AWCA-Net与RAFNet也通过不同处理策略应对异质洪水响应 \citep{du2026high,li2026rafnet}。本文相关差异在于针对二值变化目标组织信息的方式；不能仅凭结构区别或视觉示例推断组件收益。
+
+\subsection{水深信息的条件价值}
+
+水深补充了淹没范围内部的信息，其解释取决于可用约束。存在有效干湿边界与适宜地形数据时，边界推得的WSE具有应用价值；永久水体界面及未观测边缘会削弱这些约束。FwDET、FLEXTH和RS-FloodXDepth已处理相关边界与范围限制 \citep{cohen2019floodwater,betterle2024water,tian2026floodxdepth}。CFDepth在给定支撑区内采用筛选、受约束初始化和局部连续性细化，得到满足地形下界的一阶水面，但未约束水量平衡或实际水力联系。
+
+Brazos产物比较说明，输出覆盖与水深精度需要分别评价。更多正水深像元不必然意味着水深更准确，共同有效域内误差降低也不能证明空间格局准确。NSE为负表示在该共同有效集合上，平方误差高于直接预测其参考均值的误差。即使总体误差低于比较产物，这一结果仍限制定量解释。生成版本来源尚未闭合，也使这些差异不能归因于CFDepth的某个具体处理。
+
+\subsection{适用范围与局限}
+
+SAR可观测性仍受物理条件限制。建筑几何、叠掩、阴影、植被、粗糙度及获取时机可能遮蔽洪水或产生类似非洪水变化的响应 \citep{wagner2026gfm,tsyganskaya2018vegetation}。特征校准不能保证恢复未被观测到的水体信号。标签分辨率及不确定的事件时相同样影响新增淹没的认定 \citep{zhang2025floodplanet}。训练评价重合与预测来源尚未闭合，因而不能得出独立跨传感器结论；数据集间泛化需要超出传感器名称变化本身的证据 \citep{portales2025flood}。
+
+CFDepth还受到DEM空间和垂直精度的限制。狭窄SAR检测区域可能仅占地形像元的一部分，最大值聚合保留支撑区并不恢复亚像元地形。范围错误会改变估深域与可用边界高程，这是方法本身的依赖关系，不是已测得的扰动结果。已有针对加龙河洪水的处理流程研究也表明，输入范围及参数选择会影响水深估算 \citep{travert2026uncertainty}；其敏感性大小不能直接用于本文。桥梁、涵洞、排水设施及影像上不连通区域之间的交换均未显式表示。缺少可达锚点的像元采用相对地形的回退值，应与具有锚点约束的估计区分。结合尚未核实的照片时相与参考产物来源，这些限制使水深结果只能作为条件信息，不能等同于实测洪水水深或事件动力过程。
 
 \section{结论}
 
-本研究提出了一个面向双时相 SAR 影像的“范围—水深”城市洪水制图框架，以应对复杂城市环境中 SAR 洪水范围识别困难以及变化检测洪水范围输入条件下水深估计不稳定的问题。该框架首先通过 HA-CQI 开展城市洪水范围制图，其中协调对齐提高灾前与灾后特征的可比性，变化查询交互建模与洪水相关的跨时相变化。随后，CFDepth 将 HA-CQI 输出的变化定义洪水支撑区与 DEM 约束相结合，在连通分量内生成用于快速应急解译的一阶水深近似。实验表明，在郑州和涿州城市洪水案例中，HA-CQI 优于具有代表性的变化检测基线，IoU 分别达到 73.38\% 和 86.23\%，并能更加稳定地保持破碎、狭窄和复杂边界淹没模式。水深诊断进一步表明，在相同新增淹没洪水支撑区和 DEM 约束下，与 FwDET 相比，CFDepth 在连通分量内提供了更完整的水深覆盖和更少的局部 WSE 不连续。郑州和涿州的有效水深覆盖率分别提高 23.18 和 30.46 个百分点，WSE 梯度中位数分别降低 80.4\% 和 90.4\%，且八个现场照片参考点周边的水深等级与照片估计水深区间总体一致。未来工作将整合高精度 DTM、现场观测和不确定性分析，以提高该框架在不同城市洪水场景下的水文可解释性。
+HarmoSSM通过双时相SAR可比表征、状态与变化证据，以及区域上下文和局部重建的结合，处理复杂景观中的新增淹没识别。CFDepth进一步利用筛选后的地形约束，将给定淹没范围扩展为一阶水深场。该方法将新增淹没的位置与范围内部的条件信息联系起来，同时区分两者的观测和评价要求。
 
-\section*{Acknowledgements}
+郑州与涿州面板呈现了局部、狭窄、破碎及大范围淹没的共存，支持研究问题的相关性，但不能证明形态专项改进或组件作用。在单独的Brazos产物比较中，更广的正水深覆盖和更低的总体误差，与较低相关性及负NSE同时存在。这些发现限于图示空间案例及给定水深产物，不能确立独立传感器迁移、城市实测水深精度或水动力真实性。
+
+\section*{致谢}
 
 \begin{sloppypar}
-This work was supported by the National Key R\&D Program of China (Grant No. 2024YFC3808602). The authors thank Prof. Shuliang Zhang from Nanjing Normal University for his valuable assistance with this research.
+本研究得到国家重点研发计划（项目编号：2024YFC3808602）资助。作者感谢南京师范大学张书亮教授对本研究提供的宝贵帮助。
 \end{sloppypar}
 
 \bibliographystyle{elsarticle-harv}

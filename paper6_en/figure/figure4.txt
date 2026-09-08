@@ -1,0 +1,69 @@
+图4：ChatGPT网页端image2紧凑双层CQI计算图提示词
+
+一、使用说明
+对应方法3.2节HCE内部的查询交互，展开一个尺度的CQI。采用左侧成对输入、上层查询更新、下层空间更新及右侧密集输出的紧凑布局，替换原约2.2:1单行主线方案。图4已完成一轮重绘，当前JPG为局部连接待修正的工作图；本轮不生成或替换JPG。将第二部分完整复制到网页端即可独立使用；可同时上传三张参考图，参考职责见第三部分。
+
+二、英文主提示词（完整复制）
+Create one compact scientific deep-learning module diagram for a remote-sensing paper. Use a white landscape canvas approximately 1.6:1, organized as two connected computational tiers within one figure. This is a single-scale Change Query Interaction computation, not a whole-network architecture. Do not stretch the entire sequence into one horizontal row.
+
+VISUAL LANGUAGE
+Use Times New Roman-like text, italic mathematical feature symbols, thin black orthogonal arrows, short operator labels, and restrained pastel fills. Features are thin axonometric slabs; tokens and queries are segmented strips. Pre-event features are pale blue, post-event features pale orange, learned and updated queries pale green, and fused spatial features and tokens neutral gray. Use small rectangular operator plates, C in a circle for concatenation, and circled plus for addition. Query segments use one consistent green family, not class-coded multicolor blocks. Segment counts are illustrative, not the actual number of queries.
+
+A faint local tint may distinguish the upper query path and lower spatial path. Do not enclose them in three independent stage panels, add large section banners, duplicate inputs at tier boundaries, or use large rounded boxes containing paragraphs. Keep all mathematical labels and the compact legend horizontal. No decorative shadows, glossy shading, realistic SAR patches, synthetic predictions, attention heatmaps, or full attention equations. Attention is represented by compact MHA plates with explicit Q and K/V ports, without expanding internal projection matrices.
+
+LAYOUT
+Use the left portion for paired-feature construction and Z/T. Place the first attention and query residual in the upper middle. Put the second attention directly below the updated-query output, so Q₁ reaches its K/V port through a short downward connector. Continue the spatial updates in the lower tier toward the right. Stagger narrow FFN, normalization, and reshape plates locally if necessary to fit the canvas, rather than shrinking text or widening the whole figure. Reserve a clear outer channel below the calculation for Z's residual and a compact legend beneath it. Keep the dense output at the right, without a large unused lower region.
+
+INPUT CONSTRUCTION
+At the left draw feature slabs labeled “Xᴀ” and “Xʙ”. Both feed C directly. Also connect both to a subtraction operation with explicitly ordered output “Xʙ − Xᴀ”. Branch this difference through absolute value to produce “|Xʙ − Xᴀ|”. The directed difference and absolute difference also enter C. Thus C has exactly four feature inputs: pre, post, post minus pre, and absolute difference.
+C → “Pair proj” → feature slab “Z” → “Flatten” → token strip “T”. Pair proj is convolutional pair projection, not MLP. Draw Z once. Branch Z into the outer residual channel, terminating only at the final dense addition before output convolution.
+
+UPPER TIER: QUERY UPDATE
+Place one learnable query strip labeled “Q₀” above the spatial token path. The compact “MHA₁” plate receives Q₀ at port “Q” and original T at port “K/V”. Its output enters a circled plus. A local residual directly from Q₀ enters the other input of this plus. The sum passes through “LNq”, producing the updated strip “Q₁”. A small optional annotation reads “Tokens → queries”. Q₁ is the updated version of Q₀, not a second independent learned bank.
+
+LOWER TIER: SPATIAL UPDATE
+Original T branches from the same source used above and enters “MHA₂” at port “Q”. Updated Q₁ descends from the upper tier into MHA₂ at port “K/V”. The MHA₂ output enters a circled plus whose other input is a local residual from ORIGINAL T. The sum passes through “LNt”, producing “T₁”. A small optional annotation reads “Queries → tokens”. Keep the original-T connector visible; do not substitute Q₁ or an updated token for it.
+
+T₁ splits into a path through “FFN” and a short bypass to another circled plus. FFN supplies the other input of this plus. Pass the sum through a second “LNt”, then “Reshape”. Both LNt occurrences use the same normalization module. Place the short annotation “Shared LNt” near them, without a data-flow arrow between the two normalization plates. LNq is separate from LNt.
+
+DENSE OUTPUT
+Reshape output and the outer residual from Z enter the final circled plus. Continue through “Conv”, then “CBAM”, then the output feature slab “Dᵢ”. This is a dense change feature, not a predicted mask or query classification. The Z residual ends BEFORE Conv and CBAM, never after them.
+
+REFERENCE AND LEGEND RULES
+If style references are attached, borrow only their compact tiered layout, short vertical links, feature slabs, query strips, operator symbols, and restrained local backgrounds. Do not copy the reference architecture or add low-rank factorization, Bridge, Extractor, Fourier processing, matching, or classification mechanisms. This prompt is complete without the references and requires no local file access.
+
+Use one compact legend containing “C: concatenation”, “⊕: addition”, “MHA: multi-head attention”, “LN: layer normalization”, “FFN: feed-forward network”, “Pair proj: convolutional pair projection”, and “A/B: pre/post”. Include “One scale shown; five independent CQI blocks” once. Do not draw cross-scale communication or shared query banks across scales. Do not add a title or figure number inside the image.
+
+EDGE CHECK BEFORE RENDERING
+Verify the exact sources and destinations:
+1. T → MHA₁ K/V; Q₀ → MHA₁ Q.
+2. MHA₁ output + Q₀ → LNq → Q₁.
+3. T → MHA₂ Q; Q₁ → MHA₂ K/V.
+4. MHA₂ output + original T → LNt → T₁.
+5. FFN(T₁) + T₁ → the second shared LNt → Reshape.
+6. Reshape output + Z → Conv → CBAM → Dᵢ.
+These are four residual additions: query, token, FFN, and dense feature. Keep each start and endpoint explicit. Use filled junction dots only at genuine branches; crossings without junctions must be rerouted. Retain short local loops and a clear outer dense residual. Deliver one image with readable labels and balanced use of both tiers.
+
+三、参考图使用说明
+- 参考图片.png：参考上下层布局、短距离垂直连接和紧凑尺度；不采用其ViT、Bridge和Extractor结构。
+- 参考图片2.png：参考特征薄片、短算子、局部残差及轻量浅底强调；不采用多模块拼图、频域处理或匹配流程。
+- 参考图片3.png：主要视觉参考，借鉴查询条带、运算符号、端口和清楚的残差；不引入低秩查询生成或其他模块。
+参考图不能覆盖第二部分的计算关系。三图可随主提示词上传，模型不需要读取本地路径；未上传时主提示词仍独立完整。旧版单行横向主线要求失效。
+
+四、英文局部修订提示词
+Edit only the attention ports, residual connections, and their local routing in the existing two-tier CQI diagram. Freeze the accepted canvas, upper/lower arrangement, typography, feature glyphs, colors, and unaffected operator positions.
+MHA₁: Q₀ supplies Q, original T supplies K/V; its output adds Q₀ before LNq, producing Q₁.
+MHA₂: original T supplies Q, updated Q₁ descends from the upper tier to K/V; its output adds original T before LNt, producing T₁.
+Add T₁ around FFN before the second shared LNt. Add Z after Reshape and before Conv and CBAM. Keep LNq separate from the shared LNt module. Route the Z residual outside the computation, away from attention nodes and text.
+Remove only incorrect arrows and replace them with these exact connections. Do not expand MHA internals, add duplicate inputs, flatten the layout into one row, or introduce new mechanisms. Preserve all correct branches and keep four residual additions visible.
+
+五、连接与版面验收
+已按当前CQI代码核对两次注意力、四条残差、原始T的分支及共享LNt关系。生成后逐项执行英文EDGE CHECK，再缩至论文宽度检查字号、拥挤、上下层留白、图例和箭头。视觉参考不能作为算法依据；条带段数不代表查询数量或洪水类别。两轮针对性修订仍无法纠正的连接停止采用该输出。当前已完成一轮重绘，重复输入连接尚待修正和验收，不运行LaTeX构建。
+这是方法说明图，不是实验图或图文摘要。将来实际使用生成图时，记录网页显示的工具/模型版本、生成日期、原提示词及修订记录，并在图注和文章AI声明披露。当前版本信息不预填，不宣称已经完成生成或作者审核。
+
+六、当前工作图定点修正
+Edit only the input connections entering C. Remove the duplicated direct X_B-to-C edge so that C has exactly four inputs: X_A, X_B, X_B minus X_A, and its absolute difference. Keep both connected computation tiers, Q0/Q1, original T, all four residual additions, shared LNt, and dense output unchanged. This is the CQI computation within HCE, not a separate contribution or complete detector. The dense pair feature is Z_i and its flattened sequence is T_i in the manuscript; the single-scale figure may omit i except on D_i.
+
+
+方法正文与图注同步（2026-09-08）
+两稿3.2区分密集Z_i与展平T_i，明确查询汇聚、上下文返回、残差FFN与密集残差。图注说明四路构建、查询与token更新及D_i输出，五尺度各自独立。既有重复X_B→C直连仍需删除，最终成对拼接只接灾前、灾后、有向差、绝对差四路；LN_q与LN_t分开，token更新及FFN后的LN_t复用。本轮仅更新文字，不修改JPG；现图仍为局部连线待修的工作图。

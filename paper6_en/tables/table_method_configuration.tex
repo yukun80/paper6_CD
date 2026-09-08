@@ -1,0 +1,31 @@
+\begin{table*}[htbp]
+\centering
+\captionsetup{name=Table}
+\caption{Implementation settings for HarmoSSM and CFDepth.}
+\label{tab:method_config}
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.08}
+\begin{tabularx}{\linewidth}{@{}p{0.23\linewidth}X@{}}
+\toprule
+Processing stage & Configuration \\
+\midrule
+\multicolumn{2}{@{}l}{\textit{HarmoSSM representation and reconstruction}} \\
+Shared encoder & EfficientNet-B2; FPN: 128 channels at P1--P5 \\
+Semantic branch & Frozen DINOv3 ViT-S/16; layers 5, 8, 11; input $512\times512$; fusion at P3--P5 \\
+Paired harmonization & Calibration at P1/P2; local alignment at P1--P3; window 5; $\epsilon=10^{-5}$. P1: 2 heads, 4 samples, 2 offset groups; P2/P3: 4 heads, 9 samples, 4 groups \\
+CQI & Five independent blocks; 128 channels, 16 queries and 4 heads per scale; FFN expansion 2 \\
+OSCD & 128-channel fused context; 384-channel scan input; 4 scan directions; state dimension 1; FFN expansion 4 \\
+\midrule
+\multicolumn{2}{@{}l}{\textit{Training and selection}} \\
+Input and batch & $256\times256$ tiles; batch size 12; bfloat16 mixed precision \\
+Optimization & AdamW; base learning rate $10^{-4}$; head multiplier 2; weight decay $5\times10^{-4}$; cosine decay; 80 epochs \\
+Checkpoint and threshold & Validation flood IoU; selected epoch 77 and threshold 0.80; search range 0.05--0.95 with step 0.01 \\
+\midrule
+\multicolumn{2}{@{}l}{\textit{CFDepth}} \\
+Boundary screening & Maximum slope $5^\circ$; local-median radius 3 pixels; deviation multiplier 3; minimum tolerance 0.25 m \\
+Anchors and initialization & Pairing radius 2 pixels; eight-connected propagation up to 10 km; terrain lower bound $Z+0.01$ m; low-confidence fallback where no anchor is reachable \\
+Continuity refinement & Center-inclusive $3\times3$ window; relaxation 0.85; 50 iterations; fixed anchors and terrain lower bound \\
+\bottomrule
+\end{tabularx}
+\end{table*}

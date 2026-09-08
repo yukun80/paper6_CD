@@ -29,7 +29,7 @@ python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --amp \
   --amp_dtype bf16 \
   --skip-tiles \
-  --output-dir HA-CQI/outputs/gf3_henan_20260826_1
+  --output-dir HA-CQI/outputs/gf3_henan_20260826
 
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/GF3_Zhuozhou_CD_infer \
@@ -39,8 +39,7 @@ python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --num_workers 8 \
   --amp \
   --amp_dtype bf16 \
-  --skip-tiles \
-  --output-dir HA-CQI/outputs/gf3_zhuozhou_20260826_1
+  --output-dir HA-CQI/outputs/gf3_zhuozhou_20260826
 
 python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --tiles-root datasets/LT1_Guangxi_CD_infer \

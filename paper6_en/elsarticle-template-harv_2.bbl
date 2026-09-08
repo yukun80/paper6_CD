@@ -1,4 +1,4 @@
-\begin{thebibliography}{51}
+\begin{thebibliography}{45}
 \expandafter\ifx\csname natexlab\endcsname\relax\def\natexlab#1{#1}\fi
 \providecommand{\url}[1]{\texttt{#1}}
 \providecommand{\href}[2]{#2}
@@ -12,18 +12,6 @@
 \providecommand{\bibinfo}[2]{#2}
 \ifx\xfnm\relax \def\xfnm[#1]{\unskip,\space#1}\fi
 %Type = Article
-\bibitem[{Akkimi et~al.(2026)Akkimi, Jella, Peesapati, Singh, Khv and
-  Chauhan}]{akkimi2026fldepth}
-\bibinfo{author}{Akkimi, A.}, \bibinfo{author}{Jella, S.},
-  \bibinfo{author}{Peesapati, R.M.}, \bibinfo{author}{Singh, A.},
-  \bibinfo{author}{Khv, D.R.}, \bibinfo{author}{Chauhan, P.},
-  \bibinfo{year}{2026}.
-\newblock \bibinfo{title}{Fldepth: A new method for estimating fluvial and
-  pluvial flood depths from near real-time satellite-derived inundation map and
-  topography}.
-\newblock \bibinfo{journal}{Water Resources Management} \bibinfo{volume}{40},
-  \bibinfo{pages}{128}.
-%Type = Article
 \bibitem[{Amitrano et~al.(2024)Amitrano, Di~Martino, Di~Simone and
   Imperatore}]{amitrano2024sarFloodReview}
 \bibinfo{author}{Amitrano, D.}, \bibinfo{author}{Di~Martino, G.},
@@ -34,22 +22,14 @@
 \newblock \bibinfo{journal}{Remote Sensing} \bibinfo{volume}{16},
   \bibinfo{pages}{656}.
 \newblock \DOIprefix\doi{10.3390/rs16040656}.
-%Type = Article
-\bibitem[{Balaian et~al.(2024)Balaian, Sanders and
-  Abdolhosseini~Qomi}]{balaian2024urbanForm}
-\bibinfo{author}{Balaian, S.K.}, \bibinfo{author}{Sanders, B.F.},
-  \bibinfo{author}{Abdolhosseini~Qomi, M.J.}, \bibinfo{year}{2024}.
-\newblock \bibinfo{title}{How urban form impacts flooding}.
-\newblock \bibinfo{journal}{Nature Communications} \bibinfo{volume}{15},
-  \bibinfo{pages}{6911}.
-\newblock \DOIprefix\doi{10.1038/s41467-024-50347-4}.
-%Type = Article
+%Type = Inproceedings
 \bibitem[{Bandara and Patel(2022)}]{bandara2022changeformer}
 \bibinfo{author}{Bandara, W.G.C.}, \bibinfo{author}{Patel, V.M.},
   \bibinfo{year}{2022}.
 \newblock \bibinfo{title}{A transformer-based siamese network for change
-  detection}.
-\newblock \bibinfo{journal}{arXiv preprint arXiv:2201.01293} .
+  detection}, in: \bibinfo{booktitle}{IGARSS 2022--2022 IEEE International
+  Geoscience and Remote Sensing Symposium}, pp. \bibinfo{pages}{207--210}.
+\newblock \DOIprefix\doi{10.1109/IGARSS46834.2022.9883686}.
 %Type = Article
 \bibitem[{Betterle and Salamon(2024)}]{betterle2024water}
 \bibinfo{author}{Betterle, A.}, \bibinfo{author}{Salamon, P.},
@@ -59,71 +39,27 @@
 \newblock \bibinfo{journal}{Natural Hazards and Earth System Sciences}
   \bibinfo{volume}{24}, \bibinfo{pages}{2817--2836}.
 \newblock \DOIprefix\doi{10.5194/nhess-24-2817-2024}.
+%Type = Article
+\bibitem[{Chen et~al.(2022)Chen, Qi and Shi}]{chen2021remote}
+\bibinfo{author}{Chen, H.}, \bibinfo{author}{Qi, Z.}, \bibinfo{author}{Shi,
+  Z.}, \bibinfo{year}{2022}.
+\newblock \bibinfo{title}{Remote sensing image change detection with
+  transformers}.
+\newblock \bibinfo{journal}{IEEE Transactions on Geoscience and Remote Sensing}
+  \bibinfo{volume}{60}, \bibinfo{pages}{1--14}.
+\newblock \DOIprefix\doi{10.1109/TGRS.2021.3095166}.
 %Type = Inproceedings
-\bibitem[{Bonafilia et~al.(2020)Bonafilia, Tellman, Anderson and
-  Issenberg}]{bonafilia2020sen1floods11}
-\bibinfo{author}{Bonafilia, D.}, \bibinfo{author}{Tellman, B.},
-  \bibinfo{author}{Anderson, T.}, \bibinfo{author}{Issenberg, E.},
-  \bibinfo{year}{2020}.
-\newblock \bibinfo{title}{Sen1floods11: A georeferenced dataset to train and
-  test deep learning flood algorithms for sentinel-1}, in:
-  \bibinfo{booktitle}{Proceedings of the IEEE/CVF Conference on Computer Vision
-  and Pattern Recognition Workshops}, pp. \bibinfo{pages}{835--845}.
-\newblock \DOIprefix\doi{10.1109/CVPRW50498.2020.00113}.
-%Type = Article
-\bibitem[{Brown et~al.(2016)Brown, Hambidge and
-  Brownett}]{brown2016operationalSarLidar}
-\bibinfo{author}{Brown, K.M.}, \bibinfo{author}{Hambidge, C.H.},
-  \bibinfo{author}{Brownett, J.M.}, \bibinfo{year}{2016}.
-\newblock \bibinfo{title}{Progress in operational flood mapping using satellite
-  synthetic aperture radar (sar) and airborne light detection and ranging
-  (lidar) data}.
-\newblock \bibinfo{journal}{Progress in Physical Geography}
-  \bibinfo{volume}{40}, \bibinfo{pages}{222--237}.
-\newblock \DOIprefix\doi{10.1177/0309133316633570}.
-%Type = Article
-\bibitem[{Chen et~al.(2022a)Chen, Qi and Shi}]{chen2021remote}
-\bibinfo{author}{Chen, H.}, \bibinfo{author}{Qi, Z.}, \bibinfo{author}{Shi,
-  Z.}, \bibinfo{year}{2022}a.
-\newblock \bibinfo{title}{Remote sensing image change detection with
-  transformers}.
-\newblock \bibinfo{journal}{IEEE Transactions on Geoscience and Remote Sensing}
-  \bibinfo{volume}{60}, \bibinfo{pages}{1--14}.
-\newblock \DOIprefix\doi{10.1109/TGRS.2021.3095166}.
-%Type = Article
-\bibitem[{Chen et~al.(2022b)Chen, Qi and Shi}]{chen2022bit}
-\bibinfo{author}{Chen, H.}, \bibinfo{author}{Qi, Z.}, \bibinfo{author}{Shi,
-  Z.}, \bibinfo{year}{2022}b.
-\newblock \bibinfo{title}{Remote sensing image change detection with
-  transformers}.
-\newblock \bibinfo{journal}{IEEE Transactions on Geoscience and Remote Sensing}
-  \bibinfo{volume}{60}, \bibinfo{pages}{1--14}.
-\newblock \DOIprefix\doi{10.1109/TGRS.2021.3095166}.
-%Type = Article
-\bibitem[{Chen and Shi(2020)}]{chen2020spatial}
-\bibinfo{author}{Chen, H.}, \bibinfo{author}{Shi, Z.}, \bibinfo{year}{2020}.
-\newblock \bibinfo{title}{A spatial-temporal attention-based method and a new
-  dataset for remote sensing image change detection}.
-\newblock \bibinfo{journal}{Remote sensing} \bibinfo{volume}{12},
-  \bibinfo{pages}{1662}.
-%Type = Article
-\bibitem[{Chen et~al.(2023)Chen, Liu, Li, Liu, Chen, Zhang, Zou and
+\bibitem[{Chen et~al.(2024)Chen, Liu, Li, Liu, Chen, Zhang, Zou and
   Shi}]{chen2023ttp}
 \bibinfo{author}{Chen, K.}, \bibinfo{author}{Liu, C.}, \bibinfo{author}{Li,
   W.}, \bibinfo{author}{Liu, Z.}, \bibinfo{author}{Chen, H.},
   \bibinfo{author}{Zhang, H.}, \bibinfo{author}{Zou, Z.}, \bibinfo{author}{Shi,
-  Z.}, \bibinfo{year}{2023}.
+  Z.}, \bibinfo{year}{2024}.
 \newblock \bibinfo{title}{Time travelling pixels: Bitemporal features
-  integration with foundation model for remote sensing image change detection}.
-\newblock \bibinfo{journal}{arXiv preprint arXiv:2312.16202} .
-%Type = Article
-\bibitem[{Chen et~al.(2025)Chen, Zhou and Li}]{chen2025flood}
-\bibinfo{author}{Chen, W.}, \bibinfo{author}{Zhou, Y.}, \bibinfo{author}{Li,
-  X.}, \bibinfo{year}{2025}.
-\newblock \bibinfo{title}{Flood index-enhanced deep learning model for coastal
-  inundation mapping in sar imagery}.
-\newblock \bibinfo{journal}{International Journal of Applied Earth Observation
-  and Geoinformation} \bibinfo{volume}{139}, \bibinfo{pages}{104550}.
+  integration with foundation model for remote sensing image change detection},
+  in: \bibinfo{booktitle}{IGARSS 2024--2024 IEEE International Geoscience and
+  Remote Sensing Symposium}, pp. \bibinfo{pages}{8581--8584}.
+\newblock \DOIprefix\doi{10.1109/IGARSS53475.2024.10640593}.
 %Type = Article
 \bibitem[{Cheng and Hsu(2025)}]{cheng2025changedino}
 \bibinfo{author}{Cheng, C.H.}, \bibinfo{author}{Hsu, C.C.},
@@ -141,18 +77,7 @@
   sar images and lidar data}.
 \newblock \bibinfo{journal}{Natural Hazards and Earth System Sciences}
   \bibinfo{volume}{18}, \bibinfo{pages}{3063--3084}.
-%Type = Article
-\bibitem[{Cohen et~al.(2018)Cohen, Brakenridge, Kettner, Bates, Nelson,
-  McDonald, Huang, Munasinghe and Zhang}]{cohen2018estimating}
-\bibinfo{author}{Cohen, S.}, \bibinfo{author}{Brakenridge, G.R.},
-  \bibinfo{author}{Kettner, A.}, \bibinfo{author}{Bates, B.},
-  \bibinfo{author}{Nelson, J.}, \bibinfo{author}{McDonald, R.},
-  \bibinfo{author}{Huang, Y.F.}, \bibinfo{author}{Munasinghe, D.},
-  \bibinfo{author}{Zhang, J.}, \bibinfo{year}{2018}.
-\newblock \bibinfo{title}{Estimating floodwater depths from flood inundation
-  maps and topography}.
-\newblock \bibinfo{journal}{JAWRA Journal of the American Water Resources
-  Association} \bibinfo{volume}{54}, \bibinfo{pages}{847--858}.
+\newblock \DOIprefix\doi{10.5194/nhess-18-3063-2018}.
 %Type = Article
 \bibitem[{Cohen et~al.(2019)Cohen, Raney, Munasinghe, Loftis, Molthan, Bell,
   Rogers, Galantowicz, Brakenridge, Kettner et~al.}]{cohen2019floodwater}
@@ -166,18 +91,11 @@
   for improved remote sensing analysis of coastal flooding}.
 \newblock \bibinfo{journal}{Natural Hazards and Earth System Sciences}
   \bibinfo{volume}{19}, \bibinfo{pages}{2053--2065}.
+\newblock \DOIprefix\doi{10.5194/nhess-19-2053-2019}.
 %Type = Inproceedings
-\bibitem[{Daudt et~al.(2018a)Daudt, Le~Saux and Boulch}]{daudt2018fully}
+\bibitem[{Daudt et~al.(2018)Daudt, Le~Saux and Boulch}]{daudt2018fully}
 \bibinfo{author}{Daudt, R.C.}, \bibinfo{author}{Le~Saux, B.},
-  \bibinfo{author}{Boulch, A.}, \bibinfo{year}{2018}a.
-\newblock \bibinfo{title}{Fully convolutional siamese networks for change
-  detection}, in: \bibinfo{booktitle}{2018 25th IEEE International Conference
-  on Image Processing (ICIP)}, pp. \bibinfo{pages}{4063--4067}.
-\newblock \DOIprefix\doi{10.1109/ICIP.2018.8451652}.
-%Type = Inproceedings
-\bibitem[{Daudt et~al.(2018b)Daudt, Le~Saux and Boulch}]{daudt2018fcsiam}
-\bibinfo{author}{Daudt, R.C.}, \bibinfo{author}{Le~Saux, B.},
-  \bibinfo{author}{Boulch, A.}, \bibinfo{year}{2018}b.
+  \bibinfo{author}{Boulch, A.}, \bibinfo{year}{2018}.
 \newblock \bibinfo{title}{Fully convolutional siamese networks for change
   detection}, in: \bibinfo{booktitle}{2018 25th IEEE International Conference
   on Image Processing (ICIP)}, pp. \bibinfo{pages}{4063--4067}.
@@ -192,15 +110,16 @@
   in vhr remote sensing images}.
 \newblock \bibinfo{journal}{IEEE Transactions on Geoscience and Remote Sensing}
   \bibinfo{volume}{62}, \bibinfo{pages}{1--11}.
+\newblock \DOIprefix\doi{10.1109/TGRS.2024.3368168}.
 %Type = Article
 \bibitem[{Dong et~al.(2026)Dong, Hu, Wang, Chen and Meng}]{dong2026peftcd}
 \bibinfo{author}{Dong, S.}, \bibinfo{author}{Hu, Y.}, \bibinfo{author}{Wang,
   L.}, \bibinfo{author}{Chen, G.}, \bibinfo{author}{Meng, X.},
   \bibinfo{year}{2026}.
-\newblock \bibinfo{title}{Peftcd: Leveraging vision foundation models with
+\newblock \bibinfo{title}{{PeftCD}: Leveraging vision foundation models with
   parameter-efficient fine-tuning for remote sensing change detection}.
 \newblock \bibinfo{journal}{IEEE Journal of Selected Topics in Applied Earth
-  Observations and Remote Sensing} .
+  Observations and Remote Sensing} \DOIprefix\doi{10.1109/JSTARS.2026.3679260}.
 %Type = Article
 \bibitem[{Du et~al.(2026)Du, Shao, Xiao, Zhang, Zhu, Wang, Balz and
   Li}]{du2026high}
@@ -213,6 +132,7 @@
   enriched-diverse and complex flooding scenarios}.
 \newblock \bibinfo{journal}{ISPRS Journal of Photogrammetry and Remote Sensing}
   \bibinfo{volume}{231}, \bibinfo{pages}{507--531}.
+\newblock \DOIprefix\doi{10.1016/j.isprsjprs.2025.11.011}.
 %Type = Article
 \bibitem[{Fang et~al.(2022)Fang, Li, Shao and Li}]{fang2022snunet}
 \bibinfo{author}{Fang, S.}, \bibinfo{author}{Li, K.}, \bibinfo{author}{Shao,
@@ -222,16 +142,14 @@
 \newblock \bibinfo{journal}{IEEE Geoscience and Remote Sensing Letters}
   \bibinfo{volume}{19}, \bibinfo{pages}{1--5}.
 \newblock \DOIprefix\doi{10.1109/LGRS.2021.3056416}.
-%Type = Article
-\bibitem[{Feng et~al.(2021)Feng, Zhang and
-  Bourke}]{feng2021urbanizationFloodRisk}
-\bibinfo{author}{Feng, B.}, \bibinfo{author}{Zhang, Y.},
-  \bibinfo{author}{Bourke, R.}, \bibinfo{year}{2021}.
-\newblock \bibinfo{title}{Urbanization impacts on flood risks based on urban
-  growth data and coupled flood models}.
-\newblock \bibinfo{journal}{Natural Hazards} \bibinfo{volume}{106},
-  \bibinfo{pages}{613--627}.
-\newblock \DOIprefix\doi{10.1007/s11069-020-04480-0}.
+%Type = Inproceedings
+\bibitem[{Fu et~al.(2025)Fu, Lou and Yu}]{fu2025segman}
+\bibinfo{author}{Fu, Y.}, \bibinfo{author}{Lou, M.}, \bibinfo{author}{Yu, Y.},
+  \bibinfo{year}{2025}.
+\newblock \bibinfo{title}{Segman: Omni-scale context modeling with state space
+  models and local attention for semantic segmentation}, in:
+  \bibinfo{booktitle}{Proceedings of the IEEE/CVF Conference on Computer Vision
+  and Pattern Recognition}, pp. \bibinfo{pages}{19077--19087}.
 %Type = Article
 \bibitem[{Giustarini et~al.(2013)Giustarini, Hostache, Matgen, Schumann, Bates
   and Mason}]{giustarini2013urbanFloodCd}
@@ -244,35 +162,55 @@
 \newblock \bibinfo{journal}{IEEE Transactions on Geoscience and Remote Sensing}
   \bibinfo{volume}{51}, \bibinfo{pages}{2417--2430}.
 \newblock \DOIprefix\doi{10.1109/TGRS.2012.2210901}.
+%Type = Inproceedings
+\bibitem[{Gu and Dao(2024)}]{gu2023mamba}
+\bibinfo{author}{Gu, A.}, \bibinfo{author}{Dao, T.}, \bibinfo{year}{2024}.
+\newblock \bibinfo{title}{Mamba: Linear-time sequence modeling with selective
+  state spaces}, in: \bibinfo{booktitle}{Proceedings of the First Conference on
+  Language Modeling}, pp. \bibinfo{pages}{1--32}.
+\newblock \URLprefix \url{https://openreview.net/forum?id=tEYskw1VY2}.
 %Type = Article
-\bibitem[{Han et~al.(2023)Han, Wu, Guo, Hu, Li and Chen}]{han2023change}
+\bibitem[{Han et~al.(2023a)Han, Wu, Guo, Hu and Chen}]{han2023hanet}
+\bibinfo{author}{Han, C.}, \bibinfo{author}{Wu, C.}, \bibinfo{author}{Guo, H.},
+  \bibinfo{author}{Hu, M.}, \bibinfo{author}{Chen, H.}, \bibinfo{year}{2023}a.
+\newblock \bibinfo{title}{Hanet: A hierarchical attention network for change
+  detection with bi-temporal very-high-resolution remote sensing images}.
+\newblock \bibinfo{journal}{IEEE Journal of Selected Topics in Applied Earth
+  Observations and Remote Sensing} \bibinfo{volume}{16},
+  \bibinfo{pages}{3867--3878}.
+\newblock \DOIprefix\doi{10.1109/JSTARS.2023.3264802}.
+%Type = Article
+\bibitem[{Han et~al.(2023b)Han, Wu, Guo, Hu, Li and Chen}]{han2023change}
 \bibinfo{author}{Han, C.}, \bibinfo{author}{Wu, C.}, \bibinfo{author}{Guo, H.},
   \bibinfo{author}{Hu, M.}, \bibinfo{author}{Li, J.}, \bibinfo{author}{Chen,
-  H.}, \bibinfo{year}{2023}.
+  H.}, \bibinfo{year}{2023}b.
 \newblock \bibinfo{title}{Change guiding network: Incorporating change prior to
   guide change detection in remote sensing imagery}.
 \newblock \bibinfo{journal}{IEEE Journal of Selected Topics in Applied Earth
   Observations and Remote Sensing} \bibinfo{volume}{16},
   \bibinfo{pages}{8395--8407}.
+\newblock \DOIprefix\doi{10.1109/JSTARS.2023.3310208}.
 %Type = Article
-\bibitem[{Hultquist and Cervone(2020)}]{hultquist2020crowdsourcedFloodDepth}
-\bibinfo{author}{Hultquist, C.}, \bibinfo{author}{Cervone, G.},
-  \bibinfo{year}{2020}.
-\newblock \bibinfo{title}{Integration of crowdsourced images, usgs networks,
-  remote sensing, and a model to assess flood depth during hurricane florence}.
-\newblock \bibinfo{journal}{Remote Sensing} \bibinfo{volume}{12},
-  \bibinfo{pages}{834}.
-\newblock \DOIprefix\doi{10.3390/rs12050834}.
+\bibitem[{Hawker et~al.(2022)Hawker, Uhe, Paulo, Sosa, Savage, Sampson and
+  Neal}]{hawker2022fabdem}
+\bibinfo{author}{Hawker, L.}, \bibinfo{author}{Uhe, P.},
+  \bibinfo{author}{Paulo, L.}, \bibinfo{author}{Sosa, J.},
+  \bibinfo{author}{Savage, J.}, \bibinfo{author}{Sampson, C.},
+  \bibinfo{author}{Neal, J.}, \bibinfo{year}{2022}.
+\newblock \bibinfo{title}{{A 30 m global map of elevation with forests and
+  buildings removed}}.
+\newblock \bibinfo{journal}{Environmental Research Letters}
+  \bibinfo{volume}{17}, \bibinfo{pages}{024016}.
+\newblock \DOIprefix\doi{10.1088/1748-9326/ac4d4f}.
 %Type = Article
-\bibitem[{Li et~al.(2023a)Li, Sun, Lu, Guo, Wang, Sun and
-  Yao}]{li2023urbanFloodRiskReview}
-\bibinfo{author}{Li, C.}, \bibinfo{author}{Sun, N.}, \bibinfo{author}{Lu, Y.},
-  \bibinfo{author}{Guo, B.}, \bibinfo{author}{Wang, Y.}, \bibinfo{author}{Sun,
-  X.}, \bibinfo{author}{Yao, Y.}, \bibinfo{year}{2023}a.
-\newblock \bibinfo{title}{Review on urban flood risk assessment}.
-\newblock \bibinfo{journal}{Sustainability} \bibinfo{volume}{15},
-  \bibinfo{pages}{765}.
-\newblock \DOIprefix\doi{10.3390/su15010765}.
+\bibitem[{Lan and Wang(2025)}]{lan2025haihe}
+\bibinfo{author}{Lan, L.}, \bibinfo{author}{Wang, X.}, \bibinfo{year}{2025}.
+\newblock \bibinfo{title}{{Large-scale flood mapping using Sentinel-1 and
+  Sentinel-2 imagery: Spatio-temporal analysis of the 23·7 Haihe basin-wide
+  extreme flood}}.
+\newblock \bibinfo{journal}{Journal of Hydrology} \bibinfo{volume}{653},
+  \bibinfo{pages}{132777}.
+\newblock \DOIprefix\doi{10.1016/j.jhydrol.2025.132777}.
 %Type = Article
 \bibitem[{Li et~al.(2024)Li, Cao and Meng}]{li2024new}
 \bibinfo{author}{Li, K.}, \bibinfo{author}{Cao, X.}, \bibinfo{author}{Meng,
@@ -281,116 +219,69 @@
   remote-sensing change detection}.
 \newblock \bibinfo{journal}{IEEE Transactions on Geoscience and Remote Sensing}
   \bibinfo{volume}{62}, \bibinfo{pages}{1--12}.
+\newblock \DOIprefix\doi{10.1109/TGRS.2024.3365825}.
 %Type = Article
-\bibitem[{Li et~al.(2019)Li, Martinis and Wieland}]{li2019urbanFloodAslcnn}
-\bibinfo{author}{Li, Y.}, \bibinfo{author}{Martinis, S.},
-  \bibinfo{author}{Wieland, M.}, \bibinfo{year}{2019}.
-\newblock \bibinfo{title}{Urban flood mapping with an active self-learning
-  convolutional neural network based on terrasar-x intensity and
-  interferometric coherence}.
-\newblock \bibinfo{journal}{ISPRS Journal of Photogrammetry and Remote Sensing}
-  \bibinfo{volume}{152}, \bibinfo{pages}{178--191}.
+\bibitem[{Li et~al.(2026)Li, Liu and Wang}]{li2026rafnet}
+\bibinfo{author}{Li, S.}, \bibinfo{author}{Liu, K.}, \bibinfo{author}{Wang,
+  Q.}, \bibinfo{year}{2026}.
+\newblock \bibinfo{title}{{Near-real-time SAR flood detection using feature
+  fusion and region-adaptive deep learning method}}.
+\newblock \bibinfo{journal}{Journal of Hydrology} \bibinfo{volume}{674},
+  \bibinfo{pages}{135523}.
+\newblock \DOIprefix\doi{10.1016/j.jhydrol.2026.135523}.
+%Type = Inproceedings
+\bibitem[{Lin et~al.(2017a)Lin, Doll{\'a}r, Girshick, He, Hariharan and
+  Belongie}]{lin2017fpn}
+\bibinfo{author}{Lin, T.Y.}, \bibinfo{author}{Doll{\'a}r, P.},
+  \bibinfo{author}{Girshick, R.}, \bibinfo{author}{He, K.},
+  \bibinfo{author}{Hariharan, B.}, \bibinfo{author}{Belongie, S.},
+  \bibinfo{year}{2017}a.
+\newblock \bibinfo{title}{Feature pyramid networks for object detection}, in:
+  \bibinfo{booktitle}{Proceedings of the IEEE Conference on Computer Vision and
+  Pattern Recognition}, pp. \bibinfo{pages}{2117--2125}.
+%Type = Inproceedings
+\bibitem[{Lin et~al.(2017b)Lin, Goyal, Girshick, He and
+  Doll{\'a}r}]{lin2017focal}
+\bibinfo{author}{Lin, T.Y.}, \bibinfo{author}{Goyal, P.},
+  \bibinfo{author}{Girshick, R.}, \bibinfo{author}{He, K.},
+  \bibinfo{author}{Doll{\'a}r, P.}, \bibinfo{year}{2017}b.
+\newblock \bibinfo{title}{Focal loss for dense object detection}, in:
+  \bibinfo{booktitle}{Proceedings of the IEEE International Conference on
+  Computer Vision}, pp. \bibinfo{pages}{2980--2988}.
+%Type = Inproceedings
+\bibitem[{Liu et~al.(2024)Liu, Tian, Zhao, Yu, Xie, Wang, Ye, Jiao and
+  Liu}]{liu2024vmamba}
+\bibinfo{author}{Liu, Y.}, \bibinfo{author}{Tian, Y.}, \bibinfo{author}{Zhao,
+  Y.}, \bibinfo{author}{Yu, H.}, \bibinfo{author}{Xie, L.},
+  \bibinfo{author}{Wang, Y.}, \bibinfo{author}{Ye, Q.}, \bibinfo{author}{Jiao,
+  J.}, \bibinfo{author}{Liu, Y.}, \bibinfo{year}{2024}.
+\newblock \bibinfo{title}{Vmamba: Visual state space model}, in:
+  \bibinfo{booktitle}{Advances in Neural Information Processing Systems},
+  \bibinfo{publisher}{Curran Associates, Inc.}. pp.
+  \bibinfo{pages}{103031--103063}.
+\newblock \DOIprefix\doi{10.52202/079017-3273}.
 %Type = Article
-\bibitem[{Li et~al.(2023b)Li, Ye, Wu, Wu and Qian}]{li2023zhengzhou720Flood}
-\bibinfo{author}{Li, Y.}, \bibinfo{author}{Ye, S.}, \bibinfo{author}{Wu, Q.},
-  \bibinfo{author}{Wu, Y.}, \bibinfo{author}{Qian, S.}, \bibinfo{year}{2023}b.
-\newblock \bibinfo{title}{Analysis and countermeasures of the ``7.20'' flood in
-  zhengzhou}.
-\newblock \bibinfo{journal}{Journal of Asian Architecture and Building
-  Engineering} \bibinfo{volume}{22}, \bibinfo{pages}{3782--3798}.
-\newblock \DOIprefix\doi{10.1080/13467581.2023.2208195}.
+\bibitem[{Misra et~al.(2025)Misra, White, Nsutezo, Straka and
+  Lavista}]{misra2025globalFloods}
+\bibinfo{author}{Misra, A.}, \bibinfo{author}{White, K.},
+  \bibinfo{author}{Nsutezo, S.F.}, \bibinfo{author}{Straka, III, W.},
+  \bibinfo{author}{Lavista, J.}, \bibinfo{year}{2025}.
+\newblock \bibinfo{title}{{Mapping global floods with 10 years of satellite
+  radar data}}.
+\newblock \bibinfo{journal}{Nature Communications} \bibinfo{volume}{16},
+  \bibinfo{pages}{5762}.
+\newblock \DOIprefix\doi{10.1038/s41467-025-60973-1}.
 %Type = Article
-\bibitem[{Liu et~al.(2025)Liu, Li, Ma and Mao}]{liu2025floodDepthReview}
-\bibinfo{author}{Liu, B.}, \bibinfo{author}{Li, Y.}, \bibinfo{author}{Ma, M.},
-  \bibinfo{author}{Mao, B.}, \bibinfo{year}{2025}.
-\newblock \bibinfo{title}{A comprehensive review of machine learning approaches
-  for flood depth estimation}.
-\newblock \bibinfo{journal}{International Journal of Disaster Risk Science}
-  \bibinfo{volume}{16}, \bibinfo{pages}{433--445}.
-\newblock \DOIprefix\doi{10.1007/s13753-025-00639-0}.
-%Type = Article
-\bibitem[{Liu et~al.(2026)Liu, Zhao and Tang}]{liu2026multi}
-\bibinfo{author}{Liu, S.}, \bibinfo{author}{Zhao, D.}, \bibinfo{author}{Tang,
-  L.}, \bibinfo{year}{2026}.
-\newblock \bibinfo{title}{A multi-scale remote sensing image change detection
-  network based on vision foundation model}.
-\newblock \bibinfo{journal}{Remote Sensing} \bibinfo{volume}{18},
-  \bibinfo{pages}{506}.
-%Type = Article
-\bibitem[{Mason et~al.(2014)Mason, Giustarini, Garcia-Pintado and
-  Cloke}]{mason2014doubleScattering}
-\bibinfo{author}{Mason, D.C.}, \bibinfo{author}{Giustarini, L.},
-  \bibinfo{author}{Garcia-Pintado, J.}, \bibinfo{author}{Cloke, H.L.},
-  \bibinfo{year}{2014}.
-\newblock \bibinfo{title}{Detection of flooded urban areas in high resolution
-  synthetic aperture radar images using double scattering}.
-\newblock \bibinfo{journal}{International Journal of Applied Earth Observation
-  and Geoinformation} \bibinfo{volume}{28}, \bibinfo{pages}{150--159}.
-\newblock \DOIprefix\doi{10.1016/j.jag.2013.12.002}.
-%Type = Article
-\bibitem[{Mason et~al.(2010)Mason, Speck, Devereux, Schumann, Neal and
-  Bates}]{mason2010urbanFloodTgrs}
-\bibinfo{author}{Mason, D.C.}, \bibinfo{author}{Speck, R.},
-  \bibinfo{author}{Devereux, B.}, \bibinfo{author}{Schumann, G.J.P.},
-  \bibinfo{author}{Neal, J.C.}, \bibinfo{author}{Bates, P.D.},
-  \bibinfo{year}{2010}.
-\newblock \bibinfo{title}{Flood detection in urban areas using terrasar-x}.
-\newblock \bibinfo{journal}{IEEE Transactions on Geoscience and Remote Sensing}
-  \bibinfo{volume}{48}, \bibinfo{pages}{882--894}.
-\newblock \DOIprefix\doi{10.1109/TGRS.2009.2029236}.
-%Type = Article
-\bibitem[{Matgen et~al.(2007)Matgen, Schumann, Henry, Hoffmann and
-  Pfister}]{matgen2007integration}
-\bibinfo{author}{Matgen, P.}, \bibinfo{author}{Schumann, G.},
-  \bibinfo{author}{Henry, J.B.}, \bibinfo{author}{Hoffmann, L.},
-  \bibinfo{author}{Pfister, L.}, \bibinfo{year}{2007}.
-\newblock \bibinfo{title}{Integration of sar-derived river inundation areas,
-  high-precision topographic data and a river flow model toward near real-time
-  flood management}.
-\newblock \bibinfo{journal}{International Journal of Applied Earth Observation
-  and Geoinformation} \bibinfo{volume}{9}, \bibinfo{pages}{247--263}.
-%Type = Article
-\bibitem[{Mudashiru et~al.(2021)Mudashiru, Sabtu, Abustan and
-  Balogun}]{mudashiru2021floodHazardReview}
-\bibinfo{author}{Mudashiru, R.B.}, \bibinfo{author}{Sabtu, N.},
-  \bibinfo{author}{Abustan, I.}, \bibinfo{author}{Balogun, W.},
-  \bibinfo{year}{2021}.
-\newblock \bibinfo{title}{Flood hazard mapping methods: A review}.
-\newblock \bibinfo{journal}{Journal of Hydrology} \bibinfo{volume}{603},
-  \bibinfo{pages}{126846}.
-\newblock \DOIprefix\doi{10.1016/j.jhydrol.2021.126846}.
-%Type = Article
-\bibitem[{Nobre et~al.(2011)Nobre, Cuartas, Hodnett, Renn{\'o}, Rodrigues,
-  Silveira and Saleska}]{nobre2011height}
-\bibinfo{author}{Nobre, A.D.}, \bibinfo{author}{Cuartas, L.A.},
-  \bibinfo{author}{Hodnett, M.}, \bibinfo{author}{Renn{\'o}, C.D.},
-  \bibinfo{author}{Rodrigues, G.}, \bibinfo{author}{Silveira, A.},
-  \bibinfo{author}{Saleska, S.}, \bibinfo{year}{2011}.
-\newblock \bibinfo{title}{Height above the nearest drainage--a hydrologically
-  relevant new terrain model}.
-\newblock \bibinfo{journal}{Journal of Hydrology} \bibinfo{volume}{404},
-  \bibinfo{pages}{13--29}.
-%Type = Article
-\bibitem[{Notti et~al.(2018)Notti, Giordan, Cal{\`o}, Pepe, Zucca and
-  Galve}]{notti2018potentialLimitations}
-\bibinfo{author}{Notti, D.}, \bibinfo{author}{Giordan, D.},
-  \bibinfo{author}{Cal{\`o}, F.}, \bibinfo{author}{Pepe, A.},
-  \bibinfo{author}{Zucca, F.}, \bibinfo{author}{Galve, J.P.},
-  \bibinfo{year}{2018}.
-\newblock \bibinfo{title}{Potential and limitations of open satellite data for
-  flood mapping}.
-\newblock \bibinfo{journal}{Remote Sensing} \bibinfo{volume}{10},
-  \bibinfo{pages}{1673}.
-\newblock \DOIprefix\doi{10.3390/rs10111673}.
-%Type = Article
-\bibitem[{Qin et~al.(2025)Qin, Wang, Fan and Pan}]{qin2025sam2}
-\bibinfo{author}{Qin, Y.}, \bibinfo{author}{Wang, C.}, \bibinfo{author}{Fan,
-  Y.}, \bibinfo{author}{Pan, C.}, \bibinfo{year}{2025}.
-\newblock \bibinfo{title}{Sam2-cd: Remote sensing image change detection with
-  sam2}.
-\newblock \bibinfo{journal}{IEEE Journal of Selected Topics in Applied Earth
-  Observations and Remote Sensing} \bibinfo{volume}{18},
-  \bibinfo{pages}{24575--24587}.
+\bibitem[{Portal{\'{e}}s-Juli{\`{a}} et~al.(2025)Portal{\'{e}}s-Juli{\`{a}},
+  Mateo-Garc{\'{i}}a and G{\'{o}}mez-Chova}]{portales2025flood}
+\bibinfo{author}{Portal{\'{e}}s-Juli{\`{a}}, E.},
+  \bibinfo{author}{Mateo-Garc{\'{i}}a, G.}, \bibinfo{author}{G{\'{o}}mez-Chova,
+  L.}, \bibinfo{year}{2025}.
+\newblock \bibinfo{title}{{Understanding flood detection models across
+  Sentinel-1 and Sentinel-2 modalities and benchmark datasets}}.
+\newblock \bibinfo{journal}{Remote Sensing of Environment}
+  \bibinfo{volume}{328}, \bibinfo{pages}{114882}.
+\newblock \DOIprefix\doi{10.1016/j.rse.2025.114882}.
 %Type = Article
 \bibitem[{Saleh et~al.(2024a)Saleh, Holail, Xiao and Xia}]{saleh2024high}
 \bibinfo{author}{Saleh, T.}, \bibinfo{author}{Holail, S.},
@@ -400,81 +291,138 @@
   multi-temporal sar change analysis with semantic token-based transformer}.
 \newblock \bibinfo{journal}{International Journal of Applied Earth Observation
   and Geoinformation} \bibinfo{volume}{131}, \bibinfo{pages}{103991}.
+\newblock \DOIprefix\doi{10.1016/j.jag.2024.103991}.
 %Type = Article
-\bibitem[{Saleh et~al.(2024b)Saleh, Holail, Zahran, Xiao and
-  Xia}]{saleh2024list}
-\bibinfo{author}{Saleh, T.}, \bibinfo{author}{Holail, S.},
-  \bibinfo{author}{Zahran, M.}, \bibinfo{author}{Xiao, X.},
-  \bibinfo{author}{Xia, G.S.}, \bibinfo{year}{2024}b.
-\newblock \bibinfo{title}{List-net: Enhanced flood mapping with lightweight sar
-  transformer network and dimension-wise attention}.
-\newblock \bibinfo{journal}{IEEE Transactions on Geoscience and Remote Sensing}
-  \bibinfo{volume}{62}, \bibinfo{pages}{1--17}.
-%Type = Article
-\bibitem[{Saleh et~al.(2024c)Saleh, Weng, Holail, Hao and Xia}]{saleh2024dam}
+\bibitem[{Saleh et~al.(2024b)Saleh, Weng, Holail, Hao and Xia}]{saleh2024dam}
 \bibinfo{author}{Saleh, T.}, \bibinfo{author}{Weng, X.},
   \bibinfo{author}{Holail, S.}, \bibinfo{author}{Hao, C.},
-  \bibinfo{author}{Xia, G.S.}, \bibinfo{year}{2024}c.
+  \bibinfo{author}{Xia, G.S.}, \bibinfo{year}{2024}b.
 \newblock \bibinfo{title}{Dam-net: Flood detection from sar imagery using
   differential attention metric-based vision transformers}.
 \newblock \bibinfo{journal}{ISPRS Journal of Photogrammetry and Remote Sensing}
   \bibinfo{volume}{212}, \bibinfo{pages}{440--453}.
+\newblock \DOIprefix\doi{10.1016/j.isprsjprs.2024.05.018}.
 %Type = Article
-\bibitem[{Surampudi and Kumar(2023)}]{surampudi2023flood}
-\bibinfo{author}{Surampudi, S.}, \bibinfo{author}{Kumar, V.},
-  \bibinfo{year}{2023}.
-\newblock \bibinfo{title}{Flood depth estimation in agricultural lands from l
-  and c-band synthetic aperture radar images and digital elevation model}.
-\newblock \bibinfo{journal}{IEEE Access} \bibinfo{volume}{11},
-  \bibinfo{pages}{3241--3256}.
+\bibitem[{Salehi et~al.(2017)Salehi, Erdogmus and
+  Gholipour}]{salehi2017tversky}
+\bibinfo{author}{Salehi, S.S.M.}, \bibinfo{author}{Erdogmus, D.},
+  \bibinfo{author}{Gholipour, A.}, \bibinfo{year}{2017}.
+\newblock \bibinfo{title}{Tversky loss function for image segmentation using 3d
+  fully convolutional deep networks}.
+\newblock \bibinfo{journal}{arXiv preprint arXiv:1706.05721}
+  \DOIprefix\doi{10.48550/arXiv.1706.05721}.
 %Type = Article
-\bibitem[{Teng et~al.(2017)Teng, Jakeman, Vaze, Croke, Dutta and
-  Kim}]{teng2017floodInundationUncertainty}
-\bibinfo{author}{Teng, J.}, \bibinfo{author}{Jakeman, A.J.},
-  \bibinfo{author}{Vaze, J.}, \bibinfo{author}{Croke, B.F.W.},
-  \bibinfo{author}{Dutta, D.}, \bibinfo{author}{Kim, S.}, \bibinfo{year}{2017}.
-\newblock \bibinfo{title}{Flood inundation modelling: A review of methods,
-  recent advances and uncertainty analysis}.
-\newblock \bibinfo{journal}{Environmental Modelling \& Software}
-  \bibinfo{volume}{90}, \bibinfo{pages}{201--216}.
-\newblock \DOIprefix\doi{10.1016/j.envsoft.2017.01.006}.
+\bibitem[{Sim{\'e}oni et~al.(2025)Sim{\'e}oni, Vo, Seitzer, Baldassarre, Oquab,
+  Jose, Khalidov, Szafraniec, Yi, Ramamonjisoa, Massa, Haziza, Wehrstedt, Wang,
+  Darcet, Moutakanni, Sentana, Roberts, Vedaldi, Tolan, Brandt, Couprie,
+  Mairal, J{\'e}gou, Labatut and Bojanowski}]{simeoni2025dinov3}
+\bibinfo{author}{Sim{\'e}oni, O.}, \bibinfo{author}{Vo, H.V.},
+  \bibinfo{author}{Seitzer, M.}, \bibinfo{author}{Baldassarre, F.},
+  \bibinfo{author}{Oquab, M.}, \bibinfo{author}{Jose, C.},
+  \bibinfo{author}{Khalidov, V.}, \bibinfo{author}{Szafraniec, M.},
+  \bibinfo{author}{Yi, S.}, \bibinfo{author}{Ramamonjisoa, M.},
+  \bibinfo{author}{Massa, F.}, \bibinfo{author}{Haziza, D.},
+  \bibinfo{author}{Wehrstedt, L.}, \bibinfo{author}{Wang, J.},
+  \bibinfo{author}{Darcet, T.}, \bibinfo{author}{Moutakanni, T.},
+  \bibinfo{author}{Sentana, L.}, \bibinfo{author}{Roberts, C.},
+  \bibinfo{author}{Vedaldi, A.}, \bibinfo{author}{Tolan, J.},
+  \bibinfo{author}{Brandt, J.}, \bibinfo{author}{Couprie, C.},
+  \bibinfo{author}{Mairal, J.}, \bibinfo{author}{J{\'e}gou, H.},
+  \bibinfo{author}{Labatut, P.}, \bibinfo{author}{Bojanowski, P.},
+  \bibinfo{year}{2025}.
+\newblock \bibinfo{title}{Dinov3}.
+\newblock \bibinfo{journal}{arXiv preprint arXiv:2508.10104}
+  \DOIprefix\doi{10.48550/arXiv.2508.10104}.
 %Type = Article
-\bibitem[{Teng et~al.(2022)Teng, Penton, Ticehurst, Sengupta, Freebairn,
-  Marvanek, Vaze, Gibbs, Streeton, Karim et~al.}]{teng2022comprehensive}
-\bibinfo{author}{Teng, J.}, \bibinfo{author}{Penton, D.J.},
-  \bibinfo{author}{Ticehurst, C.}, \bibinfo{author}{Sengupta, A.},
-  \bibinfo{author}{Freebairn, A.}, \bibinfo{author}{Marvanek, S.},
-  \bibinfo{author}{Vaze, J.}, \bibinfo{author}{Gibbs, M.},
-  \bibinfo{author}{Streeton, N.}, \bibinfo{author}{Karim, F.}, et~al.,
-  \bibinfo{year}{2022}.
-\newblock \bibinfo{title}{A comprehensive assessment of floodwater depth
-  estimation models in semiarid regions}.
-\newblock \bibinfo{journal}{Water Resources Research} \bibinfo{volume}{58},
-  \bibinfo{pages}{e2022WR032031}.
-\newblock \DOIprefix\doi{10.1029/2022WR032031}.
+\bibitem[{Tahermanesh et~al.(2025)Tahermanesh, Mohammadzadeh, Mohsenifar and
+  Moghimi}]{tahermanesh2025siscnet}
+\bibinfo{author}{Tahermanesh, S.}, \bibinfo{author}{Mohammadzadeh, A.},
+  \bibinfo{author}{Mohsenifar, A.}, \bibinfo{author}{Moghimi, A.},
+  \bibinfo{year}{2025}.
+\newblock \bibinfo{title}{{SISCNet}: A novel siamese inception-based network
+  with spatial and channel attention for flood detection in {Sentinel-1}
+  imagery}.
+\newblock \bibinfo{journal}{Remote Sensing Applications: Society and
+  Environment} \bibinfo{volume}{38}, \bibinfo{pages}{101571}.
+\newblock \DOIprefix\doi{10.1016/j.rsase.2025.101571}.
+%Type = Inproceedings
+\bibitem[{Tan and Le(2019)}]{tan2019efficientnet}
+\bibinfo{author}{Tan, M.}, \bibinfo{author}{Le, Q.V.}, \bibinfo{year}{2019}.
+\newblock \bibinfo{title}{Efficientnet: Rethinking model scaling for
+  convolutional neural networks}, in: \bibinfo{booktitle}{Proceedings of the
+  36th International Conference on Machine Learning},
+  \bibinfo{publisher}{PMLR}. pp. \bibinfo{pages}{6105--6114}.
+\newblock \URLprefix \url{https://proceedings.mlr.press/v97/tan19a.html}.
 %Type = Article
-\bibitem[{Trepekli et~al.(2022)Trepekli, Balstrom, Friborg, Fog, Allotey, Kofie
-  and Moller-Jensen}]{trepekli2022uavLidarUrbanFlood}
-\bibinfo{author}{Trepekli, K.}, \bibinfo{author}{Balstrom, T.},
-  \bibinfo{author}{Friborg, T.}, \bibinfo{author}{Fog, B.},
-  \bibinfo{author}{Allotey, A.N.}, \bibinfo{author}{Kofie, R.Y.},
-  \bibinfo{author}{Moller-Jensen, L.}, \bibinfo{year}{2022}.
-\newblock \bibinfo{title}{Uav-borne, lidar-based elevation modelling: A method
-  for improving local-scale urban flood risk assessment}.
-\newblock \bibinfo{journal}{Natural Hazards} \bibinfo{volume}{113},
-  \bibinfo{pages}{423--451}.
-\newblock \DOIprefix\doi{10.1007/s11069-022-05308-9}.
+\bibitem[{Tellman et~al.(2021)Tellman, Sullivan, Kuhn, Kettner, Doyle,
+  Brakenridge, Erickson and Slayback}]{tellman2021exposure}
+\bibinfo{author}{Tellman, B.}, \bibinfo{author}{Sullivan, J.A.},
+  \bibinfo{author}{Kuhn, C.}, \bibinfo{author}{Kettner, A.J.},
+  \bibinfo{author}{Doyle, C.S.}, \bibinfo{author}{Brakenridge, G.R.},
+  \bibinfo{author}{Erickson, T.A.}, \bibinfo{author}{Slayback, D.A.},
+  \bibinfo{year}{2021}.
+\newblock \bibinfo{title}{{Satellite imaging reveals increased proportion of
+  population exposed to floods}}.
+\newblock \bibinfo{journal}{Nature} \bibinfo{volume}{596},
+  \bibinfo{pages}{80--86}.
+\newblock \DOIprefix\doi{10.1038/s41586-021-03695-w}.
 %Type = Article
-\bibitem[{Wang et~al.(2025)Wang, Zhao, Jiang, Sun, Yang, Shi, Shi and
-  Li}]{wang2025dmcf}
-\bibinfo{author}{Wang, Z.}, \bibinfo{author}{Zhao, L.}, \bibinfo{author}{Jiang,
-  N.}, \bibinfo{author}{Sun, W.}, \bibinfo{author}{Yang, J.},
-  \bibinfo{author}{Shi, L.}, \bibinfo{author}{Shi, H.}, \bibinfo{author}{Li,
-  P.}, \bibinfo{year}{2025}.
-\newblock \bibinfo{title}{Dmcf-net: Dilated multi-scale context fusion network
-  for sar flood detection}.
-\newblock \bibinfo{journal}{IEEE Journal of Selected Topics in Applied Earth
-  Observations and Remote Sensing} .
+\bibitem[{Tian et~al.(2026)Tian, Liu, Wang, Cohen and
+  Mandal}]{tian2026floodxdepth}
+\bibinfo{author}{Tian, D.}, \bibinfo{author}{Liu, H.}, \bibinfo{author}{Wang,
+  L.}, \bibinfo{author}{Cohen, S.}, \bibinfo{author}{Mandal, T.},
+  \bibinfo{year}{2026}.
+\newblock \bibinfo{title}{{RS-FloodXDepth: Enhancing Remote Sensing-Derived
+  Flood Extent and Estimating Flood Depth Using a Hydrologically Guided
+  Region-Growing Method and High-Resolution DEMs}}.
+\newblock \bibinfo{journal}{Water Resources Research} \bibinfo{volume}{62},
+  \bibinfo{pages}{e2025WR042384}.
+\newblock \DOIprefix\doi{10.1029/2025wr042384}.
+%Type = Article
+\bibitem[{Travert et~al.(2026)Travert, Goeury, Boyaval, Bacchi and
+  Zaoui}]{travert2026uncertainty}
+\bibinfo{author}{Travert, J.P.}, \bibinfo{author}{Goeury, C.},
+  \bibinfo{author}{Boyaval, S.}, \bibinfo{author}{Bacchi, V.},
+  \bibinfo{author}{Zaoui, F.}, \bibinfo{year}{2026}.
+\newblock \bibinfo{title}{{Evaluating the effects of preprocessing, method
+  selection, and hyperparameter tuning on SAR-based flood mapping and water
+  depth estimation}}.
+\newblock \bibinfo{journal}{Natural Hazards and Earth System Sciences}
+  \bibinfo{volume}{26}, \bibinfo{pages}{2387--2413}.
+\newblock \DOIprefix\doi{10.5194/nhess-26-2387-2026}.
+%Type = Article
+\bibitem[{Tsyganskaya et~al.(2018)Tsyganskaya, Martinis, Marzahn and
+  Ludwig}]{tsyganskaya2018vegetation}
+\bibinfo{author}{Tsyganskaya, V.}, \bibinfo{author}{Martinis, S.},
+  \bibinfo{author}{Marzahn, P.}, \bibinfo{author}{Ludwig, R.},
+  \bibinfo{year}{2018}.
+\newblock \bibinfo{title}{{Detection of Temporary Flooded Vegetation Using
+  Sentinel-1 Time Series Data}}.
+\newblock \bibinfo{journal}{Remote Sensing} \bibinfo{volume}{10},
+  \bibinfo{pages}{1286}.
+\newblock \DOIprefix\doi{10.3390/rs10081286}.
+%Type = Article
+\bibitem[{Wagner et~al.(2026)Wagner, Bauer-Marschallinger, Roth, Raiger-Stachl,
+  Reimer, McCormick, Matgen, Chini, Li, Martinis, Wieland, Kraft, Festa,
+  Hassaan, Tupas, Zhao, Seewald, Riffler, Molini, Kidd, Briese and
+  Salamon}]{wagner2026gfm}
+\bibinfo{author}{Wagner, W.}, \bibinfo{author}{Bauer-Marschallinger, B.},
+  \bibinfo{author}{Roth, F.}, \bibinfo{author}{Raiger-Stachl, T.},
+  \bibinfo{author}{Reimer, C.}, \bibinfo{author}{McCormick, N.},
+  \bibinfo{author}{Matgen, P.}, \bibinfo{author}{Chini, M.},
+  \bibinfo{author}{Li, Y.}, \bibinfo{author}{Martinis, S.},
+  \bibinfo{author}{Wieland, M.}, \bibinfo{author}{Kraft, F.},
+  \bibinfo{author}{Festa, D.}, \bibinfo{author}{Hassaan, M.},
+  \bibinfo{author}{Tupas, M.E.}, \bibinfo{author}{Zhao, J.},
+  \bibinfo{author}{Seewald, M.}, \bibinfo{author}{Riffler, M.},
+  \bibinfo{author}{Molini, L.}, \bibinfo{author}{Kidd, R.},
+  \bibinfo{author}{Briese, C.}, \bibinfo{author}{Salamon, P.},
+  \bibinfo{year}{2026}.
+\newblock \bibinfo{title}{{The fully-automatic Sentinel-1 Global Flood
+  Monitoring service: Scientific challenges and future directions}}.
+\newblock \bibinfo{journal}{Remote Sensing of Environment}
+  \bibinfo{volume}{333}, \bibinfo{pages}{115108}.
+\newblock \DOIprefix\doi{10.1016/j.rse.2025.115108}.
 %Type = Article
 \bibitem[{Wei et~al.(2025)Wei, Wu and Wang}]{wei2025ass}
 \bibinfo{author}{Wei, C.}, \bibinfo{author}{Wu, X.}, \bibinfo{author}{Wang,
@@ -483,36 +431,67 @@
   swin-transformer for change detection in remote sensing images}.
 \newblock \bibinfo{journal}{Remote Sensing} \bibinfo{volume}{17},
   \bibinfo{pages}{369}.
-%Type = Misc
-\bibitem[{{Xinhua}(2021)}]{xinhua2021henanEmergency}
-\bibinfo{author}{{Xinhua}}, \bibinfo{year}{2021}.
-\newblock \bibinfo{title}{Rain-ravaged henan activates highest-level emergency
-  response}.
-\newblock \URLprefix
-  \url{https://en.people.cn/n3/2021/0721/c90000-9875022.html}.
-  \bibinfo{note}{published July 21, 2021; accessed 2026-04-26}.
+\newblock \DOIprefix\doi{10.3390/rs17030369}.
+%Type = Inproceedings
+\bibitem[{Woo et~al.(2018)Woo, Park, Lee and Kweon}]{woo2018cbam}
+\bibinfo{author}{Woo, S.}, \bibinfo{author}{Park, J.}, \bibinfo{author}{Lee,
+  J.Y.}, \bibinfo{author}{Kweon, I.S.}, \bibinfo{year}{2018}.
+\newblock \bibinfo{title}{Cbam: Convolutional block attention module}, in:
+  \bibinfo{booktitle}{Proceedings of the European Conference on Computer
+  Vision}, pp. \bibinfo{pages}{3--19}.
 %Type = Article
-\bibitem[{Zhang et~al.(2025)Zhang, Chen, Wang, Kar and
-  Pierce}]{zhang2025opticalFloodReview}
-\bibinfo{author}{Zhang, M.}, \bibinfo{author}{Chen, Z.}, \bibinfo{author}{Wang,
-  J.}, \bibinfo{author}{Kar, B.}, \bibinfo{author}{Pierce, M.},
+\bibitem[{Wu et~al.(2022)Wu, Song, Huang, Zhong, Zhan, Teng, Qiu, He and
+  Cao}]{wu2022msdeeplab}
+\bibinfo{author}{Wu, H.}, \bibinfo{author}{Song, H.}, \bibinfo{author}{Huang,
+  J.}, \bibinfo{author}{Zhong, H.}, \bibinfo{author}{Zhan, R.},
+  \bibinfo{author}{Teng, X.}, \bibinfo{author}{Qiu, Z.}, \bibinfo{author}{He,
+  M.}, \bibinfo{author}{Cao, J.}, \bibinfo{year}{2022}.
+\newblock \bibinfo{title}{Flood detection in dual-polarization {SAR} images
+  based on multi-scale deeplab model}.
+\newblock \bibinfo{journal}{Remote Sensing} \bibinfo{volume}{14},
+  \bibinfo{pages}{5181}.
+\newblock \DOIprefix\doi{10.3390/rs14205181}.
+%Type = Article
+\bibitem[{Yadav et~al.(2022)Yadav, Nascetti and Ban}]{yadav2022attentive}
+\bibinfo{author}{Yadav, R.}, \bibinfo{author}{Nascetti, A.},
+  \bibinfo{author}{Ban, Y.}, \bibinfo{year}{2022}.
+\newblock \bibinfo{title}{Deep attentive fusion network for flood detection on
+  uni-temporal {Sentinel-1} data}.
+\newblock \bibinfo{journal}{Frontiers in Remote Sensing} \bibinfo{volume}{3},
+  \bibinfo{pages}{1060144}.
+\newblock \DOIprefix\doi{10.3389/frsen.2022.1060144}.
+%Type = Article
+\bibitem[{Zhang et~al.(2025)Zhang, Giezendanner, Mukherjee, Tellman, Melancon,
+  Purri, Gurung, Lall, Barnard and Molthan}]{zhang2025floodplanet}
+\bibinfo{author}{Zhang, Z.}, \bibinfo{author}{Giezendanner, J.},
+  \bibinfo{author}{Mukherjee, R.}, \bibinfo{author}{Tellman, B.},
+  \bibinfo{author}{Melancon, A.}, \bibinfo{author}{Purri, M.},
+  \bibinfo{author}{Gurung, I.}, \bibinfo{author}{Lall, U.},
+  \bibinfo{author}{Barnard, K.}, \bibinfo{author}{Molthan, A.},
   \bibinfo{year}{2025}.
-\newblock \bibinfo{title}{Optical remote sensing for global flood disaster
-  mapping: A critical review towards operational readiness}.
-\newblock \bibinfo{journal}{Remote Sensing} \bibinfo{volume}{17},
-  \bibinfo{pages}{1886}.
-\newblock \DOIprefix\doi{10.3390/rs17111886}.
+\newblock \bibinfo{title}{{Assessing Inundation Semantic Segmentation Models
+  Trained on High- versus Low-Resolution Labels using FloodPlanet, a Manually
+  Labeled Multi-Sourced High-Resolution Flood Dataset}}.
+\newblock \bibinfo{journal}{Journal of Remote Sensing} \bibinfo{volume}{5},
+  \bibinfo{pages}{0575}.
+\newblock \DOIprefix\doi{10.34133/remotesensing.0575}.
 %Type = Article
-\bibitem[{Zhao et~al.(2022)Zhao, Li, Matgen, Pelich, Hostache, Wagner and
-  Chini}]{zhao2022urbanAwareUnet}
-\bibinfo{author}{Zhao, J.}, \bibinfo{author}{Li, Y.}, \bibinfo{author}{Matgen,
-  P.}, \bibinfo{author}{Pelich, R.}, \bibinfo{author}{Hostache, R.},
-  \bibinfo{author}{Wagner, W.}, \bibinfo{author}{Chini, M.},
-  \bibinfo{year}{2022}.
-\newblock \bibinfo{title}{Urban-aware u-net for large-scale urban flood mapping
-  using multitemporal sentinel-1 intensity and interferometric coherence}.
-\newblock \bibinfo{journal}{IEEE Transactions on Geoscience and Remote Sensing}
-  \bibinfo{volume}{60}, \bibinfo{pages}{1--21}.
-\newblock \DOIprefix\doi{10.1109/TGRS.2022.3199036}.
+\bibitem[{Zhao et~al.(2023)Zhao, Sui and Liu}]{zhao2023siamdwenet}
+\bibinfo{author}{Zhao, B.}, \bibinfo{author}{Sui, H.}, \bibinfo{author}{Liu,
+  J.}, \bibinfo{year}{2023}.
+\newblock \bibinfo{title}{Siam-dwenet: Flood inundation detection for sar
+  imagery using a cross-task transfer siamese network}.
+\newblock \bibinfo{journal}{International Journal of Applied Earth Observation
+  and Geoinformation} \bibinfo{volume}{116}, \bibinfo{pages}{103132}.
+\newblock \DOIprefix\doi{10.1016/j.jag.2022.103132}.
+%Type = Article
+\bibitem[{Zhu et~al.(2025)Zhu, Yoshimura, Liu and Fu}]{zhu2025globalfloodsar}
+\bibinfo{author}{Zhu, Y.}, \bibinfo{author}{Yoshimura, K.},
+  \bibinfo{author}{Liu, Y.}, \bibinfo{author}{Fu, H.}, \bibinfo{year}{2025}.
+\newblock \bibinfo{title}{Global flood extent monitoring using sar satellite
+  and hydrological data: A multi-scale and multi-source approach}.
+\newblock \bibinfo{journal}{Journal of Hydrology} \bibinfo{volume}{663},
+  \bibinfo{pages}{134074}.
+\newblock \DOIprefix\doi{10.1016/j.jhydrol.2025.134074}.
 
 \end{thebibliography}

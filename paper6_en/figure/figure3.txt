@@ -1,0 +1,47 @@
+图3：ChatGPT网页端image2模块图提示词
+
+一、使用说明
+对应方法3.2节HCE中的表征协调处理。当前交付采用特征薄片、短算子与显式残差的SCI模块图提示词，替换上一轮圆角文字框方案。图3压缩编码入口并展开HA，图4展开单尺度CQI。图3已完成一轮重绘，当前JPG为连接细节待修正的工作图，本轮不生成或替换图片。将第二部分完整复制到网页端即可独立使用。
+
+二、英文主提示词（完整复制）
+Create a scientific deep-learning module diagram for a remote-sensing paper, with the visual grammar of a carefully drawn academic vector schematic. Use a white landscape canvas, approximately 2.2:1, thin black orthogonal arrows, Times New Roman-like labels, italic mathematical feature symbols, and restrained pastel fills. Represent feature tensors as thin axonometric slabs or small stacks with consistent shallow thickness, queries as segmented strips, operations as narrow rectangular plates, concatenation as a small circle C, and residual addition as a circled plus. Use pale blue for pre-event features, pale orange for post-event features, pale green for queries, and muted lavender or cream for operation plates. No decorative shadows, gradients, glossy rendering, realistic images, or synthetic prediction maps.
+
+The image must read as one continuous computation graph, not a business flowchart of large rounded text boxes. Short operator labels replace explanatory sentences. Do not enclose the processing sequence in three panels, use panel letters, or repeat inputs at stage boundaries. A subtle local tint may emphasize a connected operation, but never partition the full canvas. Feature slabs, mathematical symbols, explicit branch connections and local residuals carry the explanation. Use generous but purposeful spacing. Only narrow operator plates may rotate short labels vertically; feature names and the bottom legend remain horizontal. Keep text legible at journal page width. No overall title or figure number. All quoted labels below are exact rendering text; the remaining prose is instruction, not text to print. Arrow crossings are not junctions: use explicit filled dots at actual branches and reroute other crossings. The diagram must stand alone without access to code or prior conversation.
+
+COMPOSITION AND INPUTS
+Reserve approximately the left fifth for a compressed encoding entry and the remaining space for HA computation. At the left place paired input feature slabs labeled "A" and "B". These are pre-event and post-event SAR inputs. Connect both into a compact paired encoding glyph with two short plates labeled "Shared CNN" and "Frozen DINO". This glyph represents the same encoder applied separately to both times, not concatenation or fusion of the two times. The CNN has a direct outlet labeled "P1-P2" and a second outlet labeled "P3-P5". The P3-P5 outlet and the DINO semantic branch enter C followed by a short "Conv + CBAM" plate. This fusion is per time. Its output is two distinct feature stacks, one blue and one orange, labeled "Fused P3-P5". Do not draw normalization, image-range restoration or backbone layers. Keep the corresponding pre/post features separate even where the shared encoder is depicted once.
+
+SCALE ROUTING
+Depict calibration and alignment as a representative per-level computation, not cross-scale fusion. Use small scale-labeled ports so three routes are explicit: CNN P1-P2 enters paired calibration; fused P3 bypasses calibration and enters alignment; fused P4-P5 bypasses both and reaches the matching final pyramid. Draw separate blue and orange bypass paths. The P3 bypass joins the alignment entry as an alternative scale-specific input, not as an addition to P1/P2. A compact routing legend must read "P1-P2: calibration + alignment", "P3: alignment only", "P4-P5: bypass", and "Per-level processing". Never connect P3-P5 to the calibration statistics or affine nodes.
+
+PAIRED CALIBRATION
+Draw two feature tracks through the central-left area. Branch both shallow features into a small "Joint moments" plate between the tracks. Its output symbol is "μpair, σpair" and branches into each time's "Norm" plate. The respective original feature also enters its own Norm plate. Each Norm output passes through an "Affine" plate using the shared learned symbols "μc, σc" shown once between the tracks. This produces an intermediate feature "Yᴬ" or "Yᴮ". Each Y splits: one path goes through "Recover", the other bypasses Recover to a circled plus; Recover supplies the second input to that plus. The calibration residual starts at Y AFTER affine, not at the raw CNN feature. The sum is the calibrated feature that continues directly into alignment. Shared moments are per pair over both times and spatial positions, and canonical affine parameters are learned. Do not depict source-domain prototypes or batch-wide statistics. The two Recover paths use the same weights at a given level; P1 and P2 are processed independently.
+
+LOCAL ALIGNMENT
+Use pre and post feature slabs labeled "Uᴬ" and "Uᴮ" at the incoming alignment ports, without restarting the whole graph. For P1/P2 these are calibrated outputs; for P3 they are fused features from its bypass. Uᴮ enters a short Q projection plate labeled "Q". Uᴬ branches to plates labeled "K" and "V". A compact C receives Uᴬ, Uᴮ and their derived difference labeled "Uᴮ − Uᴬ", then feeds "Offset + bias". This operator produces two clearly distinct outputs: "Δp" to "Sample" and "b" to the attention-score addition. Sample receives K and V and supplies "Kₛ" and "Vₛ" separately. Attach a small abstract sampling grid to Sample: a few reference points and shifted points illustrate learned local feature sampling, not observations or the configured sample count.
+
+Q and Kₛ enter a short score plate labeled "QKₛᵀ / √d". Its score and b enter a circled plus, then "Softmax". The resulting weights and Vₛ enter "Weighted sum", then "Proj". The Proj output and a direct residual from Uᴬ meet at a circled plus, producing aligned pre features. The Uᴮ track supplies Q and offset/bias inputs but otherwise passes through alignment unchanged. Do not add an update or residual operation to post features at this stage.
+
+OUTPUTS AND LEGEND
+The only final outputs are two small five-slab pyramids labeled "X₁ᴬ–X₅ᴬ" and "X₁ᴮ–X₅ᴮ". The blue pyramid receives aligned P1-P3 plus blue fused P4-P5; the orange pyramid receives calibrated P1/P2, fused P3, and orange fused P4/P5. Do not connect the pyramids to one another. Below them write "To CQI" without an arrow between outputs. Keep a compact bottom legend: "A / B: pre / post", "C: concatenation", "⊕: addition", "Norm: paired normalization", "Recover: residual recovery", "Proj: output projection", followed by the scale-routing legend above. Preserve residual topology with short loops, not explanatory paragraphs inside boxes.
+
+EDGE AUDIT BEFORE RENDERING
+Trace all three scale routes independently for each time. Check that shared statistics have exactly the two shallow time inputs, P3 never passes through calibration, and P4/P5 connects only to its own output. Check affine-output residuals, post Q versus pre K/V, the separate offset and attention-bias destinations, and the final pre-feature residual. This is feature coordination, not physical radiometric correction or global image warping. Do not import any SCGC-Net module or mechanism. Produce one image only.
+
+三、参考图使用说明
+参考SCGC-Net方法章节的“设计目的—输入与计算—输出”组织，以及CAM/CU图的特征薄片、紧凑算子、分支、残差和符号图例。只借鉴视觉语法，不复制布局或引入其模块。可附参考论文模块图作为视觉参考；当前旧图和失败生成图不作为连接依据。取消上一版禁止特征厚度、数学符号及局部强调的要求，保留不拆成三联面板的原则。英文主提示词不依赖参考图也可使用。
+
+四、英文局部修订提示词
+Edit only the scale routing and residual connectors in the existing diagram. Preserve its feature slabs, operator plates, colors, typography, and all unaffected node positions. CNN P1/P2 alone supplies Joint moments and calibration. Fused P3 goes directly to the alignment entry, and fused P4/P5 goes to its own final pyramid. The Recover residual begins after Affine. Post features supply Q; pre features supply K/V. Δp controls sampling and b enters the score addition before Softmax. The final alignment residual starts at Uᴬ; Uᴮ remains unchanged through alignment. Do not add stage panels or explanatory text boxes.
+
+五、连接与版面验收
+主提示词末尾EDGE AUDIT为逐项连接清单。生成后先逐条核对，再检查特征与运算视觉区分、无长句框、箭头不穿字、残差来源明确及缩至论文宽度后的可读性。绘图中的分段数量和网格点仅为示意，不替代实验配置。两轮局部修订仍无法纠正的连接停止采用该输出。当前图片已重绘但局部连接待修正，文本核对通过不等于图件已通过科学或排版审查。
+这是方法说明图，不是实验图或图文摘要。将来实际使用生成图时，记录网页显示的工具/模型版本、生成日期、原提示词及修订记录，并在图注和文章AI声明披露。当前版本信息不预填，不宣称已经完成生成或作者审核。
+
+六、本轮重绘图的定点纠正（HarmoSSM方法重构）
+本条替换任何“尚未生成”的旧状态判断，现图已重绘但未通过科学验收。保持现有SCI薄片、主图和局部细节布局，仅修正连接：
+Correct the existing Figure 3 without changing its accepted composition, feature slabs, colors, or scale routes. Show shared-weight annotations only between the two CNN encoders and between the two DINO encoders, never between CNN and DINO; these are annotations, not data-flow arrows. Keep post-event P1-P3 unchanged in the main graph, with branches supplying the pre-feature alignment reference. In the local alignment detail, route sampled K to the QK score, sampled V to the weighted sum, and post-event U_B directly to Q projection. Route the predicted bias to the score addition before Softmax, and the predicted offset to sampling. The unchanged U_B output must branch directly from U_B, not from a score node. Feed each original feature into its own Norm node alongside the shared moments. Preserve the affine-output recovery residual and the pre-feature alignment residual. Identify this computation as the representation-harmonization part of HCE; HCE also includes CQI in Figure 4.
+
+
+方法正文与图注同步（2026-09-08）
+两稿3.2将共享表征、成对统计校准和局部对应拆开解释。图注以上部尺度路径、下部校准及对齐为主体；A/B为灾前/灾后，局部对齐以灾后为查询，仅更新灾前。前述同类跨时相共享权重、采样K/V去向、Q与偏移/偏置分流、灾后直接输出及原始特征进入Norm等待修事项继续保留。本轮仅更新文字，不修改JPG；现图仍为局部连线待修的工作图。

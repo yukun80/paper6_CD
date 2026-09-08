@@ -1,0 +1,75 @@
+图5：ChatGPT网页端image2提示词——左侧解码主流程与右侧结构细节
+
+一、使用说明
+对应方法3.3节。本版采用约1.3:1“左主右详”构图，替换旧1.7:1横向完整展开及底部单个插图要求。左侧纵向展示完整解码，右上展开Regional context，右下只展开Multiresolution input。蓝—珊瑚色、Times字体及特征薄片保持。第二部分为独立完整的重绘提示词，不沿用旧图错误布线；第四部分用于当前工作图的定点连线修订。图5现已完成重绘：左侧逐级恢复、右下多分辨率输入及O→Up→S→Proj→J顺序保留；右上汇聚连线尚未通过科学验收。本轮仅更新图件文字说明，不生成或替换JPG。
+
+二、英文主提示词（完整复制）
+Redraw the OSCD decoder figure with a NEW compact composition and NEW wiring. Do not preserve the old wide horizontal layout or its erroneous connections. Use a canvas approximately 1.3:1: the left 40% is the complete decoder overview running vertically; the right 60% contains regional-context detail above and multiresolution-input detail below. These are an overview and nested explanations, not three serial processing modules. Use the lower-right space for the input detail instead of leaving it empty. Place a compact legend at the bottom; allow two short rows rather than forcing a full-width single row.
+
+VISUAL STYLE
+Use Times New Roman-like labels, italic feature symbols, thin dark-gray orthogonal arrows, short rectangular operator plates, and thin axonometric feature slabs. Palette: features #DCE5EF; regional-context operators #D5E8F0; reinjection Proj, J and its three additions #F1D5CC; local reconstruction #E5DFED; ordinary projection, resizing and concatenation #F4F5F7. White background and near-black text. No SegMAN-style green-yellow palette, decorative shadows, gradient fills, oversized banners, or long explanations inside boxes. Keep a uniform readable font instead of shrinking labels to fit. Use only restrained local framing to distinguish detail scope.
+C in a circle means concatenation; circled plus means element-wise addition. Use solid arrowheads only for computation and dotted leaders WITHOUT arrowheads for detail correspondence. Filled dots indicate actual branches; other crossings must be rerouted. Leaders attach to operator frames, not feature wires. Do not add a figure number or overall title.
+
+LEFT: VERTICAL DECODER OVERVIEW
+At the top show three small feature slabs D₃, D₄ and D₅ feeding a compact “Regional context” operator. Add “From CQI” once. Regional context outputs R₃.
+Continue vertically downward:
+R₃ → “Up” → C → “Reconstruct” → R₂;
+R₂ → “Up” → C → “Reconstruct” → R₁.
+Place D₂ beside the FIRST recovery step, with D₂ → “Proj” → the first C. Place D₁ beside the SECOND step, with D₁ → “Proj” → the second C. Their short connections must remain within the left column. Never draw D₁/D₂ across the entire canvas. Each C has exactly two inputs, and each Reconstruct has only ONE input: its preceding C output. No shallow feature may feed Reconstruct directly.
+Below R₁ continue through “2-class head” → “Resize” → “Logits” → “Softmax + threshold” → “New inundation extent”. Keep output operators compact; a short local bend is allowed within the left column, but no long horizontal output chain. Resize restores the input-image grid. Do not invent a threshold value. The extent is an unfilled outlined rectangle, not a synthetic flood pattern.
+Each D feature appears once in the overview. Repetition inside an explicitly linked detail is explanatory, not a new source or a second application of the algorithm.
+
+UPPER RIGHT: REGIONAL CONTEXT DETAIL
+Title this area “Regional context detail”. Connect its frame to the left Regional context operator with a dotted non-arrowed leader. Its boundaries are D₃–D₅ in and R₃ out, exactly matching the overview.
+Project and resize D₃, D₄ and D₅ separately to the D₃ grid, obtaining E₃, E₄ and E₅. These enter C → “Fuse” → F. Branch each Eᵢ to its own later reinjection addition.
+Within the right-hand area, use compact stacked routes rather than a miniature full-width chain:
+F → “Multiresolution input” → G → “State-space context” → O → “Up” → S.
+S has a direct route into the final context concatenation and a separate route through a visible “Proj” plate to J. J is produced AFTER upsampling. Do not omit J or project O in its place.
+F independently supplies “Short Conv”, and also “Global Pool + Proj” → “Resize”. Neither branch originates from O, S or J.
+
+Place three coral addition nodes in parallel rows. Give each node a left input from Eᵢ and a separate second input from a branching J line. Put the J branching line on the INPUT side of the additions. Its three branch dots connect to the three addition input ports, never the result wires.
+E₃ and J → addition → E₃ + J;
+E₄ and J → addition → E₄ + J;
+E₅ and J → addition → E₅ + J.
+No arrow connects one addition to the next. Each result has its own independent wire to the final C. Keep E₃/E₄/E₅ bypasses distinct; their shared initial fusion does not merge these later branches.
+
+The final context C receives exactly SIX distinct inputs: S directly, Short Conv output, resized global context, E₃ + J, E₄ + J, and E₅ + J. Use six visible input ports. It feeds “Reconstruct” → R₃. J alone and F alone are NOT inputs to this C. Short/global outputs do NOT enter any Eᵢ + J addition. This six-way operation is concatenation, not summation.
+
+LOWER RIGHT: MULTIRESOLUTION INPUT DETAIL
+Use the title “Multiresolution input detail”. Connect this frame by a dotted non-arrowed leader only to “Multiresolution input” in the upper-right detail. Its input is F and output is G. It does NOT expand the State-space context operator.
+F splits into:
+“Identity” → “PU ×4” → “Reduce”;
+“Conv s2” → “PU ×2” → “Reduce”;
+“Conv s4” → “Reduce”.
+All three outputs enter C → G. Stop the detail at G. Do not repeat State-space context, O, Up, S or J here. PU denotes pixel unshuffle, not interpolation. Do not show scan sequences, numbered grids, direction arrows, CPE/FFN internals, training losses or auxiliary heads.
+
+HIERARCHY AND SPACING
+The left overview remains the only complete input-to-prediction path. Right-side views explain existing operators and have no solid data-flow connection into the left overview. Keep both correspondence leaders short and away from text. Arrange upper-right computation rows and lower-right input branches to use their allotted areas fully, with balanced margins. Do not scatter enlarged empty feature slabs or leave a blank lower-right quadrant. Preserve modest whitespace around labels and arrowheads.
+Use a compact legend: “C: concatenation”, “⊕: addition”, “PU: pixel unshuffle”, “Up: resize”, “Dotted leader: detail correspondence”. No training area, supervision connectors, DEM, CFDepth, realistic imagery or simulated prediction blobs. Reference images guide typography, feature symbols and overview/detail hierarchy only; do not import their network mechanisms or claim that generic operations are independently novel.
+
+FINAL CONNECTION CHECK
+1. Left overview includes D₃–D₅ → Regional context → R₃, then D₂ recovery, then D₁ recovery and the prediction chain.
+2. Each local Reconstruct receives only its preceding C output.
+3. Upper-right scope is D₃–D₅ → R₃; lower-right scope is F → G.
+4. O → Up → S → Proj → J, with S also entering context C directly.
+5. Three independent Eᵢ+J nodes receive J on their input side; no serial additions or output-side J junctions.
+6. Six context inputs remain separate until concatenation.
+7. Detail leaders have no arrowheads and do not introduce additional serial computation.
+8. No complete wide horizontal chain, reduced-size text, training content or scan tutorial remains.
+Deliver one compact academic decoder figure.
+
+三、参考图使用说明
+借鉴参考图“左侧整体、右侧模块内部展开”的层次和紧凑布线，不保留旧生成图的横向位置与箭头。SegMAN只提供组织参考，沿用本图蓝—珊瑚配色而非其绿色—黄色体系。右上展开Regional context；右下只展开Multiresolution input，输出统一命名G，避免重复State-space context造成两次执行的误解。无参考附件时英文主提示词仍独立完整。
+
+四、英文局部修订提示词（针对已重绘工作图，2026-09-08）
+Edit ONLY the wiring in the upper-right “Regional context detail” of the supplied working figure. Preserve the left decoder overview, the complete lower-right multiresolution-input detail, node positions, feature slabs, colors, typography, and the correct O → Up → S → Proj → J sequence. Do not redraw the whole figure.
+First erase the incorrect reinjection and final-concatenation wires completely, including old junction dots and duplicate routes. Then rebuild these connections:
+1. Branch E₃, E₄ and E₅ separately from their own projected/resized feature slabs. Each still enters the initial C → Fuse → F, and each has one independent bypass to its matching coral addition. E₃ must feed E₃+J, E₄ must feed E₄+J, and E₅ must feed E₅+J. Remove the current E₅-to-first-addition and F-to-addition connections.
+2. Take a new branching line from the OUTPUT of J, on the INPUT side of the three additions. J enters each addition once as its second input. Delete J's current direct route into the final C. No addition output may join this J input bus or another addition.
+3. Give S one clearly separate direct path to final C and one path through Proj to J. Erase the existing Up-output bus where it joins the E₃+J result and feeds an addition. The S-to-C wire must have no junction with any addition input or result wire.
+4. Connect Short Conv explicitly from F AFTER Fuse. Remove its ambiguous incoming route from the initial concatenation area. Preserve F → Global Pool + Proj → Resize as a separate branch.
+5. Connect exactly six distinct inputs to the final context C: S, Short Conv output, resized global-context output, E₃+J, E₄+J and E₅+J. Use six visible input ports. Remove extra routes, including any duplicate addition-to-C path that bypasses the corresponding result slab. Only this C output enters Reconstruct → R₃.
+Crossings have no filled dots unless they are intended branches. Keep all three addition results independent and retain the existing correct upstream/downstream computation. Do not change the left D₂/D₁ recovery, the lower-right F-to-G branches, or the inference-only content.
+
+五、验收清单
+本轮更新本TXT及已授权的正文、图注和方案记录。主图完整但封装Regional context，D₂/D₁就近输入；右上输入输出为D₃—D₅/R₃，右下为F/G，细节对应范围一致。逐箭头核对O/S/J顺序、J分支所在输入侧、三个独立加法、六路拼接和局部Reconstruct唯一输入。定点修图后检查1.3:1整体比例、左右区域利用率、右下留白、字体一致性与论文宽度可读性。不得以文本检查替代最终图像科学验收。若反复生成错误，保留正确布局后仅修订对应连接。当前工作图已重绘但右上连接未验收通过；本轮不生成或修改JPG。两稿正文按正确计算关系深化并串行编译，算法及实验产物保持不变。
