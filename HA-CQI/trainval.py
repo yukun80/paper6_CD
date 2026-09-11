@@ -6,7 +6,6 @@ import json
 import math
 import os
 import random
-from contextlib import nullcontext
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -20,10 +19,8 @@ import torch
 from tqdm import tqdm
 
 from data.cd_dataset import DataLoader
-from data.runtime_snapshot import (
-    build_runtime_data_snapshot,
-    warn_if_runtime_snapshot_changed,
-)
+from data.runtime_snapshot import build_runtime_data_snapshot
+from utils.prediction import foreground_probability, threshold_probability
 from model.checkpointing import atomic_json_save
 from model.engine import build_hacqi_engine
 from option import Options
@@ -142,7 +139,6 @@ class HACQITrainer:
         )
 
         self.global_step = 0
-        self.start_epoch = 1
         self.best_selection: dict[str, Any] | None = None
         self.thresholds = build_threshold_grid(
             opt.threshold_min,
@@ -154,52 +150,11 @@ class HACQITrainer:
         self.vis_path = self.save_dir / opt.vis_path
         self.vis_path.mkdir(parents=True, exist_ok=True)
         self.metrics_path = self.save_dir / "metrics.jsonl"
-        snapshot_name = "resume_options.json" if opt.resume else "options.json"
-        atomic_json_save(_json_safe_options(opt), self.save_dir / snapshot_name)
+        atomic_json_save(_json_safe_options(opt), self.save_dir / "options.json")
         atomic_json_save(self.runtime_data_snapshot, self.save_dir / "data_snapshot.json")
 
-        if opt.resume:
-            self.start_epoch, self.global_step, payload = self.model.restore_training_checkpoint(
-                opt.resume,
-                scaler=self.scaler,
-                data_loader_generator=self.train_loader.generator,
-            )
-            checkpoint_snapshot_id = (
-                payload.get("meta", {}).get("data_config", {}).get("runtime_snapshot_id")
-            )
-            current_snapshot_id = self.runtime_data_snapshot["runtime_snapshot_id"]
-            data_changed = warn_if_runtime_snapshot_changed(
-                checkpoint_snapshot_id,
-                current_snapshot_id,
-            )
-            if data_changed:
-                self.best_selection = None
-                print(
-                    "[WARN] reset in-memory best selection because validation members "
-                    "changed; the next completed validation establishes a new primary baseline."
-                )
-            else:
-                self._restore_best_selection()
-            print(
-                f"[INFO] resumed from {opt.resume}: start_epoch={self.start_epoch}, "
-                f"global_step={self.global_step}"
-            )
-
-    def _restore_best_selection(self) -> None:
-        path = self.save_dir / "selection.json"
-        if path.is_file():
-            payload = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(payload, dict) and payload.get("iou_1") is not None:
-                self.best_selection = payload
-
     def _autocast_context(self):
-        if not self.amp_enabled:
-            return nullcontext()
-        return torch.amp.autocast(
-            device_type=self.model.device.type,
-            dtype=self.amp_dtype,
-            enabled=True,
-        )
+        return self.model._amp_autocast_context()
 
     @staticmethod
     def _mean_stats(sums: dict[str, float], count: int) -> dict[str, float]:
@@ -217,8 +172,8 @@ class HACQITrainer:
         threshold: float,
     ) -> None:
         if prediction.ndim == 4:
-            probability = torch.softmax(prediction.detach().float(), dim=1)[:, 1]
-            prediction = (probability >= float(threshold)).long()
+            probability = foreground_probability(prediction.detach())
+            prediction = threshold_probability(probability, threshold).long()
         vis_input = make_numpy_grid(de_norm(x1[0:8].clone(), self.opt.mean, self.opt.std))
         vis_input2 = make_numpy_grid(de_norm(x2[0:8].clone(), self.opt.mean, self.opt.std))
         vis_pred = make_numpy_grid(prediction[0:8].unsqueeze(1).repeat(1, 3, 1, 1))
@@ -338,7 +293,7 @@ class HACQITrainer:
             img2 = batch["img2"].to(self.model.device, non_blocking=True)
             with self._autocast_context():
                 logits = self.model.inference(img1, img2)
-            probabilities = torch.softmax(logits.float(), dim=1)[:, 1].cpu().numpy()
+            probabilities = foreground_probability(logits).cpu().numpy()
             target = batch["cd_label"].cpu().numpy()
             evaluator.update(probabilities, target)
             step_count += 1
@@ -418,8 +373,6 @@ class HACQITrainer:
                 global_step=self.global_step,
                 selection=selection,
                 data_provenance=self.data_provenance,
-                scaler_state=self.scaler.state_dict(),
-                data_loader_generator_state=self.train_loader.get_generator_state(),
             )
             selection["checkpoint_file"] = checkpoint_path.name
             self.best_selection = selection
@@ -432,8 +385,6 @@ class HACQITrainer:
             global_step=self.global_step,
             selection=selection,
             data_provenance=self.data_provenance,
-            scaler_state=self.scaler.state_dict(),
-            data_loader_generator_state=self.train_loader.get_generator_state(),
         )
         print(f"[INFO] last checkpoint: {last_path}")
         if epoch % 10 == 0:
@@ -443,8 +394,6 @@ class HACQITrainer:
                 global_step=self.global_step,
                 selection=selection,
                 data_provenance=self.data_provenance,
-                scaler_state=self.scaler.state_dict(),
-                data_loader_generator_state=self.train_loader.get_generator_state(),
             )
             print(f"[INFO] periodic checkpoint: {periodic_path}")
 
@@ -470,16 +419,12 @@ class HACQITrainer:
             handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
 
     def run(self) -> None:
-        if self.start_epoch > self.opt.num_epochs:
-            raise ValueError(
-                f"Resume epoch {self.start_epoch - 1} already reaches num_epochs={self.opt.num_epochs}"
-            )
         total_batches = math.ceil(len(self.train_loader) / self.opt.batch_size)
         print(
-            f"[INFO] epochs={self.start_epoch}..{self.opt.num_epochs} | "
+            f"[INFO] epochs=1..{self.opt.num_epochs} | "
             f"nominal_train_batches={total_batches}"
         )
-        for epoch in range(self.start_epoch, self.opt.num_epochs + 1):
+        for epoch in range(1, self.opt.num_epochs + 1):
             previous = (
                 float(self.best_selection["iou_1"]) * 100.0 if self.best_selection else float("nan")
             )

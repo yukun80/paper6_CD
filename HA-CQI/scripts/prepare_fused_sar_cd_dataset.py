@@ -26,7 +26,21 @@ PROJECT_ROOT = CURRENT_DIR.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from data.tif_io import build_valid_mask, stretch_sar_array  # noqa: E402
+from data.tif_io import (  # noqa: E402
+    LABEL_FOREGROUND,
+    LABEL_NODATA,
+    decode_binary_label,
+    read_label_mask,
+    read_raster_valid_mask,
+    read_training_label,
+)
+from data.scene_stretch import (  # noqa: E402
+    StretchBounds,
+    StretchConfig,
+    fit_scene_stretch,
+    read_scene_window,
+    stretch_to_uint8,
+)
 from utils.provenance import sha256_file  # noqa: E402
 
 """
@@ -102,8 +116,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--stride", type=int, default=128)
     parser.add_argument("--train-ratio", type=float, default=0.75)
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--stretch-low", type=float, default=2.0)
-    parser.add_argument("--stretch-high", type=float, default=98.0)
+    parser.add_argument("--stretch-low", type=float, default=2.0, help="双时相整景联合百分位下限")
+    parser.add_argument("--stretch-high", type=float, default=98.0, help="双时相整景联合百分位上限")
     parser.add_argument(
         "--min-valid-ratio",
         type=float,
@@ -173,7 +187,7 @@ def build_s1gfloods_records(src_root: Path, strict: bool) -> list[SampleRecord]:
             raise ValueError(f"S1GFloods strict mode expects PNG only, got: {name}")
         stem = Path(name).stem
         sample_id = f"s1gfloods_{stem}"
-        label_arr = np.asarray(Image.open(label_map[name]).convert("L"), dtype=np.uint8)
+        label_arr = read_training_label(label_map[name], (a_map[name], b_map[name]))
         valid_pixels = int(label_arr.size)
         foreground_pixels = int(np.count_nonzero(label_arr > 0))
         records.append(
@@ -211,18 +225,18 @@ def iter_windows(height: int, width: int, tile_size: int, stride: int) -> list[W
     return windows
 
 
-def stretch_to_uint8(arr: np.ndarray, valid_mask: np.ndarray, low: float, high: float) -> np.ndarray:
-    """按有效像素百分位做稳定拉伸，保持与现有 SAR 推理脚本一致。"""
-    stretched = stretch_sar_array(arr, valid_mask, low=low, high=high)
-    return np.rint(stretched * 255.0).astype(np.uint8)
-
-
-def label_to_uint8(arr: np.ndarray, valid_mask: np.ndarray | None = None) -> np.ndarray:
-    """统一把标签转成 0/255，便于训练阶段沿用现有二值读取逻辑。"""
-    foreground = arr > 0
+def label_to_uint8(
+    arr: np.ndarray,
+    valid_mask: np.ndarray | None = None,
+    *,
+    nodata: float | int | None = None,
+    label_mask: np.ndarray | None = None,
+) -> np.ndarray:
+    """仅保留已知洪水编码，GT 未知和 SAR 无效位置统一为背景。"""
+    foreground, _ = decode_binary_label(arr, nodata, label_mask)
     if valid_mask is not None:
-        foreground &= valid_mask
-    return np.where(foreground, 255, 0).astype(np.uint8)
+        foreground[~valid_mask] = 0
+    return foreground * LABEL_FOREGROUND
 
 
 def find_single_tif(folder: Path) -> Path:
@@ -279,15 +293,19 @@ def build_varfloods_records(args: argparse.Namespace) -> tuple[list[SampleRecord
                 left = int(window.col_off)
                 arr_a = ds_a.read(1, window=window).astype(np.float32, copy=False)
                 arr_b = ds_b.read(1, window=window).astype(np.float32, copy=False)
-                valid_mask = build_valid_mask(arr_a, ds_a.nodata)
-                valid_mask &= build_valid_mask(arr_b, ds_b.nodata)
+                valid_mask = read_raster_valid_mask(ds_a, arr_a, window)
+                valid_mask &= read_raster_valid_mask(ds_b, arr_b, window)
                 valid_ratio = float(valid_mask.mean())
                 if valid_ratio <= 0.0 or valid_ratio < args.min_valid_ratio:
                     skipped_invalid += 1
                     continue
 
                 arr_l = ds_l.read(1, window=window)
-                foreground_pixels = int(np.count_nonzero((arr_l > 0) & valid_mask))
+                label = label_to_uint8(
+                    arr_l, valid_mask, nodata=ds_l.nodata,
+                    label_mask=read_label_mask(ds_l, window),
+                )
+                foreground_pixels = int(np.count_nonzero(label))
                 valid_pixels = int(np.count_nonzero(valid_mask))
 
                 kept += 1
@@ -399,7 +417,7 @@ def compute_cross_split_overlap(splits: dict[str, list[SampleRecord]]) -> dict[s
 
 
 def compute_dataset_fingerprint(splits: dict[str, list[SampleRecord]]) -> str:
-    """生成构建时审计指纹；训练和 resume 从不把它作为准入条件。"""
+    """生成构建时审计指纹；训练从不把它作为准入条件。"""
     digest = hashlib.sha256()
     for split in ("train", "val"):
         for record in sorted(splits[split], key=lambda item: item.sample_id):
@@ -529,13 +547,37 @@ def manifest_row(record: SampleRecord, split: str, out_root: Path, write_tif: bo
 
 
 def write_s1_record(record: SampleRecord, out_root: Path, split: str) -> None:
-    """S1GFloods 已经是 PNG，对应 split 下直接重命名复制。"""
+    """复制 S1GFloods 影像，标签按公共监督规则归一化后写出。"""
     copy_file(record.a_path, out_root / split / "A" / f"{record.sample_id}.png")
     copy_file(record.b_path, out_root / split / "B" / f"{record.sample_id}.png")
-    copy_file(record.label_path, out_root / split / "label" / f"{record.sample_id}.png")
+    label = read_training_label(record.label_path, (record.a_path, record.b_path))
+    write_png_label(label * LABEL_FOREGROUND, out_root / split / "label" / f"{record.sample_id}.png")
 
 
-def write_var_records(records: list[SampleRecord], out_root: Path, split: str, args: argparse.Namespace) -> None:
+def fit_var_scene_stretches(
+    records: list[SampleRecord], args: argparse.Namespace,
+) -> tuple[dict[tuple[Path, Path], StretchBounds], list[dict[str, object]]]:
+    """每个参与输出的源场景对只拟合一次，跨 train/val 复用同一标尺。"""
+    pairs = sorted({(r.a_path, r.b_path) for r in records if r.source == "varfloods_pro"})
+    bounds_by_pair: dict[tuple[Path, Path], StretchBounds] = {}
+    reports: list[dict[str, object]] = []
+    config = StretchConfig(low=args.stretch_low, high=args.stretch_high)
+    for a_path, b_path in pairs:
+        with rasterio.open(a_path) as ds_a, rasterio.open(b_path) as ds_b:
+            bounds, statistics = fit_scene_stretch(ds_a, ds_b, config)
+        bounds_by_pair[(a_path, b_path)] = bounds
+        reports.append({
+            "pre_image": str(a_path), "post_image": str(b_path),
+            "percentiles": {"low": config.low, "high": config.high},
+            **statistics,
+        })
+    return bounds_by_pair, reports
+
+
+def write_var_records(
+    records: list[SampleRecord], out_root: Path, split: str,
+    bounds_by_pair: dict[tuple[Path, Path], StretchBounds],
+) -> None:
     """按区域分组写 VarFloods 切片，减少重复打开整景 tif 的开销。"""
     grouped: dict[tuple[Path, Path, Path], list[SampleRecord]] = defaultdict(list)
     for record in records:
@@ -545,15 +587,20 @@ def write_var_records(records: list[SampleRecord], out_root: Path, split: str, a
         with rasterio.open(a_path) as ds_a, rasterio.open(b_path) as ds_b, rasterio.open(label_path) as ds_l:
             for record in group:
                 window = Window(col_off=record.col_off, row_off=record.row_off, width=record.width, height=record.height)
-                arr_a = ds_a.read(1, window=window).astype(np.float32, copy=False)
-                arr_b = ds_b.read(1, window=window).astype(np.float32, copy=False)
+                raw_a, raw_b, stretch_valid = read_scene_window(ds_a, ds_b, window)
+                # PNG 映射使用原始精度；标签及 TIFF 导出沿用既有 float32 路径。
+                arr_a = raw_a.astype(np.float32, copy=False)
+                arr_b = raw_b.astype(np.float32, copy=False)
                 arr_l = ds_l.read(1, window=window)
-
-                valid_mask = build_valid_mask(arr_a, ds_a.nodata)
-                valid_mask &= build_valid_mask(arr_b, ds_b.nodata)
-                a_png = stretch_to_uint8(arr_a, valid_mask, args.stretch_low, args.stretch_high)
-                b_png = stretch_to_uint8(arr_b, valid_mask, args.stretch_low, args.stretch_high)
-                label_png = label_to_uint8(arr_l, valid_mask=valid_mask)
+                valid_mask = read_raster_valid_mask(ds_a, arr_a, window)
+                valid_mask &= read_raster_valid_mask(ds_b, arr_b, window)
+                bounds = bounds_by_pair[(a_path, b_path)]
+                a_png = stretch_to_uint8(raw_a, stretch_valid, bounds)
+                b_png = stretch_to_uint8(raw_b, stretch_valid, bounds)
+                label_png = label_to_uint8(
+                    arr_l, valid_mask, nodata=ds_l.nodata,
+                    label_mask=read_label_mask(ds_l, window),
+                )
 
                 write_png_rgb(a_png, out_root / split / "A" / f"{record.sample_id}.png")
                 write_png_rgb(b_png, out_root / split / "B" / f"{record.sample_id}.png")
@@ -581,7 +628,7 @@ def write_var_records(records: list[SampleRecord], out_root: Path, split: str, a
                     out_root / f"{split}_tif" / "label" / f"{record.sample_id}.tif",
                     window,
                     "uint8",
-                    0,
+                    LABEL_NODATA,
                 )
 
 
@@ -590,6 +637,7 @@ def write_split_outputs(
     split: str,
     records: list[SampleRecord],
     args: argparse.Namespace,
+    bounds_by_pair: dict[tuple[Path, Path], StretchBounds],
 ) -> list[dict[str, object]]:
     manifest_rows: list[dict[str, object]] = []
 
@@ -602,7 +650,7 @@ def write_split_outputs(
         manifest_rows.append(manifest_row(record, split, out_root, write_tif=False))
 
     if not args.dry_run:
-        write_var_records(var_records, out_root, split, args)
+        write_var_records(var_records, out_root, split, bounds_by_pair)
     manifest_rows.extend(manifest_row(record, split, out_root, write_tif=True) for record in var_records)
     return manifest_rows
 
@@ -641,10 +689,13 @@ def write_report(
     split_rows: dict[str, list[dict[str, object]]],
     region_reports: list[dict[str, object]],
     protected_hashes: dict[str, str],
+    stretch_reports: list[dict[str, object]],
 ) -> None:
     dataset_fingerprint = compute_dataset_fingerprint(splits)
     payload = {
         "format_version": 2,
+        "label_encoding": {"background": 0, "foreground": LABEL_FOREGROUND, "nodata": LABEL_NODATA},
+        "label_policy": "unknown_gt_and_invalid_sar_as_background",
         "dataset_fingerprint": dataset_fingerprint,
         "source_roots": {
             "s1gfloods_root": str(args.s1gfloods_root),
@@ -695,6 +746,7 @@ def write_report(
             split: [record.sample_id for record in items[:5]] for split, items in splits.items()
         },
         "varfloods_regions": region_reports,
+        "scene_stretches": stretch_reports,
     }
 
     if args.dry_run:
@@ -718,19 +770,21 @@ def main() -> None:
     all_records = s1_records + var_records
     splits = assign_splits(all_records, args.train_ratio, args.seed)
 
+    # dry-run 也拟合并报告；在清理/创建输出目录前完成整景统计。
+    bounds_by_pair, stretch_reports = fit_var_scene_stretches(all_records, args)
     clean_output_root(args.out_root, args.overwrite, args.dry_run)
     prepare_dirs(args.out_root, args.dry_run)
 
     split_rows: dict[str, list[dict[str, object]]] = {}
     for split, records in splits.items():
-        split_rows[split] = write_split_outputs(args.out_root, split, records, args)
+        split_rows[split] = write_split_outputs(args.out_root, split, records, args, bounds_by_pair)
 
     protected_after = protected_dataset_hashes(args.protected_dataset_root)
     if protected_after != protected_before:
         raise RuntimeError(
             f"Protected dataset changed during build: {args.protected_dataset_root}"
         )
-    write_report(args, splits, split_rows, region_reports, protected_before)
+    write_report(args, splits, split_rows, region_reports, protected_before, stretch_reports)
     counts = {split: len(items) for split, items in splits.items()}
     print(
         "[DONE] total={total} train={train} val={val} s1gfloods={s1} varfloods={var}".format(

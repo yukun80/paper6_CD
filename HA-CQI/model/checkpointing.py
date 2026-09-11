@@ -114,24 +114,6 @@ def extract_network_state(payload: dict[str, Any]) -> dict[str, torch.Tensor]:
     return payload["network"]
 
 
-def load_network_state(
-    network: nn.Module,
-    checkpoint_path: str | Path,
-    *,
-    strict: bool = True,
-    map_location: str | torch.device = "cpu",
-) -> dict[str, Any]:
-    payload = load_checkpoint_payload(checkpoint_path, map_location=map_location)
-    checkpoint_model_config(payload)
-    state = extract_network_state(payload)
-    missing, unexpected = network.load_state_dict(state, strict=strict)
-    if strict and (missing or unexpected):
-        raise RuntimeError(
-            f"Strict checkpoint load failed: missing={missing}, unexpected={unexpected}"
-        )
-    return payload
-
-
 def checkpoint_model_config(payload: dict[str, Any]) -> dict[str, Any]:
     meta = validate_checkpoint_v2(payload)
     raw_model_config = meta.get("model_config")

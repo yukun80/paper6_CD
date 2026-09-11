@@ -77,7 +77,7 @@ python trainval.py \
 
 正式训练不得保留 `--max_train_steps/--max_val_steps`。
 
-## 4. Checkpoint 与 resume
+## 4. Checkpoint 与训练记录
 
 每个 run 记录：
 
@@ -91,17 +91,12 @@ options.json
 data_snapshot.json
 ```
 
-完整续训：
-
-```bash
-cd HA-CQI
-RESUME=checkpoints/<run>/<run>_efficientnet_b2_last.pth \
-bash trainval_s1gfloods.sh
-```
-
-模型、loss 和训练配置仍严格一致。若目录成员或自动统计变化，resume 会给出醒目 warning，恢复
-optimizer/scheduler/scaler/epoch/随机状态后在当前快照上继续；同时重置内存中的历史 best 比较值，
-由下一次完整 validation 建立新 primary baseline。此时不再视为严格可复现实验。
+每次训练从 CNN/DINO 预训练权重开始，epoch 从 1、global step 从 0 开始。
+不支持续训或整模型初始化；`--resume` 和 `--init_checkpoint` 已删除，传入将报未知参数错误。
+脚本不再读取 `RESUME` 环境变量，旧命令设置该变量也会启动全新训练。
+新 checkpoint 仅保存 `network/meta`，保留 v2 模型配置、阈值选择、epoch/global_step 和审计信息；
+不保存任何训练恢复状态。best_primary、last、每 10 epoch 的 periodic 名称与保存时机不变。
+新旧 v2 checkpoint 均可用于测试与推理，旧格式仍不支持。
 早期 B2-OSCD v2 的 `[2,5,8,11] + raw[1:]` 仅按可证明等价关系解释为 `[5,8,11]`；
 显式 `[2,8,11]` 的 0825 checkpoint 仍按原层路由复现。
 

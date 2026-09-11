@@ -8,6 +8,7 @@ from PIL import Image
 from torchvision import transforms
 
 from data.tif_io import is_tiff_path, read_sar_tif
+from utils.prediction import foreground_probability, threshold_probability
 from model.engine import build_hacqi_engine
 from model.checkpointing import (
     apply_checkpoint_model_config,
@@ -147,8 +148,8 @@ def main():
 
     with torch.no_grad():
         pred = model.inference(img_A, img_B)
-        pred_prob = torch.softmax(pred, dim=1)[:, 1]
-        pred = (pred_prob >= float(opt.threshold)).long()
+        pred_prob = foreground_probability(pred)
+        pred = threshold_probability(pred_prob, opt.threshold).long()
         pred_img = Image.fromarray(
             (pred[0].cpu().detach().numpy() * 255).astype("uint8")
         )

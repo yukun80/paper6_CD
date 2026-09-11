@@ -30,14 +30,13 @@ from data.runtime_snapshot import (  # noqa: E402
     build_runtime_data_snapshot,
     resolve_auto_channel_stats,
     scan_split_files,
-    warn_if_runtime_snapshot_changed,
 )
 from model.checkpointing import (  # noqa: E402
     CHECKPOINT_FORMAT_VERSION,
     atomic_torch_save,
     checkpoint_model_config,
     load_checkpoint_payload,
-    load_network_state,
+    extract_network_state,
     resolve_inference_threshold,
 )
 from model.backbones import build_feature_backbone  # noqa: E402
@@ -569,12 +568,6 @@ class PipelineContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "A/B/label must have identical"):
                 build_runtime_data_snapshot(dataset_root)
 
-    def test_resume_snapshot_change_warns_but_does_not_fail(self) -> None:
-        self.assertFalse(warn_if_runtime_snapshot_changed("same", "same"))
-        with self.assertWarnsRegex(UserWarning, "no longer a strictly reproducible"):
-            changed = warn_if_runtime_snapshot_changed("old", "current")
-        self.assertTrue(changed)
-
     def test_stats_payload_write_is_atomic(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -785,7 +778,8 @@ class PipelineContractTests(unittest.TestCase):
             self.assertEqual(payload["meta"]["format_version"], 2)
             self.assertIn("optimizer", payload)
             v2_target = torch.nn.Conv2d(2, 2, 1)
-            load_network_state(v2_target, v2_path, strict=True)
+            checkpoint_model_config(payload)
+            v2_target.load_state_dict(extract_network_state(payload), strict=True)
             for expected, actual in zip(source.parameters(), v2_target.parameters()):
                 self.assertTrue(torch.equal(expected, actual))
 
@@ -799,88 +793,6 @@ class PipelineContractTests(unittest.TestCase):
             }
             with self.assertRaisesRegex(ValueError, "lacks required inference fields"):
                 checkpoint_model_config(payload)
-
-    def test_resume_ignores_runtime_membership_but_checks_configs(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-
-            class TinyNetwork(torch.nn.Module):
-                def __init__(self) -> None:
-                    super().__init__()
-                    self.encoder = torch.nn.Module()
-                    self.encoder.register_buffer(
-                        "input_mean", torch.full((1, 3, 1, 1), 0.2)
-                    )
-                    self.encoder.register_buffer(
-                        "input_std", torch.full((1, 3, 1, 1), 0.3)
-                    )
-                    self.conv = torch.nn.Conv2d(2, 2, 1)
-
-            engine = object.__new__(HACQIEngine)
-            torch.nn.Module.__init__(engine)
-            engine.model = TinyNetwork()
-            engine.opt = SimpleNamespace(
-                mean=[0.7, 0.6, 0.5],
-                std=[0.4, 0.3, 0.2],
-            )
-            engine.optimizer = torch.optim.AdamW(engine.model.parameters(), lr=1e-3)
-            engine.scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-                engine.optimizer, T_max=2
-            )
-            current_model_config = valid_model_config()
-            current_model_config["input_mean"] = list(engine.opt.mean)
-            current_model_config["input_std"] = list(engine.opt.std)
-            expected_meta = {
-                "model_config": current_model_config,
-                "loss_config": {"mode": "expected"},
-                "training_config": {"seed": 1},
-            }
-            engine._build_checkpoint_meta = lambda **_: expected_meta
-            checkpoint_model = valid_model_config()
-            checkpoint_model["input_mean"] = [0.2, 0.2, 0.2]
-            checkpoint_model["input_std"] = [0.3, 0.3, 0.3]
-
-            payload = {
-                "network": engine.model.state_dict(),
-                "optimizer": engine.optimizer.state_dict(),
-                "scheduler": engine.scheduler.state_dict(),
-                "scaler": None,
-                "epoch": 1,
-                "global_step": 2,
-                "torch_rng_state": torch.get_rng_state(),
-                "data_loader_generator_state": None,
-                "meta": {
-                    "format_version": CHECKPOINT_FORMAT_VERSION,
-                    "model_config": checkpoint_model,
-                    "loss_config": expected_meta["loss_config"],
-                    "training_config": expected_meta["training_config"],
-                    "data_config": {
-                        "runtime_snapshot_id": "different-directory-snapshot",
-                    },
-                },
-            }
-            compatible = atomic_torch_save(payload, root / "compatible.pth")
-            start_epoch, global_step, _ = engine.restore_training_checkpoint(
-                compatible,
-                scaler=None,
-            )
-            self.assertEqual((start_epoch, global_step), (2, 2))
-            torch.testing.assert_close(
-                engine.model.encoder.input_mean,
-                torch.tensor(engine.opt.mean).view(1, 3, 1, 1),
-            )
-            torch.testing.assert_close(
-                engine.model.encoder.input_std,
-                torch.tensor(engine.opt.std).view(1, 3, 1, 1),
-            )
-
-            payload["meta"] = {
-                **payload["meta"],
-                "training_config": {"seed": 2},
-            }
-            incompatible = atomic_torch_save(payload, root / "incompatible.pth")
-            with self.assertRaisesRegex(ValueError, "training_config.seed"):
-                engine.restore_training_checkpoint(incompatible, scaler=None)
 
     def test_shared_sar_helpers_preserve_validity_and_stretch(self) -> None:
         array = np.asarray([[0.0, 1.0], [2.0, -9999.0]], dtype=np.float32)

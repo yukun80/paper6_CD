@@ -7,27 +7,53 @@ import argparse
 import csv
 import json
 import shutil
+import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Sequence
 
 import numpy as np
 import rasterio
 from PIL import Image
 from rasterio.windows import Window
+from rasterio.crs import CRS
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from data.tif_io import (  # noqa: E402
+    LABEL_FOREGROUND,
+    LABEL_NODATA,
+    decode_binary_label,
+    read_label_mask,
+    read_raster_valid_mask,
+)
 
 """
-python ChangeDINO-main/scripts/prepare_sar_scene_label_infer.py \
+python HA-CQI/scripts/prepare_sar_scene_label_infer.py \
   --src-root datasets/GF3_Henan \
   --label-image GF3_Zhengzhou_label.tif \
   --tiles-root datasets/GF3_Henan_CD_infer \
   --overwrite
 
-python ChangeDINO-main/scripts/prepare_sar_scene_label_infer.py \
+python HA-CQI/scripts/prepare_sar_scene_label_infer.py \
   --src-root datasets/GF3_Zhuozhou \
   --label-image GF3_Zhuozhou_label.tif \
   --tiles-root datasets/GF3_Zhuozhou_CD_infer \
   --overwrite
+
+python HA-CQI/scripts/prepare_sar_scene_label_infer.py \
+  --src-root datasets/LT1_Guangxi \
+  --label-image LT_Guangxi_Label.tif \
+  --tiles-root datasets/LT1_Guangxi_CD_infer \
+  --strict
+
+python HA-CQI/scripts/prepare_sar_scene_label_infer.py \
+  --src-root datasets/LT1_Guangxi \
+  --label-image LT_Guangxi_Label.tif \
+  --tiles-root datasets/LT1_Guangxi_CD_infer \
+  --strict
 
 """
 
@@ -41,12 +67,13 @@ class LabelMeta:
     height: int
     crs: str | None
     transform: str
+    transform_coefficients: tuple[float, ...]
     dtype: str
     nodata: float | int | None
 
 
 def build_parser(
-    description: str = "Prepare SAR scene label tiles for ChangeDINO inference",
+    description: str = "Prepare SAR scene label tiles for HA-CQI inference",
 ) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description)
     parser.add_argument("--src-root", type=Path, default=Path("datasets/GF3_Henan"))
@@ -86,6 +113,23 @@ def load_manifest(manifest_path: Path) -> tuple[list[dict[str, str]], list[str]]
         raise ValueError(f"Manifest has no header: {manifest_path}")
     if not rows:
         raise ValueError(f"Manifest is empty: {manifest_path}")
+    # 清单仍是路径来源，但只接受当前 test/ 布局，不重写历史路径。
+    path_fields = ("a_png", "b_png", "valid_mask", "a_tif", "b_tif", "label_png", "label_tif")
+    for row_index, row in enumerate(rows, start=2):
+        for key in path_fields:
+            value = row.get(key)
+            if not value:
+                continue
+            relative = PurePosixPath(value)
+            if (
+                relative.is_absolute() or len(relative.parts) < 2
+                or relative.parts[0] != "test" or ".." in relative.parts
+            ):
+                raise ValueError(
+                    f"Manifest row {row_index} {key}={value!r}: only test/ paths are "
+                    "supported; legacy tiles/ layout is unsupported. Rebuild image tiles "
+                    "with HA-CQI/scripts/prepare_tiles.py."
+                )
     return rows, fieldnames
 
 
@@ -105,6 +149,7 @@ def validate_label(label_path: Path, strict: bool) -> LabelMeta:
             height=ds.height,
             crs=str(ds.crs) if ds.crs else None,
             transform=str(ds.transform),
+            transform_coefficients=tuple(ds.transform)[:6],
             dtype=ds.dtypes[0],
             nodata=ds.nodata,
         )
@@ -118,25 +163,63 @@ def load_prepare_report(tiles_root: Path) -> dict[str, object] | None:
 
 
 def validate_against_prepare_report(label: LabelMeta, report: dict[str, object] | None) -> None:
-    """若推理集保留了原始整景元信息，则要求 label 与其完全同网格。"""
-    if not report:
+    """兼容新旧报告编码，仍要求标签与场景同 CRS、同像素网格。"""
+    if report is None:
         return
-
-    source = report.get("source")
+    if not isinstance(report, dict):
+        raise ValueError("prepare_report.json must contain an object")
+    if "source" not in report:
+        return
+    source = report["source"]
     if not isinstance(source, dict):
-        return
+        raise ValueError("prepare_report.json source must contain an object")
 
     expected_width = source.get("width")
     expected_height = source.get("height")
-    expected_crs = source.get("crs")
-    expected_transform = source.get("transform")
     if expected_width is not None and int(expected_width) != label.width:
         raise ValueError(f"Label width mismatch: {label.width} != {expected_width}")
     if expected_height is not None and int(expected_height) != label.height:
         raise ValueError(f"Label height mismatch: {label.height} != {expected_height}")
-    if expected_crs != label.crs:
-        raise ValueError(f"Label CRS mismatch: {label.crs} != {expected_crs}")
-    if expected_transform != label.transform:
+
+    # 多个非空 CRS 表示必须一致，不以优先级掩盖冲突；null 表示该编码未提供。
+    reported_crs: list[CRS] = []
+    for key in ("crs", "crs_wkt", "crs_epsg"):
+        value = source.get(key)
+        if value is None:
+            continue
+        try:
+            if key == "crs_epsg":
+                if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                    raise ValueError("crs_epsg must be a positive integer")
+                parsed = CRS.from_epsg(value)
+            else:
+                if not isinstance(value, str) or not value.strip():
+                    raise ValueError(f"{key} must be a nonempty string")
+                parsed = CRS.from_wkt(value) if key == "crs_wkt" else CRS.from_user_input(value)
+        except (ValueError, TypeError, rasterio.errors.CRSError) as exc:
+            raise ValueError(f"Invalid source.{key}: {value!r}") from exc
+        if reported_crs and parsed != reported_crs[0]:
+            raise ValueError("Conflicting CRS representations in prepare_report.json")
+        reported_crs.append(parsed)
+    expected_crs = reported_crs[0] if reported_crs else None
+    actual_crs = CRS.from_user_input(label.crs) if label.crs is not None else None
+    if expected_crs != actual_crs:
+        raise ValueError(f"Label CRS mismatch: {actual_crs} != {expected_crs}")
+
+    expected_transform = source.get("transform")
+    if isinstance(expected_transform, str):
+        # 历史报告保存 Affine 的显示字符串，维持原比较契约。
+        matches = expected_transform == label.transform
+    elif isinstance(expected_transform, list):
+        if len(expected_transform) != 6 or any(
+            isinstance(value, bool) or not isinstance(value, (int, float))
+            or not np.isfinite(value) for value in expected_transform
+        ):
+            raise ValueError("source.transform must contain six finite numeric coefficients")
+        matches = tuple(expected_transform) == label.transform_coefficients
+    else:
+        raise ValueError("source.transform must be a legacy string or six numeric coefficients")
+    if not matches:
         raise ValueError("Label geotransform mismatch with prepare_report.json")
 
 
@@ -173,19 +256,6 @@ def prepare_dirs(tiles_root: Path, dry_run: bool) -> None:
         (tiles_root / rel_dir).mkdir(parents=True, exist_ok=True)
 
 
-def decode_binary_label(
-    arr: np.ndarray,
-    nodata: float | int | None,
-) -> tuple[np.ndarray, np.ndarray]:
-    """将源标签解码为 0/1，并显式排除 metadata nodata 与历史值 3。"""
-    valid = np.isfinite(arr)
-    if nodata is not None:
-        valid &= arr != nodata
-    valid &= arr != 3
-    binary = ((arr > 0) & valid).astype(np.uint8)
-    return binary, valid
-
-
 def write_png_label(arr: np.ndarray, out_path: Path, dry_run: bool) -> None:
     if dry_run:
         return
@@ -212,7 +282,7 @@ def write_tif_from_window(
             "dtype": "uint8",
             "transform": rasterio.windows.transform(window, src_ds.transform),
             "compress": "LZW",
-            "nodata": 255,
+            "nodata": LABEL_NODATA,
         }
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -226,9 +296,12 @@ def write_outputs(
     rows: list[dict[str, str]],
     dry_run: bool,
 ) -> tuple[list[dict[str, str]], dict[str, int]]:
-    """按 manifest 中已有 tile_id 与窗口信息回切标签，不重算切片规则。"""
+    """按 manifest 回切标签；仅接受 test/ 路径，不重写路径。"""
     updated_rows: list[dict[str, str]] = []
-    stats = {"valid_pixels": 0, "foreground_pixels": 0, "nodata_pixels": 0}
+    stats = {
+        "valid_pixels": 0, "foreground_pixels": 0, "nodata_pixels": 0,
+        "source_gt_invalid_pixels": 0, "sar_invalid_pixels": 0,
+    }
 
     with rasterio.open(label_path) as ds_label:
         for row in rows:
@@ -240,13 +313,29 @@ def write_outputs(
 
             window = Window(col_off=left, row_off=top, width=width, height=height)
             arr = ds_label.read(1, window=window)
-            label_binary, valid = decode_binary_label(arr, ds_label.nodata)
-            label_png = (label_binary * 255).astype(np.uint8)
-            label_tif = label_binary.copy()
-            label_tif[~valid] = 255
-            stats["valid_pixels"] += int(np.count_nonzero(valid))
+            label_binary, source_valid = decode_binary_label(
+                arr, ds_label.nodata, read_label_mask(ds_label, window),
+            )
+            sar_valid = np.ones(arr.shape, dtype=bool)
+            # 使用清单已有的 SAR 覆盖信息，不把 PNG 的黑色猜作 NoData。
+            for key in ("valid_mask", "a_tif", "b_tif"):
+                if row.get(key):
+                    with rasterio.open(tiles_root / row[key]) as source:
+                        source_array = source.read(1)
+                        values = source_array[:height, :width]
+                        source_mask = read_raster_valid_mask(source, source_array)[:height, :width]
+                    if values.shape != arr.shape:
+                        raise ValueError(f"Label/SAR mask shape mismatch for tile {tile_id}: {key}")
+                    if key == "valid_mask":
+                        source_mask &= values > 0
+                    sar_valid &= source_mask
+            label_binary[~sar_valid] = 0
+            label_png = label_binary * LABEL_FOREGROUND
+            label_tif = label_png
+            stats["valid_pixels"] += int(arr.size)
             stats["foreground_pixels"] += int(np.count_nonzero(label_binary))
-            stats["nodata_pixels"] += int(valid.size - np.count_nonzero(valid))
+            stats["source_gt_invalid_pixels"] += int(np.count_nonzero(~source_valid))
+            stats["sar_invalid_pixels"] += int(np.count_nonzero(~sar_valid))
 
             label_png_rel = Path("test/label") / f"{tile_id}.png"
             label_tif_rel = Path("test/label_tif") / f"{tile_id}.tif"
@@ -303,7 +392,8 @@ def write_report(
             "label_tif_dir": "test/label_tif",
         },
         "tile_count": row_count,
-        "label_encoding": {"background": 0, "foreground": 1, "nodata": 255},
+        "label_encoding": {"background": 0, "foreground": LABEL_FOREGROUND, "nodata": LABEL_NODATA},
+        "label_policy": "unknown_gt_and_invalid_sar_as_background",
         "tile_pixel_stats": pixel_stats,
     }
     if dry_run:

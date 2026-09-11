@@ -9,6 +9,8 @@ from typing import Iterable
 import numpy as np
 from scipy import ndimage
 
+from .prediction import threshold_probability
+
 
 EPS = np.finfo(np.float64).eps
 
@@ -108,13 +110,15 @@ class ComponentCoverageStats:
         gt = np.asarray(target).astype(bool) & np.asarray(valid_mask).astype(bool)
         pred = np.asarray(prediction).astype(bool) & np.asarray(valid_mask).astype(bool)
         component_map, count = ndimage.label(gt, structure=structure)
+        # 按组件一次汇总面积与命中数，避免为每个组件扫描整张图。
+        areas = np.bincount(component_map.reshape(-1), minlength=count + 1)
+        hits = np.bincount(component_map[pred], minlength=count + 1)
         for component_id in range(1, count + 1):
-            mask = component_map == component_id
-            area = int(np.count_nonzero(mask))
+            area = int(areas[component_id])
             if area <= 0:
                 continue
             bucket = _component_bucket(area, self.tiny_area_thresh, self.small_area_thresh)
-            coverage = float(np.count_nonzero(pred & mask)) / area
+            coverage = float(hits[component_id]) / area
             self.total[bucket] += 1
             self.hit10[bucket] += int(coverage >= 0.10)
             self.hit25[bucket] += int(coverage >= 0.25)
@@ -129,20 +133,29 @@ class ComponentCoverageStats:
         return result
 
 
-def false_positive_component_scores(
+def _false_positive_component_areas(
     target: np.ndarray,
     prediction: np.ndarray,
     valid_mask: np.ndarray,
-) -> dict[str, float | int]:
+) -> np.ndarray:
+    """返回按连通标记顺序排列的误报面积，供单图与累计统计共用。"""
     fp_mask = (
         np.asarray(prediction).astype(bool)
         & ~np.asarray(target).astype(bool)
         & np.asarray(valid_mask).astype(bool)
     )
     component_map, count = ndimage.label(fp_mask, structure=np.ones((3, 3), dtype=np.int8))
-    areas = np.bincount(component_map.reshape(-1))[1:] if count else np.empty(0, dtype=np.int64)
+    return np.bincount(component_map.reshape(-1))[1:] if count else np.empty(0, dtype=np.int64)
+
+
+def false_positive_component_scores(
+    target: np.ndarray,
+    prediction: np.ndarray,
+    valid_mask: np.ndarray,
+) -> dict[str, float | int]:
+    areas = _false_positive_component_areas(target, prediction, valid_mask)
     return {
-        "fp_component_count": int(count),
+        "fp_component_count": int(areas.size),
         "largest_fp_component": int(areas.max()) if areas.size else 0,
         "p95_fp_component_area": float(np.percentile(areas, 95)) if areas.size else 0.0,
     }
@@ -200,6 +213,13 @@ def boundary_f1_metrics(
     gt = np.asarray(target)
     valid = np.ones(gt.shape, dtype=bool) if valid_mask is None else np.asarray(valid_mask)
     counts = boundary_match_counts(gt, prediction, valid, tolerance)
+    return {**counts, **_boundary_metrics_from_counts(counts, tolerance)}
+
+
+def _boundary_metrics_from_counts(
+    counts: dict[str, int], tolerance: int,
+) -> dict[str, float]:
+    """统一边界计数到指标的换算，保留空边界约定和原浮点运算顺序。"""
     pred_total = counts["prediction_boundary"]
     target_total = counts["target_boundary"]
     precision = (
@@ -214,7 +234,6 @@ def boundary_f1_metrics(
     )
     f1 = 2.0 * precision * recall / (precision + recall + EPS)
     return {
-        **counts,
         f"boundary_precision_tol{tolerance}": float(precision),
         f"boundary_recall_tol{tolerance}": float(recall),
         f"boundary_f1_tol{tolerance}": float(f1),
@@ -222,13 +241,12 @@ def boundary_f1_metrics(
 
 
 class FloodEvaluationAccumulator:
-    """内存常数级累计多阈值混淆矩阵、校准和参考阈值细粒度指标。"""
+    """内存常数级累计多阈值混淆矩阵和参考阈值细粒度指标。"""
 
     def __init__(
         self,
         thresholds: Iterable[float],
         reference_threshold: float,
-        calibration_bins: int = 15,
         tiny_area_thresh: int = 100,
         small_area_thresh: int = 400,
     ) -> None:
@@ -237,17 +255,12 @@ class FloodEvaluationAccumulator:
             raise ValueError("thresholds must be a non-empty subset of [0, 1]")
         if not 0.0 <= reference_threshold <= 1.0:
             raise ValueError("reference_threshold must be within [0, 1]")
-        if calibration_bins < 2:
-            raise ValueError("calibration_bins must be >= 2")
         self.thresholds = np.asarray(values, dtype=np.float64)
+        # 报告保留原始阈值；比较网格允许 float32 转换后的重复值。
+        self._comparison_thresholds = self.thresholds.astype(np.float32)
         self.reference_threshold = float(reference_threshold)
         self.pos_pass_bins = np.zeros(len(values) + 1, dtype=np.int64)
         self.neg_pass_bins = np.zeros(len(values) + 1, dtype=np.int64)
-        self.calibration_bins = int(calibration_bins)
-        self.calibration_count = np.zeros(calibration_bins, dtype=np.int64)
-        self.calibration_prob_sum = np.zeros(calibration_bins, dtype=np.float64)
-        self.calibration_target_sum = np.zeros(calibration_bins, dtype=np.float64)
-        self.brier_sum = 0.0
         self.valid_pixels = 0
         self.reference_confusion = np.zeros(4, dtype=np.int64)  # tp, fp, tn, fn
         self.component_stats = ComponentCoverageStats(tiny_area_thresh, small_area_thresh)
@@ -285,7 +298,9 @@ class FloodEvaluationAccumulator:
         if flat_probs.size == 0:
             return
 
-        passed_count = np.searchsorted(self.thresholds, flat_probs, side="right")
+        passed_count = np.searchsorted(
+            self._comparison_thresholds, flat_probs.astype(np.float32), side="right"
+        )
         self.pos_pass_bins += np.bincount(
             passed_count[flat_gt], minlength=len(self.thresholds) + 1
         )
@@ -293,33 +308,19 @@ class FloodEvaluationAccumulator:
             passed_count[~flat_gt], minlength=len(self.thresholds) + 1
         )
 
-        calibration_index = np.minimum(
-            (flat_probs * self.calibration_bins).astype(np.int64), self.calibration_bins - 1
-        )
-        self.calibration_count += np.bincount(
-            calibration_index, minlength=self.calibration_bins
-        )
-        self.calibration_prob_sum += np.bincount(
-            calibration_index, weights=flat_probs, minlength=self.calibration_bins
-        )
-        self.calibration_target_sum += np.bincount(
-            calibration_index, weights=flat_gt.astype(np.float64), minlength=self.calibration_bins
-        )
-        self.brier_sum += float(np.square(flat_probs - flat_gt.astype(np.float64)).sum())
         self.valid_pixels += int(flat_probs.size)
 
-        pred = probs >= self.reference_threshold
+        pred = threshold_probability(probs, self.reference_threshold)
         reference = evaluate_binary_arrays(pred, gt, valid)
         self.reference_confusion += np.asarray(
             [reference["tp"], reference["fp"], reference["tn"], reference["fn"]],
             dtype=np.int64,
         )
 
-        batch_probs = probs[None, ...] if probs.ndim == 2 else probs
+        batch_predictions = pred[None, ...] if pred.ndim == 2 else pred
         batch_gt = gt[None, ...] if gt.ndim == 2 else gt
         batch_valid = valid[None, ...] if valid.ndim == 2 else valid
-        for prob_item, gt_item, valid_item in zip(batch_probs, batch_gt, batch_valid):
-            pred_item = prob_item >= self.reference_threshold
+        for pred_item, gt_item, valid_item in zip(batch_predictions, batch_gt, batch_valid):
             self.component_stats.update(gt_item, pred_item, valid_item)
             for tolerance in self.boundary_tolerances:
                 counts = boundary_match_counts(
@@ -336,15 +337,10 @@ class FloodEvaluationAccumulator:
                 self.background_tile_count += 1
                 self.background_tile_fp_count += int(fp_fraction > 0.0)
                 self.background_tile_fp_fractions.append(fp_fraction)
-            fp_components = false_positive_component_scores(gt_item, pred_item, valid_item)
-            if int(fp_components["fp_component_count"]) > 0:
-                fp_mask = pred_item & ~gt_item & valid_item
-                component_map, count = ndimage.label(
-                    fp_mask, structure=np.ones((3, 3), dtype=np.int8)
-                )
-                self.fp_component_areas.extend(
-                    int(value) for value in np.bincount(component_map.reshape(-1))[1 : count + 1]
-                )
+            self.fp_component_areas.extend(
+                int(value)
+                for value in _false_positive_component_areas(gt_item, pred_item, valid_item)
+            )
 
     def threshold_metrics(self) -> list[dict[str, float | int]]:
         pos_suffix = np.cumsum(self.pos_pass_bins[::-1])[::-1]
@@ -361,20 +357,6 @@ class FloodEvaluationAccumulator:
             metrics["threshold"] = float(threshold)
             results.append(metrics)
         return results
-
-    def _pr_auc(self, threshold_metrics: list[dict[str, float | int]]) -> float:
-        points = [(0.0, 1.0)]
-        points.extend(
-            (float(item["recall_1"]), float(item["precision_1"]))
-            for item in reversed(threshold_metrics)
-        )
-        positive_total = int(self.pos_pass_bins.sum())
-        prevalence = positive_total / max(self.valid_pixels, 1)
-        points.append((1.0, prevalence))
-        points = sorted(points, key=lambda item: item[0])
-        recall = np.asarray([item[0] for item in points], dtype=np.float64)
-        precision = np.asarray([item[1] for item in points], dtype=np.float64)
-        return float(np.trapz(precision, recall))
 
     def scores(self) -> dict[str, object]:
         threshold_results = self.threshold_metrics()
@@ -404,23 +386,7 @@ class FloodEvaluationAccumulator:
             }
         )
         for tolerance, counts in self.boundary_counts.items():
-            pred_total = counts["prediction_boundary"]
-            target_total = counts["target_boundary"]
-            precision = (
-                counts["matched_prediction"] / pred_total
-                if pred_total
-                else float(target_total == 0)
-            )
-            recall = (
-                counts["matched_target"] / target_total
-                if target_total
-                else float(pred_total == 0)
-            )
-            reference[f"boundary_precision_tol{tolerance}"] = float(precision)
-            reference[f"boundary_recall_tol{tolerance}"] = float(recall)
-            reference[f"boundary_f1_tol{tolerance}"] = float(
-                2.0 * precision * recall / (precision + recall + EPS)
-            )
+            reference.update(_boundary_metrics_from_counts(counts, tolerance))
         fp_areas = np.asarray(self.fp_component_areas, dtype=np.int64)
         reference.update(
             {
@@ -433,28 +399,8 @@ class FloodEvaluationAccumulator:
             }
         )
 
-        nonempty = self.calibration_count > 0
-        mean_prob = np.zeros_like(self.calibration_prob_sum)
-        mean_target = np.zeros_like(self.calibration_target_sum)
-        mean_prob[nonempty] = self.calibration_prob_sum[nonempty] / self.calibration_count[nonempty]
-        mean_target[nonempty] = (
-            self.calibration_target_sum[nonempty] / self.calibration_count[nonempty]
-        )
-        ece = float(
-            np.sum(
-                self.calibration_count[nonempty]
-                / max(self.valid_pixels, 1)
-                * np.abs(mean_prob[nonempty] - mean_target[nonempty])
-            )
-        )
         return {
             "selected": selected,
             "reference": reference,
             "thresholds": threshold_results,
-            "calibration": {
-                "pr_auc": self._pr_auc(threshold_results),
-                "brier": self.brier_sum / max(self.valid_pixels, 1),
-                "ece": ece,
-                "ece_bins": self.calibration_bins,
-            },
         }

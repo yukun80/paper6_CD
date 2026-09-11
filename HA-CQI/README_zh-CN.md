@@ -51,10 +51,66 @@ train/val `4737/1593`，但该数字不是代码硬约束。完整删除同名 A
 自动使用剩余样本；若只缺少其中任一文件，加载器会明确失败。训练期间不支持热删除。
 
 `manifest_*.csv`、`split_report.json` 和历史 dataset fingerprint 仅作构建审计，不决定训练成员，
-也不阻止 resume。默认 `STATS_MODE=auto` 按当前 train A/B 的文件名、大小和 mtime 生成运行快照，
+也不作为训练准入条件。默认 `STATS_MODE=auto` 按当前 train A/B 的文件名、大小和 mtime 生成运行快照，
 自动命中或重算 mean/std 缓存。每个 run 会保存包含实际文件名、样本/前景统计和归一化参数的
 `data_snapshot.json`。若需复现实验，可显式使用 `STATS_MODE=file` 与 `STATS_FILE=...`；文件模式
 只校验 train split、三个有限 mean/std 和正数 std，不绑定 manifest。
+
+### 新制备 VarFloods 切片的整景拉伸
+
+`scripts/prepare_fused_sar_cd_dataset.py` 使用独立的 `data/scene_stretch.py`，
+与交付包的 `scene_pair_histogram_v1` 对齐，不依赖交付目录运行。
+每个原始灾前/灾后场景对在共同有效 SAR 像素上联合拟合一次，再供所有 train/val 切片复用。
+默认按非重叠 1024×1024 块扫描，使用 65,536 个直方图箱估计 P2/P98；
+`--stretch-low/high` 调整整景联合百分位。映射不使用 GT，也不进行对数转换或直方图匹配。
+
+`split_report.json` 的 `scene_stretches` 记录源图路径、百分位、算法版本、冻结上下限、
+有效计数、直方图误差界、截断比例和退化处理。`--dry-run` 同样扫描与报告统计，但不写文件。
+常数整景输出零；百分位退化时采用联合 min/max；拟合时无共同有效像素则报错。
+没有入选切片的源场景不参与拟合，继续沿用原切片筛选规则。
+
+S1GFloods 影像 PNG 原样复制；标签、原始 TIFF 导出及划分规则沿用既有逻辑。
+此改动只影响未来新制备的 VarFloods PNG，不更新现有数据，也不改变直接读取 TIFF 的训练/推理入口。
+新映射会改变输入分布，旧 checkpoint 精度未验证；当前划分规则也不构成空间独立性证明。
+
+### 独立 test/推理场景制备入口
+
+`python HA-CQI/scripts/prepare_tiles.py` 只使用命令行参数，不读取 YAML，
+也不依赖交付目录；所有路径相对当前工作目录解析。影像制备复用上述整景拉伸模块，
+输出 `test/A`、`test/B`、`test/valid_mask`、`tile_manifest.csv` 和 `prepare_report.json`。
+默认 256×256、stride 128、最小共同有效比例 0.01、整景联合 P2/P98。
+固定上下限可用 `--stretch-mode value --value-min ... --value-max ...`。
+`--dry-run` 仅统计。`--overwrite` 只重建 `test/A`、`test/B`、`test/valid_mask`，
+并更新影像 manifest 和制备报告；保留 `test/label`、`test/label_tif`、标签报告及其他文件。
+同一源场景和相同窗口的已有标签引用会保留；源数据或切片参数改变后，应重新生成标签。
+不覆盖源图所在目录。
+
+从仓库根目录新建广西影像切片：
+
+```bash
+python HA-CQI/scripts/prepare_tiles.py \
+  --pre-image datasets/LT1_Guangxi/LT_Guangxi_pre.tif \
+  --post-image datasets/LT1_Guangxi/LT_Guangxi_post.tif \
+  --output-dir datasets/LT1_Guangxi_CD_infer \
+  --scene-id LT1_Guangxi
+```
+
+已有影像切片时直接运行标签制备，无需重切 A/B：
+
+```bash
+python HA-CQI/scripts/prepare_sar_scene_label_infer.py \
+  --src-root datasets/LT1_Guangxi \
+  --label-image LT_Guangxi_Label.tif \
+  --tiles-root datasets/LT1_Guangxi_CD_infer \
+  --strict
+```
+
+标签程序兼容旧报告的 CRS/仿射字符串及新报告的 WKT/EPSG、六参数仿射数组，
+保留同网格校验，拒绝冲突 CRS 和错位标签，不改写输入报告。
+标签写入 `test/label`、`test/label_tif` 并补充 manifest；标签与推理均按清单读取影像或有效区路径，
+标签程序仅接受清单中 `test/` 下的路径；旧 `tiles/` 布局会在写出前报错，
+需使用 `HA-CQI/scripts/prepare_tiles.py` 重建影像切片，不自动搬移或改写路径。
+已有非空标签目录需显式 `--overwrite`，该参数在标签程序中仅替换标签目录。
 
 ## 预训练权重
 
@@ -148,9 +204,11 @@ metrics.jsonl
 options.json
 ```
 
-每个 run 还会保存 `data_snapshot.json`。完整续训使用 `RESUME=/path/to/*_last.pth`；仅初始化网络使用
-`python trainval.py ... --init_checkpoint /path/to/checkpoint.pth`。resume 会校验
-训练/loss/模型配置；数据成员或自动统计变化只给出醒目 warning，并在当前目录快照上继续。`--resume`、`--init_checkpoint`、测试和推理入口均只接受声明
+每个 run 还会保存 `data_snapshot.json`。每次训练从 CNN/DINO 预训练权重开始，
+epoch 从 1、global step 从 0 开始；不支持续训或用 HA-CQI checkpoint 初始化训练。
+新 checkpoint 仅包含 `network` 和 `meta`，保留模型、阈值选择、epoch/global_step、训练与数据审计信息，
+不保存优化器、调度器、scaler、随机数或数据加载器恢复状态。best_primary、last 和每 10 epoch 的
+periodic 保存名称与时机不变。测试和推理入口兼容包含训练状态的旧 v2 checkpoint，且仍只接受声明
 `efficientnet_b2 + imagenet + oscd_v1` 的 checkpoint v2。2026-08-23/24 的早期 B2-OSCD
 v2 checkpoint 可被精确映射为其实际有效层 `[5,8,11]` 以复现实验；其他缺失/模糊路由不会猜测。
 `S1GFloods-HA-CQI-vits16-20260427/` 及其结果保留为磁盘归档，当前代码不支持加载。
@@ -206,7 +264,7 @@ python run.py \
   --gpu_ids 0
 ```
 
-## GF3 整景瓦片推理
+## SAR 整景瓦片推理
 
 整景推理使用与 HA-CQI 相同的模型重建逻辑，将重叠瓦片的预测拼接回整景变化图。瓦片目录必须
 包含 `tile_manifest.csv`，且清单中引用的灾前 A 图像、灾后 B 图像和 `valid_mask` 文件均可读取。
@@ -214,7 +272,7 @@ python run.py \
 河南 GF3 场景示例：
 
 ```bash
-python HA-CQI/scripts/infer_gf3_henan_tiles.py \
+python HA-CQI/scripts/infer_sar_scene_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
   --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
@@ -228,7 +286,7 @@ stats 默认从 checkpoint v2 metadata 解析。推理阈值只允许两种来�
 涿州 GF3 场景使用同一入口，仅替换瓦片根目录和输出目录：
 
 ```bash
-python HA-CQI/scripts/infer_gf3_henan_tiles.py \
+python HA-CQI/scripts/infer_sar_scene_tiles.py \
   --tiles-root datasets/GF3_Zhuozhou_CD_infer \
   --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
@@ -239,7 +297,7 @@ python HA-CQI/scripts/infer_gf3_henan_tiles.py \
 广西 LT-1 场景测试：
 
 ```bash
-python HA-CQI/scripts/infer_gf3_henan_tiles.py \
+python HA-CQI/scripts/infer_sar_scene_tiles.py \
   --tiles-root datasets/LT1_Guangxi_CD_infer \
   --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
@@ -247,6 +305,13 @@ python HA-CQI/scripts/infer_gf3_henan_tiles.py \
   --skip-tiles \
   --output-dir HA-CQI/outputs/lt1_guangxi_corrected
 ```
+
+其他场景同样使用 `infer_sar_scene_tiles.py`，显式替换输入与输出目录：
+
+| 场景 | `--tiles-root` | `--output-dir` |
+| --- | --- | --- |
+| Brazos River | `datasets/USA_Brazos_River_CD_infer` | `HA-CQI/outputs/USA_Brazos_River_20260826_1` |
+| San Jacinto | `datasets/USA_San_Jacinto_CD_infer` | `HA-CQI/outputs/USA_San_Jacinto_20260826_1` |
 
 默认会保存切片级结果和整景拼接结果。整景输出位于 `<output-dir>/mosaic/`，包括：
 
@@ -269,9 +334,11 @@ python HA-CQI/scripts/evaluate_sar_scene.py \
 ```
 
 评估器排除 metadata nodata 和历史标签值 `3`，并同时报告 raw/filtered 的 IoU、F1、P/R、
-PR-AUC、Brier、ECE、背景 tile FP、FP 像素比例、最大/P95 FP 连通域及 tiny/small/large
+背景 tile FP、FP 像素比例、最大/P95 FP 连通域及 tiny/small/large
 coverage recall，并新增 2/4 像素容差 Boundary F1。河南只用于外部校准/诊断，涿州作为
 锁定测试，不参与训练 epoch 选择。
+评估报告不再计算 PR-AUC、Brier、ECE，也不再输出 `calibration` 指标块；
+诊断的 `calibration` 数据角色与验证 IoU 阈值搜索保留。
 
 统一跨域特征诊断（新 checkpoint 可额外输出 P1–P5/CQI 指标）：
 

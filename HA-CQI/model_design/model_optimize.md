@@ -73,7 +73,7 @@ val/A    val/B    val/label
 1. 扫描当前 train A/B；
 2. 以相对文件名、大小和 mtime 生成非约束性的 train image snapshot ID；
 3. 命中或重算 mean/std 缓存；
-4. 缓存仅用于加速，不参与训练或 resume 准入。
+4. 缓存仅用于加速，不参与训练准入。
 
 当前数据实测：
 
@@ -90,15 +90,14 @@ std  = [0.2783174480, 0.2783174480, 0.2783174480]
 `stats_mode=file` 用于历史复现，只校验 JSON 可读、split=train、三个 mean/std 有限且 std>0；
 不校验 manifest SHA 或 fingerprint。
 
-## 5. Checkpoint 与 resume
+## 5. Checkpoint 与训练记录
 
-- checkpoint v2 继续严格校验模型、loss 与训练配置；
-- `dino_fusion_layers` 明确写入模型 metadata；
+- 每次训练从 CNN/DINO 预训练权重开始，不支持续训或整模型训练初始化；
+- 新 checkpoint v2 仅保存 `network/meta`，不包含训练恢复状态；
+- metadata 保留模型、loss、训练配置、epoch/global_step 与阈值选择，`dino_fusion_layers` 明确写入；
 - data config 记录 runtime snapshot ID、实际计数与 stats 来源；
-- 目录成员或自动统计变化时，resume 给出醒目 warning，但继续恢复训练状态；
-- validation 成员变化时不沿用不可比较的历史 best 数值，下一次完整验证重新建立 primary baseline；
-- checkpoint 中旧 input mean/std 不阻止动态数据 resume，网络加载后归一化 buffer 刷新为当前统计；
-- 发生数据变化的 resume 不再视为严格可复现实验。
+- 每次运行独立建立 best selection；best_primary、last、periodic 的名称与保存时机不变；
+- 测试与推理兼容旧 v2，继续校验模型与推理阈值契约。
 
 metrics 与 selection 使用运行时计数，不使用历史 manifest count。
 
@@ -128,9 +127,9 @@ independent radiometric jitter 或修改 loss。
 
 ## 7. 评价与后续决策
 
-优先比较阈值无关指标和 matched operating point：
+优先比较验证集最佳 IoU 和匹配工作点下的指标：
 
-- source validation PR-AUC、best IoU；
+- source validation best IoU；
 - Henan/Zhuozhou tiny/small/large R10、R25；
 - 与 0824 相同 Recall 下的 FP 像素比例；
 - FP component 数量、P95、max；

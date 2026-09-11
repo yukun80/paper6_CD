@@ -9,7 +9,7 @@ from torchvision import transforms
 
 from .runtime_snapshot import scan_split_files
 from .transform import Transforms
-from .tif_io import is_tiff_path, read_binary_label_tif, read_sar_tif
+from .tif_io import is_tiff_path, read_sar_tif, read_training_label
 
 
 def seed_worker(worker_id: int) -> None:
@@ -23,8 +23,6 @@ def seed_worker(worker_id: int) -> None:
 def _normalize_to_rgb(image: Image.Image) -> Image.Image:
     if image.mode == "RGB":
         return image
-    if image.mode in {"L", "I", "F", "P", "LA"}:
-        return image.convert("RGB")
     return image.convert("RGB")
 
 
@@ -35,12 +33,8 @@ def _load_image(path: Path):
     return _normalize_to_rgb(Image.open(path))
 
 
-def _load_label(path: Path) -> Image.Image:
-    if is_tiff_path(path):
-        return Image.fromarray(read_binary_label_tif(path))
-    label = np.array(Image.open(path).convert("L"), dtype=np.uint8)
-    label = (label > 0).astype(np.uint8)
-    return Image.fromarray(label)
+def _load_label(path: Path, image_paths: tuple[Path, ...] = ()) -> Image.Image:
+    return Image.fromarray(read_training_label(path, image_paths))
 
 
 def _to_tensor_image(image, to_tensor: transforms.ToTensor) -> torch.Tensor:
@@ -91,7 +85,7 @@ class Load_Dataset(Dataset):
         fname = self.fnames[index]
         img1 = _load_image(self.t1_map[fname])
         img2 = _load_image(self.t2_map[fname])
-        cd_label = _load_label(self.label_map[fname])
+        cd_label = _load_label(self.label_map[fname], (self.t1_map[fname], self.t2_map[fname]))
 
         if self.phase == "train":
             data = self.transform({"img1": img1, "img2": img2, "cd_label": cd_label})
@@ -127,9 +121,3 @@ class DataLoader(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.dataset)
-
-    def get_generator_state(self) -> torch.Tensor:
-        return self.generator.get_state()
-
-    def set_generator_state(self, state: torch.Tensor) -> None:
-        self.generator.set_state(state)

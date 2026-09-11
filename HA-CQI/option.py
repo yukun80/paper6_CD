@@ -8,7 +8,6 @@ import torch
 
 from data.runtime_snapshot import resolve_auto_channel_stats
 from model.backbones import DEFAULT_BACKBONE_NAME, DEFAULT_BACKBONE_WEIGHT
-from model.checkpointing import checkpoint_model_config, load_checkpoint_payload
 from model.modules.dino_meta import (
     DINO_ARCH_CHOICES,
     resolve_dino_arch,
@@ -445,18 +444,6 @@ class Options:
             help="每个 epoch 最多验证 step；-1 表示完整验证，仅用于冒烟诊断。",
         )
         self.parser.add_argument(
-            "--resume",
-            type=str,
-            default="",
-            help="checkpoint v2 路径；恢复完整训练状态。",
-        )
-        self.parser.add_argument(
-            "--init_checkpoint",
-            type=str,
-            default="",
-            help="仅加载显式 checkpoint 的网络参数。",
-        )
-        self.parser.add_argument(
             "--stats_mode",
             type=str,
             default="auto",
@@ -548,11 +535,6 @@ class Options:
         self.opt.checkpoint_dir = _resolve_project_output_path(self.opt.checkpoint_dir)
         if self.opt.checkpoint:
             self.opt.checkpoint = _resolve_existing_project_path(self.opt.checkpoint)
-        if self.opt.resume:
-            self.opt.resume = _resolve_existing_project_path(self.opt.resume)
-        if self.opt.init_checkpoint:
-            self.opt.init_checkpoint = _resolve_existing_project_path(self.opt.init_checkpoint)
-
         self.opt.dino_weight = _resolve_repo_relative_path(self.opt.dino_weight)
         if self.opt.backbone_weight:
             _validate_backbone_weight_path(self.opt.backbone_weight)
@@ -616,12 +598,6 @@ class Options:
             raise ValueError("--max_train_steps must be -1 or positive")
         if self.opt.max_val_steps == 0 or self.opt.max_val_steps < -1:
             raise ValueError("--max_val_steps must be -1 or positive")
-        if self.opt.resume and self.opt.init_checkpoint:
-            raise ValueError("--resume and --init_checkpoint are mutually exclusive")
-        if self.opt.resume and not Path(self.opt.resume).is_file():
-            raise FileNotFoundError(f"Resume checkpoint not found: {self.opt.resume}")
-        if self.opt.init_checkpoint and not Path(self.opt.init_checkpoint).is_file():
-            raise FileNotFoundError(f"Initialization checkpoint not found: {self.opt.init_checkpoint}")
         if self.opt.checkpoint and not Path(self.opt.checkpoint).is_file():
             raise FileNotFoundError(f"Checkpoint not found: {self.opt.checkpoint}")
         if self.opt.threshold is not None and not 0.0 <= self.opt.threshold <= 1.0:
@@ -635,12 +611,6 @@ class Options:
         if self.opt.lr <= 0.0:
             raise ValueError("--lr must be positive")
 
-        # 在模型构建前给旧 backbone/input/decoder checkpoint 明确的契约错误。
-        for checkpoint_path in (self.opt.resume, self.opt.init_checkpoint):
-            if checkpoint_path:
-                checkpoint_model_config(
-                    load_checkpoint_payload(checkpoint_path, map_location="cpu")
-                )
         self.opt.mean, self.opt.std = resolve_norm_stats(self.opt)
         validate_stats_provenance(self.opt)
 

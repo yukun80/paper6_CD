@@ -25,7 +25,11 @@ REPO_ROOT = PROJECT_ROOT.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from data.tif_io import read_binary_label_tif_with_valid_mask  # noqa: E402
+from data.tif_io import (  # noqa: E402
+    read_binary_label_with_valid_mask,
+    read_raster_valid_mask,
+)
+from utils.prediction import threshold_probability
 from model.modules.dino_adapter import DinoV3FeatureExtractor  # noqa: E402
 from scripts.infer_sar_scene_tiles import (  # noqa: E402
     load_model,
@@ -81,10 +85,26 @@ def _read_manifest(tiles_root: Path) -> list[dict[str, str]]:
 def _read_raster(path: Path) -> tuple[np.ndarray, np.ndarray]:
     with rasterio.open(path) as dataset:
         array = dataset.read(1).astype(np.float32, copy=False)
-        valid = np.isfinite(array)
-        if dataset.nodata is not None:
-            valid &= array != float(dataset.nodata)
+        valid = read_raster_valid_mask(dataset, array)
     return array, valid
+
+
+def _read_tile_target(row: dict[str, str], tiles_root: Path, height: int, width: int) -> np.ndarray:
+    """优先读取带源有效性信息的 TIFF，旧 PNG 仍按 0/255 洪水编码兼容。"""
+    label_path = tiles_root / (row.get("label_tif") or row["label_png"])
+    target, _ = read_binary_label_with_valid_mask(label_path)
+    return target[:height, :width].astype(bool)
+
+
+def _read_tile_coverage(row: dict[str, str], tiles_root: Path, height: int, width: int) -> np.ndarray:
+    """融合清单掩膜与可用 SAR TIFF 覆盖区，GT 未知不缩小评估分母。"""
+    values, mask_valid = _read_raster(tiles_root / row["valid_mask"])
+    valid = mask_valid[:height, :width] & (values[:height, :width] > 0)
+    for key in ("a_tif", "b_tif"):
+        if row.get(key):
+            _, image_valid = _read_raster(tiles_root / row[key])
+            valid &= image_valid[:height, :width]
+    return valid
 
 
 def _rectangles_overlap(first: dict[str, object], second: dict[str, object]) -> bool:
@@ -114,6 +134,7 @@ def _categorize_tiles(
     rows: list[dict[str, str]],
     tiles_root: Path,
     probability: np.ndarray,
+    probability_valid: np.ndarray,
     threshold: float,
     min_valid_ratio: float,
     max_per_class: int,
@@ -126,14 +147,12 @@ def _categorize_tiles(
         top, left = int(row["top"]), int(row["left"])
         height, width = int(row["height"]), int(row["width"])
         prob = probability[top : top + height, left : left + width]
-        valid_path = tiles_root / row["valid_mask"]
-        valid, _ = _read_raster(valid_path)
-        valid = valid[:height, :width] > 0
-        valid &= np.isfinite(prob)
+        valid = _read_tile_coverage(row, tiles_root, height, width)
+        valid &= probability_valid[top : top + height, left : left + width] & np.isfinite(prob)
         valid_count = int(np.count_nonzero(valid))
         if valid_count == 0:
             continue
-        pred = prob >= threshold
+        pred = threshold_probability(prob, threshold)
         base = {
             "row_index": index,
             "tile_id": row["tile_id"],
@@ -149,8 +168,7 @@ def _categorize_tiles(
                 1.0 - np.mean(prob[valid])
             )
         else:
-            label_path = tiles_root / row["label_png"]
-            target = np.asarray(Image.open(label_path).convert("L"))[:height, :width] > 0
+            target = _read_tile_target(row, tiles_root, height, width)
             tp = int(np.count_nonzero(pred & target & valid))
             fp = int(np.count_nonzero(pred & ~target & valid))
             gt = int(np.count_nonzero(target & valid))
@@ -280,17 +298,16 @@ def _full_scene_evaluation(
     ground_truth: Path,
     threshold: float,
 ) -> dict[str, object]:
-    target, target_valid = read_binary_label_tif_with_valid_mask(ground_truth)
+    target, _ = read_binary_label_with_valid_mask(ground_truth)
     if target.shape != probability.shape:
         raise ValueError(
             f"Full-scene probability/GT shape mismatch: {probability.shape} != {target.shape}"
         )
     evaluator = FloodEvaluationAccumulator([threshold], reference_threshold=threshold)
-    evaluator.update(probability, target, probability_valid & target_valid)
+    evaluator.update(probability, target, probability_valid)
     result = evaluator.scores()
     return {
         "reference": result["reference"],
-        "calibration": result["calibration"],
     }
 
 
@@ -298,6 +315,7 @@ def _tile_evaluation(
     rows: list[dict[str, str]],
     tiles_root: Path,
     probability: np.ndarray,
+    probability_valid: np.ndarray,
     threshold: float,
 ) -> dict[str, object]:
     """按 manifest tile 统计背景 FP；重叠像素只影响汇总 IoU，不影响 tile FP 定义。"""
@@ -306,18 +324,14 @@ def _tile_evaluation(
         top, left = int(row["top"]), int(row["left"])
         height, width = int(row["height"]), int(row["width"])
         prob = probability[top : top + height, left : left + width]
-        target = np.asarray(Image.open(tiles_root / row["label_png"]).convert("L"))[
-            :height,
-            :width,
-        ] > 0
-        valid_values, valid_finite = _read_raster(tiles_root / row["valid_mask"])
-        valid = valid_finite[:height, :width] & (valid_values[:height, :width] > 0)
+        target = _read_tile_target(row, tiles_root, height, width)
+        valid = _read_tile_coverage(row, tiles_root, height, width)
+        valid &= probability_valid[top : top + height, left : left + width]
         evaluator.update(prob, target, valid)
     result = evaluator.scores()
     return {
         "note": "overlap pixels repeat across tiles; use this section for tile-level FP diagnostics",
         "reference": result["reference"],
-        "calibration": result["calibration"],
     }
 
 
@@ -337,11 +351,12 @@ def main() -> None:
         raise FileExistsError(f"Output exists; pass --overwrite explicitly: {output_path}")
     rows = _read_manifest(tiles_root)
     probability, probability_valid = _read_raster(probability_path)
-    has_labels = all(row.get("label_png") for row in rows) and args.role != "qualitative"
+    has_labels = all(row.get("label_tif") or row.get("label_png") for row in rows) and args.role != "qualitative"
     selections = _categorize_tiles(
         rows,
         tiles_root,
         probability,
+        probability_valid,
         args.threshold,
         args.min_valid_ratio,
         args.max_per_class,
@@ -394,8 +409,8 @@ def main() -> None:
             row = row_by_index[int(item["row_index"])]
             pre_raw, pre_valid = _read_raster(tiles_root / row["a_tif"])
             post_raw, post_valid = _read_raster(tiles_root / row["b_tif"])
-            valid_values, _ = _read_raster(tiles_root / row["valid_mask"])
-            valid = pre_valid & post_valid & (valid_values > 0)
+            valid_values, mask_valid = _read_raster(tiles_root / row["valid_mask"])
+            valid = pre_valid & post_valid & mask_valid & (valid_values > 0)
             values["local_ncc_15"].append(
                 _weighted_local_ncc(pre_raw, post_raw, valid, kernel_size=15)
             )
@@ -460,6 +475,7 @@ def main() -> None:
 
     report: dict[str, object] = {
         "schema_version": 1,
+        "label_policy": "unknown_gt_as_background_within_valid_coverage",
         "role": args.role,
         "eligible_for_model_selection": args.role in {"source_validation", "calibration"},
         "tiles_root": str(tiles_root),
@@ -480,6 +496,7 @@ def main() -> None:
             rows,
             tiles_root,
             probability,
+            probability_valid,
             args.threshold,
         )
     if args.ground_truth is not None:

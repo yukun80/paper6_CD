@@ -11,6 +11,7 @@ from PIL import Image
 from tqdm import tqdm
 
 from data.cd_dataset import DataLoader
+from utils.prediction import foreground_probability, threshold_probability
 from model.checkpointing import (
     apply_checkpoint_model_config,
     atomic_json_save,
@@ -106,12 +107,12 @@ def main() -> None:
             batch["img1"].to(model.device, non_blocking=True),
             batch["img2"].to(model.device, non_blocking=True),
         )
-        probabilities = torch.softmax(logits.float(), dim=1)[:, 1].cpu().numpy()
+        probabilities = foreground_probability(logits).cpu().numpy()
         target = batch["cd_label"].cpu().numpy()
         evaluator.update(probabilities, target)
         steps += 1
         if opt.save_test:
-            predictions = probabilities >= float(opt.threshold)
+            predictions = threshold_probability(probabilities, opt.threshold)
             for index, filename in enumerate(batch["fname"]):
                 output_name = f"{Path(filename).stem}.png"
                 Image.fromarray((predictions[index].astype(np.uint8) * 255)).save(

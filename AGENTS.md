@@ -93,7 +93,7 @@ SOFT_ALIGNMENT=0 RUN_NAME=S1GFloods-HA-CQI-noalign bash trainval_s1gfloods.sh
 
 ### HA-CQI Whole-Scene Inference
 ```bash
-python HA-CQI/scripts/infer_gf3_henan_tiles.py \
+python HA-CQI/scripts/infer_sar_scene_tiles.py \
   --tiles-root datasets/GF3_Henan_CD_infer \
   --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
@@ -104,7 +104,7 @@ python HA-CQI/scripts/infer_gf3_henan_tiles.py \
 For Zhuozhou, switch `--tiles-root` and `--output-dir`:
 
 ```bash
-python HA-CQI/scripts/infer_gf3_henan_tiles.py \
+python HA-CQI/scripts/infer_sar_scene_tiles.py \
   --tiles-root datasets/GF3_Zhuozhou_CD_infer \
   --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
   --gpu_ids 0 \
@@ -199,8 +199,7 @@ If `latexmk` is unavailable, use the local LaTeX toolchain available in the envi
     test.py \
     run.py \
     scripts/diagnose_cross_domain_features.py \
-    scripts/infer_sar_scene_tiles.py \
-    scripts/infer_gf3_henan_tiles.py
+    scripts/infer_sar_scene_tiles.py
   bash -n trainval_s1gfloods.sh trainval.sh
   ```
 - For HA-CQI-CFDepth core edits:
@@ -264,3 +263,8 @@ If `latexmk` is unavailable, use the local LaTeX toolchain available in the envi
 - Keep secrets, API keys, and tokens out of tracked files and scripts.
 - Prefer environment variables or runtime arguments for local machine paths.
 - Before destructive cleanup of generated outputs, confirm the target path and preserve user-created artifacts unless explicitly told otherwise.
+
+## Reasoning and Communication
+
+Spend time on thinking; you do not need to use the commentary channel to report progress to me.
+DO NOT send optional commentary.

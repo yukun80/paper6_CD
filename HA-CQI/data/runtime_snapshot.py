@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import warnings
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,8 +15,8 @@ from PIL import Image
 import rasterio
 
 from .tif_io import (
-    build_valid_mask,
-    read_binary_label_tif_with_valid_mask,
+    read_raster_valid_mask,
+    read_training_label,
     stretch_sar_array,
 )
 
@@ -93,25 +92,34 @@ def _update_file_digest(
             f"{split}\0{role}\0{relative}\0{stat.st_size}\0{stat.st_mtime_ns}\n"
         )
         digest.update(record.encode("utf-8"))
+        if path.suffix.lower() in {".tif", ".tiff"}:
+            # TIFF 输入映射已纳入 GDAL 掩膜；使旧缓存及外部掩膜变更失效。
+            digest.update(b"raster_mask_v1\0")
+            for suffix in (".msk", ".aux.xml"):
+                sidecar = Path(str(path) + suffix)
+                if sidecar.is_file():
+                    side_stat = sidecar.stat()
+                    digest.update(
+                        f"{suffix}\0{side_stat.st_size}\0{side_stat.st_mtime_ns}\n".encode("utf-8")
+                    )
 
 
-def _label_summary(paths: Iterable[Path]) -> dict[str, int | float]:
+def _label_summary(
+    paths: Iterable[Path],
+    image_paths: dict[str, tuple[Path, Path]] | None = None,
+) -> dict[str, int | float]:
     sample_count = 0
     background_tiles = 0
     foreground_pixels = 0
     valid_pixels = 0
     for path in paths:
-        if path.suffix.lower() in {".tif", ".tiff"}:
-            label, valid = read_binary_label_tif_with_valid_mask(path)
-        else:
-            raw = np.asarray(Image.open(path).convert("L"), dtype=np.uint8)
-            valid = np.ones(raw.shape, dtype=bool)
-            label = (raw > 0).astype(np.uint8)
-        current_foreground = int(np.count_nonzero((label == 1) & valid))
+        label = read_training_label(path, image_paths[path.name] if image_paths else ())
+        current_foreground = int(np.count_nonzero(label))
         sample_count += 1
         background_tiles += int(current_foreground == 0)
         foreground_pixels += current_foreground
-        valid_pixels += int(np.count_nonzero(valid))
+        # 未知 GT 和影像无效位置均已归背景，全部像素参与监督。
+        valid_pixels += int(label.size)
     return {
         "samples": sample_count,
         "background_tiles": background_tiles,
@@ -138,7 +146,10 @@ def build_runtime_data_snapshot(dataset_root: str | Path) -> dict[str, object]:
             if split == "train" and role in {"A", "B"}:
                 _update_file_digest(train_image_digest, root, split, role, ordered)
         split_payloads[split] = {
-            **_label_summary(files.label[name] for name in files.filenames),
+            **_label_summary(
+                (files.label[name] for name in files.filenames),
+                {name: (files.a[name], files.b[name]) for name in files.filenames},
+            ),
             "filenames": list(files.filenames),
         }
     return {
@@ -159,7 +170,7 @@ def _load_image_rgb(path: Path) -> np.ndarray:
         return image.reshape(-1, 3)
     with rasterio.open(path) as dataset:
         array = dataset.read(1).astype(np.float32, copy=False)
-        valid = build_valid_mask(array, dataset.nodata)
+        valid = read_raster_valid_mask(dataset, array)
     stretched = stretch_sar_array(array, valid)
     rgb = np.repeat(stretched[:, :, None], 3, axis=2).astype(
         np.float64,
@@ -286,21 +297,3 @@ def resolve_auto_channel_stats(
         stats["train_image_snapshot_id"] = snapshot["train_image_snapshot_id"]
         atomic_write_json(stats, cache_path)
     return stats, snapshot, cache_path, cache_hit
-
-
-def warn_if_runtime_snapshot_changed(
-    checkpoint_snapshot_id: str | None,
-    current_snapshot_id: str,
-) -> bool:
-    """数据成员变化只警告，不把动态目录变成 resume 准入条件。"""
-    if checkpoint_snapshot_id == current_snapshot_id:
-        return False
-    warnings.warn(
-        "Resume data members differ from the checkpoint snapshot; training will "
-        "continue with the current A/B/label directories and is no longer a "
-        "strictly reproducible continuation. "
-        f"checkpoint={checkpoint_snapshot_id!r}, current={current_snapshot_id!r}",
-        UserWarning,
-        stacklevel=2,
-    )
-    return True

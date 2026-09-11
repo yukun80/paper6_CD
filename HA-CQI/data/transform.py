@@ -2,7 +2,7 @@ import random
 
 import torchvision.transforms.functional as TF
 from torchvision import transforms
-from torchvision.transforms import InterpolationMode
+from torchvision.transforms import Compose, InterpolationMode, Lambda
 
 
 class Transforms(object):
@@ -103,34 +103,3 @@ class Transforms(object):
             )
 
         return {"img1": img1, "img2": img2, "cd_label": cd_label}
-
-
-class Lambda(object):
-    def __init__(self, lambd):
-        assert callable(lambd), repr(type(lambd).__name__) + " object is not callable"
-        self.lambd = lambd
-
-    def __call__(self, img):
-        return self.lambd(img)
-
-    def __repr__(self):
-        return self.__class__.__name__ + '()'
-
-
-class Compose(object):
-    def __init__(self, transforms):
-        self.transforms = transforms
-
-    def __call__(self, img):
-        for t in self.transforms:
-            img = t(img)
-        return img
-
-    def __repr__(self):
-        format_string = self.__class__.__name__ + '('
-        for t in self.transforms:
-            format_string += '\n'
-            format_string += '    {0}'.format(t)
-        format_string += '\n)'
-        return format_string
-

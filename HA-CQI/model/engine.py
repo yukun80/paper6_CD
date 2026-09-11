@@ -14,10 +14,7 @@ from .backbones import DEFAULT_BACKBONE_NAME
 from .checkpointing import (
     CHECKPOINT_FORMAT_VERSION,
     atomic_torch_save,
-    checkpoint_model_config,
     cpu_state_dict,
-    load_checkpoint_payload,
-    load_network_state,
 )
 from .losses.dice import DICELoss
 from .losses.focal import FocalLoss
@@ -62,11 +59,7 @@ class HACQIEngine(nn.Module):
         self.opt = opt
 
         resolved_name = opt.name
-        resume_path = str(getattr(opt, "resume", "") or "")
-        if getattr(opt, "phase", "train") == "train" and resume_path:
-            self.save_dir = str(Path(resume_path).resolve().parent)
-            resolved_name = Path(self.save_dir).name
-        elif getattr(opt, "phase", "train") == "train":
+        if getattr(opt, "phase", "train") == "train":
             resolved_name = resolve_unique_run_name(opt.checkpoint_dir, opt.name)
             self.save_dir = os.path.join(opt.checkpoint_dir, resolved_name)
         else:
@@ -111,9 +104,6 @@ class HACQIEngine(nn.Module):
         self.scheduler = optim.lr_scheduler.CosineAnnealingLR(
             self.optimizer, opt.num_epochs, eta_min=1e-7
         )
-        if getattr(opt, "init_checkpoint", ""):
-            load_network_state(self.model, opt.init_checkpoint, strict=True, map_location="cpu")
-            print(f"initialized network from: {opt.init_checkpoint}")
         self.model.to(self.device)
         print("---------- HA-CQI network initialized -------------")
 
@@ -457,8 +447,6 @@ class HACQIEngine(nn.Module):
         global_step: int,
         selection: dict[str, Any] | None,
         data_provenance: dict[str, Any],
-        scaler_state: dict[str, Any] | None,
-        data_loader_generator_state: torch.Tensor | None,
     ) -> Path:
         if tag == "periodic":
             filename = f"{self.opt.name}_{self.opt.backbone}_epoch{epoch}.pth"
@@ -475,87 +463,9 @@ class HACQIEngine(nn.Module):
         )
         payload: dict[str, Any] = {
             "network": cpu_state_dict(self.model),
-            "optimizer": self.optimizer.state_dict(),
-            "scheduler": self.scheduler.state_dict(),
-            "scaler": scaler_state,
-            "epoch": int(epoch),
-            "global_step": int(global_step),
-            "torch_rng_state": torch.get_rng_state(),
-            "cuda_rng_state_all": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else [],
-            "data_loader_generator_state": data_loader_generator_state,
             "meta": meta,
         }
         return atomic_torch_save(payload, Path(self.save_dir) / filename)
-
-    def restore_training_checkpoint(
-        self,
-        checkpoint_path: str | Path,
-        *,
-        scaler,
-        data_loader_generator=None,
-    ) -> tuple[int, int, dict[str, Any]]:
-        payload = load_checkpoint_payload(checkpoint_path, map_location="cpu")
-        normalized_model_config = checkpoint_model_config(payload)
-        meta = payload.get("meta")
-        if not isinstance(meta, dict):
-            raise ValueError("--resume requires checkpoint v2 metadata")
-        expected_meta = self._build_checkpoint_meta(
-            epoch=0,
-            global_step=0,
-            checkpoint_role="resume_validation",
-            selection=None,
-            data_provenance={},
-        )
-        mismatches: list[str] = []
-        for section_name in ("model_config", "loss_config", "training_config"):
-            checkpoint_section = (
-                normalized_model_config
-                if section_name == "model_config"
-                else meta.get(section_name)
-            )
-            expected_section = expected_meta[section_name]
-            if not isinstance(checkpoint_section, dict):
-                mismatches.append(f"{section_name}=missing")
-                continue
-            for key, expected_value in expected_section.items():
-                if section_name == "model_config" and key in {"input_mean", "input_std"}:
-                    # 自动统计属于本次数据快照；成员变化时允许续训并在加载后刷新 buffer。
-                    continue
-                actual_value = checkpoint_section.get(key)
-                if actual_value != expected_value:
-                    mismatches.append(
-                        f"{section_name}.{key}: checkpoint={actual_value!r}, current={expected_value!r}"
-                    )
-        if mismatches:
-            details = "\n  - ".join(mismatches)
-            raise ValueError(f"Resume configuration mismatch:\n  - {details}")
-        self.model.load_state_dict(payload["network"], strict=True)
-        with torch.no_grad():
-            self.model.encoder.input_mean.copy_(
-                torch.tensor(self.opt.mean, device=self.model.encoder.input_mean.device).view(
-                    1, 3, 1, 1
-                )
-            )
-            self.model.encoder.input_std.copy_(
-                torch.tensor(self.opt.std, device=self.model.encoder.input_std.device).view(
-                    1, 3, 1, 1
-                )
-            )
-        if "optimizer" not in payload or "scheduler" not in payload:
-            raise ValueError("Resume checkpoint lacks optimizer or scheduler state")
-        self.optimizer.load_state_dict(payload["optimizer"])
-        self.scheduler.load_state_dict(payload["scheduler"])
-        if scaler is not None and payload.get("scaler") is not None:
-            scaler.load_state_dict(payload["scaler"])
-        if payload.get("torch_rng_state") is not None:
-            torch.set_rng_state(payload["torch_rng_state"])
-        if torch.cuda.is_available() and payload.get("cuda_rng_state_all"):
-            torch.cuda.set_rng_state_all(payload["cuda_rng_state_all"])
-        if data_loader_generator is not None and payload.get("data_loader_generator_state") is not None:
-            data_loader_generator.set_state(payload["data_loader_generator_state"])
-        epoch = int(payload.get("epoch", meta.get("epoch", 0)))
-        global_step = int(payload.get("global_step", meta.get("global_step", 0)))
-        return epoch + 1, global_step, payload
 
     def name(self):
         return self.opt.name

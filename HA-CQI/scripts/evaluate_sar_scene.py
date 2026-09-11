@@ -17,7 +17,7 @@ PROJECT_ROOT = CURRENT_DIR.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from data.tif_io import build_valid_mask  # noqa: E402
+from data.tif_io import decode_binary_label, read_raster_valid_mask  # noqa: E402
 from utils.flood_evaluation import (  # noqa: E402
     FloodEvaluationAccumulator,
     build_threshold_grid,
@@ -111,7 +111,7 @@ def read_aligned(
             ):
                 raise ValueError(f"Raster grid mismatch: {path}")
         array = dataset.read(1)
-        valid = build_valid_mask(array, dataset.nodata)
+        valid = read_raster_valid_mask(dataset, array)
         meta = {
             "path": str(path),
             "shape": [int(dataset.height), int(dataset.width)],
@@ -147,7 +147,7 @@ def main() -> None:
     args = resolve_inputs(build_parser().parse_args())
     with rasterio.open(args.probability) as probability_dataset:
         probabilities = probability_dataset.read(1).astype(np.float32, copy=False)
-        probability_valid = build_valid_mask(probabilities, probability_dataset.nodata)
+        probability_valid = read_raster_valid_mask(probability_dataset, probabilities)
         probability_meta = {
             "path": str(args.probability),
             "shape": [probability_dataset.height, probability_dataset.width],
@@ -159,13 +159,13 @@ def main() -> None:
         ground_truth, gt_valid, gt_meta = read_aligned(
             args.ground_truth, probability_dataset
         )
-        # 历史 GF-3 原始标签以 3 表示 nodata；即使 metadata 丢失也不得视作洪水。
-        gt_valid &= ground_truth != 3
-        valid = probability_valid & gt_valid
+        # GT 未知归背景；仅影像/概率覆盖区决定评估分母。
+        target, _ = decode_binary_label(ground_truth, gt_meta["nodata"], gt_valid)
+        valid = probability_valid.copy()
         if args.valid_mask is not None:
             external_mask, mask_valid, _ = read_aligned(args.valid_mask, probability_dataset)
             valid &= mask_valid & (external_mask > 0)
-        target = (ground_truth > 0) & valid
+        target = target.astype(bool) & valid
 
         thresholds = build_threshold_grid(
             args.threshold_min, args.threshold_max, args.threshold_step
@@ -197,6 +197,7 @@ def main() -> None:
 
     report = {
         "format_version": 1,
+        "label_policy": "unknown_gt_as_background_within_valid_coverage",
         "threshold": float(args.threshold),
         "threshold_source": str(args.threshold_source),
         "valid_pixels": int(np.count_nonzero(valid)),

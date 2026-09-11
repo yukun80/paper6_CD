@@ -26,7 +26,6 @@ THRESHOLD_MAX="${THRESHOLD_MAX:-0.95}"
 THRESHOLD_STEP="${THRESHOLD_STEP:-0.01}"
 FOCAL_BG_WEIGHT="${FOCAL_BG_WEIGHT:-0.25}"
 FOCAL_FG_WEIGHT="${FOCAL_FG_WEIGHT:-0.75}"
-RESUME="${RESUME:-}"
 HEAD_LR_MULT="${HEAD_LR_MULT:-2.0}"
 AUX_LOSS_WEIGHT="${AUX_LOSS_WEIGHT:-1.0}"
 AUX_LOSS_WEIGHT_END="${AUX_LOSS_WEIGHT_END:-0.5}"
@@ -123,10 +122,6 @@ elif [[ "${AMP}" == "0" ]]; then
 else
   echo "AMP must be 0 or 1, got: ${AMP}" >&2
   exit 1
-fi
-
-if [[ -n "${RESUME}" ]]; then
-  cmd+=(--resume "${RESUME}")
 fi
 
 cmd+=("$@")

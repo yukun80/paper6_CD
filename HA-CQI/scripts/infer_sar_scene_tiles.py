@@ -30,6 +30,7 @@ REPO_ROOT = PROJECT_ROOT.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from utils.prediction import foreground_probability, threshold_probability
 from model.engine import build_hacqi_engine  # noqa: E402
 from model.backbones import DEFAULT_BACKBONE_WEIGHT  # noqa: E402
 from model.checkpointing import (  # noqa: E402
@@ -382,7 +383,7 @@ def save_tile_png(
     save_path: Path,
 ) -> None:
     """将切片概率图二值化后保存为灰度 PNG（L 模式，0/255）。"""
-    binary = (prob >= threshold).astype(np.uint8)
+    binary = threshold_probability(prob, threshold).astype(np.uint8)
     binary[valid_mask == 0] = 0
     save_path.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(binary * 255, mode="L").save(save_path)
@@ -395,7 +396,7 @@ def save_tile_tif(
     save_path: Path,
 ) -> None:
     """将切片二值预测保存为 uint8 TIF（0/1，nodata=255）。"""
-    binary = (prob >= threshold).astype(np.uint8)
+    binary = threshold_probability(prob, threshold).astype(np.uint8)
     binary[valid_mask == 0] = BINARY_NODATA
     save_path.parent.mkdir(parents=True, exist_ok=True)
     profile = {
@@ -534,7 +535,7 @@ def main(
             img1 = batch["img1"].to(model.device, non_blocking=torch.cuda.is_available())
             img2 = batch["img2"].to(model.device, non_blocking=torch.cuda.is_available())
             logits = model.inference(img1, img2)
-            probs = torch.softmax(logits, dim=1)[:, 1].detach().cpu().numpy().astype(np.float32, copy=False)
+            probs = foreground_probability(logits).detach().cpu().numpy().astype(np.float32, copy=False)
             valid_masks = batch["valid_mask"].numpy().astype(np.float32, copy=False)
             tile_ids = batch["tile_id"]
             tops = batch["top"].tolist()
@@ -555,7 +556,7 @@ def main(
                 accum_prob[top : top + height, left : left + width] += tile_prob * weight
                 accum_prob_sq[top : top + height, left : left + width] += np.square(tile_prob) * weight
                 accum_pos_weight[top : top + height, left : left + width] += (
-                    (tile_prob >= float(opt.threshold)).astype(np.float32) * weight
+                    threshold_probability(tile_prob, opt.threshold).astype(np.float32) * weight
                 )
                 accum_weight[top : top + height, left : left + width] += weight
 
@@ -592,7 +593,7 @@ def main(
     )
 
     raw_binary_map = np.full((full_height, full_width), BINARY_NODATA, dtype=np.uint8)
-    raw_binary_map[valid_output] = (prob_map[valid_output] >= float(opt.threshold)).astype(np.uint8)
+    raw_binary_map[valid_output] = threshold_probability(prob_map[valid_output], opt.threshold).astype(np.uint8)
 
     if opt.disable_blob_filter:
         binary_map = raw_binary_map.copy()
