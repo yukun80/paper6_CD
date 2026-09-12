@@ -1,23 +1,20 @@
+\begingroup
 \begin{table*}[htbp]
 \centering
 \captionsetup{name=Table}
-\caption{SAR observations and terrain data.}
+\caption{SAR imagery used in the three study areas.}
 \label{tab:gf3_eval}
-\small
-\begin{tabular}{lccccc}
+\footnotesize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lcccccc@{}}
 \toprule
-\multicolumn{6}{l}{(a) GF3 observations} \\
+Study area & Satellite & Mode & Pol. & \makecell{Pixel spacing} & Pre-event & Post-event \\
 \midrule
-Scene & Mode & Pixel spacing & Polarization & Pre-event & Post-event \\
-\midrule
-Zhengzhou & FSII & 10 m & HV & 2020-07-20 & 2021-07-20 \\
-Zhuozhou & FSII & 10 m & HV & 2022-07-20 & 2023-07-31 \\
-\midrule
-\multicolumn{6}{l}{(b) Terrain data} \\
-\midrule
-Product & \multicolumn{2}{c}{Sampling} & \multicolumn{3}{l}{Role and source} \\
-FABDEM & \multicolumn{2}{c}{Approximately 30 m} & \multicolumn{3}{l}{Terrain input for depth estimation} \\
- & \multicolumn{2}{c}{} & \multicolumn{3}{l}{\citet{hawker2022fabdem}} \\
+Zhengzhou & GF3 & FSII & HV & 10 m & 2020-07-20 & 2021-07-20 \\
+Zhuozhou & GF3 & FSII & HV & 10 m & 2022-07-20 & 2023-07-31 \\
+Guangxi & LT-1B & STRIP1 & HH & 10 m & 2026-05-11 & 2026-07-06 \\
 \bottomrule
-\end{tabular}
+\end{tabular*}
 \end{table*}
+\endgroup

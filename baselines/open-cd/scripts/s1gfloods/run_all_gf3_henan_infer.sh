@@ -7,7 +7,7 @@ TOOLS_DIR="${OPENCD_DIR}/tools"
 DEFAULT_WORKDIR_ROOT="${OPENCD_DIR}/work_dirs"
 DEFAULT_DATA_ROOT="${OPENCD_DIR}/../../datasets/GF3_Henan_CD_infer"
 DEFAULT_DEVICE="cuda:0"
-DEFAULT_BATCH_SIZE=4
+DEFAULT_BATCH_SIZE=1
 DEFAULT_THRESHOLD=0.5
 CALLER_PWD="$(pwd)"
 
@@ -20,9 +20,10 @@ Options:
                          compatible with both the default and extra S1GFloods batch scripts
   --workdir-root <path>   parent directory of s1gfloods batches, default: ./work_dirs
   --data-root <path>      GF3 infer dataset root, default: ../../datasets/GF3_Henan_CD_infer
-                         output dirs/logs/summary will append a suffix derived from this path
+                         outputs are grouped by model and region
   --device <device>       inference device, default: cuda:0
-  --batch-size <n>        inference batch size for one model, default: 4
+  --batch-size <n>        tile group size; forward always uses one tile, default: 1
+  --output-root <path>   output root, default: baselines/open-cd/outputs
   --threshold <x>         threshold on stitched probability map, default: 0.5
   --limit <n>             optional cap on tiles per model, default: all
   --skip-mosaic           only save tile-level PNG predictions
@@ -104,6 +105,7 @@ PY
 }
 
 BATCH_DIR=""
+OUTPUT_ROOT="${OPENCD_DIR}/outputs"
 WORKDIR_ROOT="${DEFAULT_WORKDIR_ROOT}"
 DATA_ROOT="${DEFAULT_DATA_ROOT}"
 DEVICE="${DEFAULT_DEVICE}"
@@ -116,6 +118,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --batch-dir)
       BATCH_DIR="$2"; shift 2;;
+    --output-root)
+      OUTPUT_ROOT="$2"; shift 2;;
     --workdir-root)
       WORKDIR_ROOT="$2"; shift 2;;
     --data-root)
@@ -142,6 +146,7 @@ done
 
 WORKDIR_ROOT="$(resolve_path "${WORKDIR_ROOT}")"
 DATA_ROOT="$(resolve_path "${DATA_ROOT}")"
+OUTPUT_ROOT="$(resolve_path "${OUTPUT_ROOT}")"
 
 if [[ -n "${BATCH_DIR}" ]]; then
   BATCH_DIR="$(resolve_path "${BATCH_DIR}")"
@@ -179,8 +184,14 @@ cd "${OPENCD_DIR}"
 export NO_ALBUMENTATIONS_UPDATE=1
 
 DATASET_SUFFIX="$(derive_dataset_suffix "${DATA_ROOT}")"
-LOG_DIR="${BATCH_DIR}/infer_logs_${DATASET_SUFFIX}"
-SUMMARY_FILE="${BATCH_DIR}/infer_gf3_henan_summary_${DATASET_SUFFIX}.tsv"
+case "${DATASET_SUFFIX}" in
+  gf3_henan_cd_infer) REGION="Zhengzhou";;
+  gf3_zhuozhou_cd_infer) REGION="Zhuozhou";;
+  lt1_guangxi_cd_infer) REGION="Guangxi";;
+  *) REGION="$(basename "${DATA_ROOT}")";;
+esac
+LOG_DIR="${OUTPUT_ROOT}/_summaries/$(basename "${BATCH_DIR}")"
+SUMMARY_FILE="${LOG_DIR}/${REGION}.tsv"
 SUCCESS_FILE="${BATCH_DIR}/succeeded_models.txt"
 mkdir -p "${LOG_DIR}"
 printf 'model_tag\tstatus\tconfig\tcheckpoint\ttile_output_dir\tmosaic_dir\treport_file\tlog_file\n' > "${SUMMARY_FILE}"
@@ -213,9 +224,11 @@ for model_tag in "${MODEL_TAGS[@]}"; do
     continue
   fi
 
-  log_file="${LOG_DIR}/${model_tag}.log"
-  out_dir="${work_dir}/infer_gf3_henan_png_${DATASET_SUFFIX}"
-  mosaic_dir="${work_dir}/infer_gf3_henan_full_${DATASET_SUFFIX}"
+  model_output="${OUTPUT_ROOT}/${model_tag}/${REGION}"
+  mkdir -p "${model_output}"
+  log_file="${model_output}/infer.log"
+  out_dir="${model_output}/tile_png"
+  mosaic_dir="${model_output}/mosaic"
   report_file="${mosaic_dir}/infer_report.json"
 
   echo
@@ -250,6 +263,7 @@ for model_tag in "${MODEL_TAGS[@]}"; do
     "${config_path}"
     "${checkpoint_path}"
     --data-root "${DATA_ROOT}"
+    --output-root "${OUTPUT_ROOT}"
     --work-dir "${work_dir}"
     --out-dir "${out_dir}"
     --mosaic-dir "${mosaic_dir}"

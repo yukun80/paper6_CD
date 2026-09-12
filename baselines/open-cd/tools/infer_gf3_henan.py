@@ -52,6 +52,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Infer GF3 Henan tiles with an Open-CD checkpoint")
     parser.add_argument("config", help="config file used to build the model")
     parser.add_argument("checkpoint", help="checkpoint path")
+    parser.add_argument("--output-root", type=Path, default=PROJECT_ROOT / "outputs")
     parser.add_argument(
         "--data-root",
         default="datasets/GF3_Henan_CD_infer",
@@ -80,8 +81,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--batch-size",
         type=int,
-        default=4,
-        help="inference batch size, default: 4",
+        default=1,
+        help="tile group size; effective forward batch size is always 1, default: 1",
     )
     parser.add_argument(
         "--limit",
@@ -103,14 +104,21 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def default_output_dir(args: argparse.Namespace) -> Path:
+    """模型和地区分目录，避免不同整景覆盖彼此。"""
+    name = Path(args.data_root).name
+    region = {"GF3_Henan_CD_infer": "Zhengzhou",
+              "GF3_Zhuozhou_CD_infer": "Zhuozhou",
+              "LT1_Guangxi_CD_infer": "Guangxi"}.get(name, name)
+    return Path(args.output_root).resolve() / Path(args.config).stem / region
+
+
 def ensure_tile_output_dir(args: argparse.Namespace) -> Path:
     """解析并创建切片输出目录。"""
     if args.out_dir:
         out_dir = Path(args.out_dir).resolve()
-    elif args.work_dir:
-        out_dir = Path(args.work_dir).resolve() / "infer_gf3_henan_png"
     else:
-        raise ValueError("Either --out-dir or --work-dir must be provided.")
+        out_dir = default_output_dir(args) / "tile_png"
     out_dir.mkdir(parents=True, exist_ok=True)
     return out_dir
 
@@ -122,10 +130,8 @@ def ensure_mosaic_output_dir(args: argparse.Namespace) -> Path | None:
 
     if args.mosaic_dir:
         mosaic_dir = Path(args.mosaic_dir).resolve()
-    elif args.work_dir:
-        mosaic_dir = Path(args.work_dir).resolve() / "infer_gf3_henan_full"
     else:
-        raise ValueError("Either --mosaic-dir or --work-dir must be provided when stitching.")
+        mosaic_dir = default_output_dir(args) / "mosaic"
     mosaic_dir.mkdir(parents=True, exist_ok=True)
     return mosaic_dir
 
@@ -354,10 +360,26 @@ def finalize_mosaic_outputs(
     )
 
 
+def predict_single_tiles(inferencer, inputs: list) -> list:
+    """底层预处理器仅支持单切片；严格校验数量防止 zip 静默丢失。"""
+    predictions = []
+    for processed in inferencer.preprocess(inputs, batch_size=1):
+        result = list(inferencer.forward(processed))
+        if len(result) != 1:
+            raise RuntimeError(f"Expected one prediction per forward, got {len(result)}")
+        predictions.extend(result)
+    if len(predictions) != len(inputs):
+        raise RuntimeError(f"Prediction count mismatch: {len(predictions)} != {len(inputs)}")
+    return predictions
+
+
 def main() -> None:
     args = parse_args()
     if args.batch_size <= 0:
         raise ValueError("--batch-size must be > 0.")
+    if args.batch_size > 1:
+        print(f"[INFO] Requested group size {args.batch_size}; effective forward batch size is 1.")
+    os.environ.setdefault("TORCH_HOME", str(PROJECT_ROOT / "pretrained/torch"))
     if not 0.0 <= args.threshold <= 1.0:
         raise ValueError("--threshold must be within [0, 1].")
     if args.device.startswith("cuda") and not torch.cuda.is_available():
@@ -416,10 +438,7 @@ def main() -> None:
     total_saved = 0
     for batch in track(list(batched(tile_records, args.batch_size)), description="GF3 inference"):
         inputs = [[pre_path, post_path] for pre_path, post_path, _, _ in batch]
-        processed_batches = inferencer.preprocess(inputs, batch_size=len(inputs))
-        predictions = []
-        for processed in processed_batches:
-            predictions.extend(inferencer.forward(processed))
+        predictions = predict_single_tiles(inferencer, inputs)
 
         for (_, _, rel_path, row), prediction in zip(batch, predictions):
             save_binary_prediction(prediction, tile_output_dir / rel_path)
