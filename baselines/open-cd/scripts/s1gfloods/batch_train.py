@@ -29,7 +29,6 @@ MODELS = {
     'lightcdnet': 'lightcdnet/lightcdnet_s_256x256_40k_s1gfloods.py',
     'changeformer': 'changeformer/changeformer_mit-b0_256x256_40k_s1gfloods.py',
     'cgnet': 'cgnet/cgnet_256x256_40k_s1gfloods.py',
-    'stanet': 'stanet/stanet_pam_256x256_40k_s1gfloods.py',
     'snunet': 'snunet/snunet_c16_256x256_40k_s1gfloods.py',
     'hanet': 'hanet/hanet_256x256_40k_s1gfloods.py',
     'ttp': 'ttp/ttp_vit-sam-b_256x256_40k_s1gfloods.py',
@@ -52,7 +51,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument('--torch-home', type=Path, default=OPENCD / 'pretrained/torch')
     p.add_argument('--seed', type=int, default=42)
     p.add_argument('--gpus', type=int, choices=[1], default=1)
-    p.add_argument('--save-best', choices=['mIoU'], default='mIoU')
+    p.add_argument('--save-best', choices=['FloodIoU', 'mIoU'], default='FloodIoU')
     p.add_argument('--dry-run', action='store_true')
     args = p.parse_args(argv)
     if not 0 <= args.seed < 2**32:
@@ -97,6 +96,7 @@ def inspect_data(root: Path) -> tuple[dict, dict]:
     sums = np.zeros(3, dtype=np.float64)
     squares = np.zeros(3, dtype=np.float64)
     count = 0
+    ratios = {}
     for split, records in members.items():
         for pair_index, row in enumerate(records, 1):
             for index, info in enumerate(row['files']):
@@ -109,6 +109,8 @@ def inspect_data(root: Path) -> tuple[dict, dict]:
                     if index == 2:
                         if not np.isin(array, [0, 255]).all():
                             raise ValueError(f'Label is not 0/255: {path}')
+                        if split == 'train':
+                            ratios[row['name']] = float(np.count_nonzero(array) / array.size)
                     elif split == 'train':
                         pixels = array.reshape(-1, 3).astype(np.float64)
                         sums += pixels.sum(axis=0)
@@ -130,6 +132,7 @@ def inspect_data(root: Path) -> tuple[dict, dict]:
                  pixel_count_per_channel=count, mean=mean.tolist(), std=std.tolist(),
                  six_channel_mean=mean.tolist() * 2, six_channel_std=std.tolist() * 2,
                  dataset_fingerprint=digest)
+    snapshot['foreground_ratios'] = ratios
     return snapshot, stats
 
 
@@ -205,6 +208,7 @@ def check_environment(models: list[str]) -> tuple[dict, list[str]]:
         import mmdet.models  # noqa: F401
         import opencd.models  # noqa: F401
         import opencd.datasets  # noqa: F401
+        import scripts.s1gfloods.training_components  # noqa: F401
         from mmengine.config import Config
         from mmengine.registry import init_default_scope
         from opencd.registry import MODELS as registry
@@ -231,8 +235,8 @@ def check_environment(models: list[str]) -> tuple[dict, list[str]]:
     return report, errors
 
 
-def make_config(model: str, args: argparse.Namespace, stats: dict):
-    """覆盖数据/统计/种子；保持原优化协议，短验证不降低训练 batch。"""
+def make_config(model: str, args: argparse.Namespace, stats: dict, ratios: dict, sampling_file=None):
+    """生成 SAR 优化配置；短验证不降低训练 batch。"""
     from mmengine.config import Config
     cfg = Config.fromfile(OPENCD / 'configs' / MODELS[model])
     cfg.data_root = str(args.data_root)
@@ -247,7 +251,33 @@ def make_config(model: str, args: argparse.Namespace, stats: dict):
     for pre in (cfg.model.data_preprocessor, cfg.get('data_preprocessor', {})):
         pre['mean'] = stats['six_channel_mean']
         pre['std'] = stats['six_channel_std']
-    cfg.default_hooks.checkpoint.save_best = 'mIoU'
+    imports = list(cfg.get('custom_imports', {}).get('imports', []))
+    imports.append('scripts.s1gfloods.training_components')
+    cfg.custom_imports = dict(imports=list(dict.fromkeys(imports)), allow_failed_imports=False)
+    pipeline = []
+    for transform in cfg.train_dataloader.dataset.pipeline:
+        if transform['type'] == 'MultiImgRandomCrop':
+            continue
+        if transform['type'] == 'MultiImgPhotoMetricDistortion':
+            transform = dict(type='SharedSARRadiometric')
+        pipeline.append(transform)
+    cfg.train_pipeline = pipeline
+    cfg.train_dataloader.dataset.pipeline = pipeline
+    cfg.train_dataloader.sampler = dict(type='ForegroundInfiniteSampler', ratios=ratios,
+                                        seed=args.seed)
+    if sampling_file is not None:
+        cfg.train_dataloader.sampler.pop('ratios')
+        cfg.train_dataloader.sampler.sampling_file = str(sampling_file)
+    learning_rates = dict(fc_siam_diff=5e-4, ifn=5e-4, bit=5e-4, snunet=5e-4,
+                          hanet=5e-4, lightcdnet=1e-3)
+    if model in learning_rates:
+        cfg.optim_wrapper.optimizer.lr = learning_rates[model]
+        if 'optimizer' in cfg:
+            cfg.optimizer.lr = learning_rates[model]
+    for split in ('val', 'test'):
+        cfg[f'{split}_evaluator']['type'] = 'FloodIoUMetric'
+    cfg.default_hooks.checkpoint.save_best = ['FloodIoU', 'mIoU']
+    cfg.primary_metric = args.save_best
     cfg.default_hooks.checkpoint.rule = 'greater'
     assets = assets_for([model], args.torch_home)
     if model == 'bit':
@@ -314,7 +344,7 @@ def execute_jobs(jobs: list[dict], batch: Path, env: dict[str, str],
                  runner: Callable = run_process) -> int:
     """汇总真实进程状态；失败后继续，但中断绝不推进下一模型。"""
     fields = ['model_tag', 'status', 'exit_code', 'config', 'work_dir', 'best_ckpt',
-              'log_file', 'started_at', 'ended_at', 'duration_sec']
+              'primary_metric', 'best_flood_ckpt', 'best_miou_ckpt', 'log_file', 'started_at', 'ended_at', 'duration_sec']
     failures = 0
     with (batch / 'summary.tsv').open('w', newline='') as stream, \
          (batch / 'succeeded_models.txt').open('w') as success, \
@@ -334,7 +364,13 @@ def execute_jobs(jobs: list[dict], batch: Path, env: dict[str, str],
                     log.write(f'Launcher error: {type(exc).__name__}: {exc}\n')
             if code in (130, 143, -signal.SIGINT, -signal.SIGTERM):
                 status = 'interrupted'
-            best = sorted(Path(job['work_dir']).glob('best_mIoU*.pth'))
+            primary = job.get('primary_metric', 'FloodIoU')
+            paths = {metric: sorted(Path(job['work_dir']).glob(f'best_{metric}_*.pth'))
+                     for metric in ('FloodIoU', 'mIoU')}
+            best = paths[primary]
+            if len(best) > 1:
+                code = 1  # 不允许在歧义权重间任意选择。
+
             if code == 0 and best:
                 status = 'success'
                 success.write(job['model_tag'] + '\n')
@@ -346,7 +382,10 @@ def execute_jobs(jobs: list[dict], batch: Path, env: dict[str, str],
                 failed.flush()
                 failures += 1
             row = {k: job[k] for k in ('model_tag', 'config', 'work_dir', 'log_file')}
-            row.update(status=status, exit_code=code, best_ckpt=str(best[0]) if best else '',
+            row.update(primary_metric=primary,
+                       best_flood_ckpt=str(paths['FloodIoU'][0]) if len(paths['FloodIoU']) == 1 else '',
+                       best_miou_ckpt=str(paths['mIoU'][0]) if len(paths['mIoU']) == 1 else '',
+                       status=status, exit_code=code, best_ckpt=str(best[0]) if best else '',
                        started_at=datetime.fromtimestamp(started).isoformat(),
                        ended_at=datetime.now().isoformat(), duration_sec=round(time.time()-started, 3))
             writer.writerow(row)
@@ -362,6 +401,7 @@ def write_json(path: Path, payload: dict) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    sys.path.insert(0, str(OPENCD))
     os.environ['NO_ALBUMENTATIONS_UPDATE'] = '1'
     os.environ['TORCH_HOME'] = str(args.torch_home)
     os.environ['HF_HUB_OFFLINE'] = '1'
@@ -376,7 +416,9 @@ def main(argv: list[str] | None = None) -> int:
     else:
         environment, env_errors = check_environment(args.models)
         errors.extend(env_errors)
-    configs = {m: make_config(m, args, stats) for m in args.models}
+    batch = batch_path(args.batch_root, args.mode)
+    configs = {m: make_config(m, args, stats, snapshot['foreground_ratios'], batch / 'sampling.json')
+               for m in args.models}
     if args.mode == 'smoke-train':
         for cfg in configs.values():
             for split in ('val', 'test'):
@@ -388,7 +430,6 @@ def main(argv: list[str] | None = None) -> int:
         return int(bool(errors))
     if errors and not args.dry_run:
         return 1
-    batch = batch_path(args.batch_root, args.mode)
     jobs = []
     for name, cfg in configs.items():
         tag = Path(MODELS[name]).stem
@@ -397,7 +438,7 @@ def main(argv: list[str] | None = None) -> int:
         cfg.work_dir = str(work)
         command = [sys.executable, str(OPENCD / 'tools/train.py'), str(config_path),
                    '--work-dir', str(work)]
-        jobs.append(dict(model_tag=tag, config=str(config_path), work_dir=str(work),
+        jobs.append(dict(model_tag=tag, primary_metric=args.save_best, config=str(config_path), work_dir=str(work),
                          log_file=str(batch / 'logs' / f'{tag}.log'), command=command))
         if args.dry_run:
             print(f'\n# EFFECTIVE CONFIG {name}\n{cfg.pretty_text}')
@@ -422,6 +463,8 @@ def main(argv: list[str] | None = None) -> int:
     write_json(batch / 'environment.json', environment)
     write_json(batch / 'data_members.json', snapshot)
     write_json(batch / 'normalization.json', stats)
+    from scripts.s1gfloods.training_components import sampling_plan
+    write_json(batch / 'sampling.json', sampling_plan(snapshot['foreground_ratios']))
     write_json(batch / 'batch_plan.json', dict(mode=args.mode, seed=args.seed, jobs=jobs))
     print(f'Batch directory: {batch}', flush=True)
     return execute_jobs(jobs, batch, child_env(args.torch_home, batch))

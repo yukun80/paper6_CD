@@ -335,13 +335,13 @@ def resolve_source_path(path_str: str) -> Path:
 def build_blend_weight(size: int) -> np.ndarray:
     """使用中心权重窗减轻滑窗边界缝。"""
     if size <= 1:
-        return np.ones((size, size), dtype=np.float32)
+        return np.ones((size, size), dtype=np.float64)
 
-    axis = np.hanning(size).astype(np.float32)
+    axis = np.hanning(size).astype(np.float64)
     if float(axis.max()) <= 0.0:
-        axis = np.ones((size,), dtype=np.float32)
+        axis = np.ones((size,), dtype=np.float64)
     axis = np.clip(axis, 1e-3, None)
-    return np.clip(np.outer(axis, axis).astype(np.float32), 1e-3, None)
+    return np.clip(np.outer(axis, axis).astype(np.float64), 1e-3, None)
 
 
 def write_geotiff(
@@ -373,6 +373,7 @@ def write_preview_png(binary_map: np.ndarray, out_path: Path) -> None:
     rgb = np.zeros((binary_map.shape[0], binary_map.shape[1], 3), dtype=np.uint8)
     rgb[binary_map == 0] = np.array([40, 40, 40], dtype=np.uint8)
     rgb[binary_map == 1] = np.array([255, 255, 255], dtype=np.uint8)
+    rgb[binary_map == BINARY_NODATA] = 255  # NoData 仅在 PNG 预览中显示为白色。
     Image.fromarray(rgb, mode="RGB").save(out_path)
 
 
@@ -520,10 +521,10 @@ def main(
     full_width = int(source["width"])
     tile_size = int(prepare_report["params"]["tile_size"])
 
-    accum_prob = np.zeros((full_height, full_width), dtype=np.float32)
-    accum_prob_sq = np.zeros((full_height, full_width), dtype=np.float32)
-    accum_pos_weight = np.zeros((full_height, full_width), dtype=np.float32)
-    accum_weight = np.zeros((full_height, full_width), dtype=np.float32)
+    accum_prob = np.zeros((full_height, full_width), dtype=np.float64)
+    accum_prob_sq = np.zeros((full_height, full_width), dtype=np.float64)
+    accum_pos_weight = np.zeros((full_height, full_width), dtype=np.float64)
+    accum_weight = np.zeros((full_height, full_width), dtype=np.float64)
     base_weight = build_blend_weight(tile_size)
 
     model = load_model(opt, checkpoint_payload)
@@ -535,8 +536,8 @@ def main(
             img1 = batch["img1"].to(model.device, non_blocking=torch.cuda.is_available())
             img2 = batch["img2"].to(model.device, non_blocking=torch.cuda.is_available())
             logits = model.inference(img1, img2)
-            probs = foreground_probability(logits).detach().cpu().numpy().astype(np.float32, copy=False)
-            valid_masks = batch["valid_mask"].numpy().astype(np.float32, copy=False)
+            probs = foreground_probability(logits).detach().cpu().numpy().astype(np.float64, copy=False)
+            valid_masks = batch["valid_mask"].numpy().astype(np.float64, copy=False)
             tile_ids = batch["tile_id"]
             tops = batch["top"].tolist()
             lefts = batch["left"].tolist()
@@ -556,7 +557,7 @@ def main(
                 accum_prob[top : top + height, left : left + width] += tile_prob * weight
                 accum_prob_sq[top : top + height, left : left + width] += np.square(tile_prob) * weight
                 accum_pos_weight[top : top + height, left : left + width] += (
-                    threshold_probability(tile_prob, opt.threshold).astype(np.float32) * weight
+                    threshold_probability(tile_prob, opt.threshold).astype(np.float64) * weight
                 )
                 accum_weight[top : top + height, left : left + width] += weight
 
@@ -578,16 +579,16 @@ def main(
             pbar.set_postfix({"batch": batch_idx, "tiles": min(batch_idx * opt.batch_size, len(dataset))})
 
     valid_output = accum_weight > 0
-    prob_map = np.full((full_height, full_width), PROB_NODATA, dtype=np.float32)
+    prob_map = np.full((full_height, full_width), PROB_NODATA, dtype=np.float64)
     prob_map[valid_output] = accum_prob[valid_output] / np.maximum(accum_weight[valid_output], 1e-6)
-    prob_var_map = np.zeros((full_height, full_width), dtype=np.float32)
+    prob_var_map = np.zeros((full_height, full_width), dtype=np.float64)
     prob_var_map[valid_output] = (
         accum_prob_sq[valid_output] / np.maximum(accum_weight[valid_output], 1e-6)
         - np.square(prob_map[valid_output])
     )
-    prob_std_map = np.zeros((full_height, full_width), dtype=np.float32)
+    prob_std_map = np.zeros((full_height, full_width), dtype=np.float64)
     prob_std_map[valid_output] = np.sqrt(np.clip(prob_var_map[valid_output], 0.0, None))
-    vote_ratio_map = np.zeros((full_height, full_width), dtype=np.float32)
+    vote_ratio_map = np.zeros((full_height, full_width), dtype=np.float64)
     vote_ratio_map[valid_output] = (
         accum_pos_weight[valid_output] / np.maximum(accum_weight[valid_output], 1e-6)
     )
@@ -611,13 +612,11 @@ def main(
         )
 
     mosaic_dir = opt.mosaic_dir
-    prob_path = mosaic_dir / "change_prob.tif"
     raw_binary_tif_path = mosaic_dir / "change_binary_raw.tif"
     raw_binary_png_path = mosaic_dir / "change_binary_raw.png"
     binary_tif_path = mosaic_dir / "change_binary.tif"
     binary_png_path = mosaic_dir / "change_binary.png"
     print("[INFO] Writing stitched outputs ...")
-    write_geotiff(source_pre, prob_path, prob_map, "float32", PROB_NODATA)
     write_geotiff(source_pre, raw_binary_tif_path, raw_binary_map, "uint8", BINARY_NODATA)
     write_preview_png(raw_binary_map, raw_binary_png_path)
     write_geotiff(source_pre, binary_tif_path, binary_map, "uint8", BINARY_NODATA)
@@ -629,6 +628,8 @@ def main(
         "stats_file": str(opt.stats_file) if opt.stats_file else "",
         "threshold": float(opt.threshold),
         "threshold_source": str(opt.threshold_source),
+        "probability_saved": False,
+        "probability_dtype": "float64",
         "batch_size": int(opt.batch_size),
         "num_workers": int(opt.num_workers),
         "total_tiles": len(dataset),
@@ -638,7 +639,6 @@ def main(
             "total_saved": total_tiles_saved,
         },
         "output_files": {
-            "change_prob_tif": str(prob_path),
             "change_binary_raw_tif": str(raw_binary_tif_path),
             "change_binary_raw_png": str(raw_binary_png_path),
             "change_binary_tif": str(binary_tif_path),

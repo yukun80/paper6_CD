@@ -165,6 +165,18 @@ LR=1e-4 \
 AMP_DTYPE=bf16 \
 EVAL_FG_THRESHOLD=0.40 \
 bash trainval_s1gfloods.sh
+
+CUDA_VISIBLE_DEVICES=0 \
+RUN_NAME=HA-CQI-OSCD \
+DATASET_NAME=S1GFloods_CD_DINO_BG_75_25_ \
+STATS_MODE=auto \
+SEED=3407 \
+BATCH_SIZE=12 \
+NUM_WORKERS=8 \
+LR=1e-4 \
+AMP=1 \
+AMP_DTYPE=bf16 \
+bash HA-CQI/trainval_s1gfloods.sh
 ```
 
 默认训练脚本使用以下关键配置：
@@ -316,12 +328,15 @@ python HA-CQI/scripts/infer_sar_scene_tiles.py \
 默认会保存切片级结果和整景拼接结果。整景输出位于 `<output-dir>/mosaic/`，包括：
 
 ```text
-change_prob.tif            # 拼接后的前景概率图
 change_binary_raw.tif/png  # 阈值化后的原始二值结果
 change_binary.tif/png      # 一致性伪斑过滤后的二值结果
 ```
 
 `<output-dir>/infer_report.json` 记录检查点、阈值、瓦片数、输出路径、拼接源影像和模型配置。
+主工程验证/推理在网络输出后使用 FP64 softmax、阈值比较及整景累积；网络、损失和混合精度
+配置不变。这是数值精度实验，不代表模型性能提升。新运行不再写出 `change_prob.tif`，
+报告记录 `probability_saved=false`、`probability_dtype=float64`；已有概率 TIFF 不删除。
+PNG 中 NoData 与前景均显示白色，有效背景为深灰色，定量评估使用二值 TIFF 的有效掩码。
 如需只保留原始拼接结果，可传入 `--disable_blob_filter`；如需跳过切片级 PNG/TIF 保存，可传入
 `--skip-tiles`。
 
@@ -333,14 +348,23 @@ python HA-CQI/scripts/evaluate_sar_scene.py \
   --ground-truth datasets/GF3_Zhuozhou/GF3_Zhuozhou_label.tif
 ```
 
-评估器排除 metadata nodata 和历史标签值 `3`，并同时报告 raw/filtered 的 IoU、F1、P/R、
-背景 tile FP、FP 像素比例、最大/P95 FP 连通域及 tiny/small/large
-coverage recall，并新增 2/4 像素容差 Boundary F1。河南只用于外部校准/诊断，涿州作为
-锁定测试，不参与训练 epoch 选择。
+新报告默认触发仅二值图评估，忽略同目录遗留的旧概率 TIFF。该模式排除预测和标签 NoData，
+包括标签未知值 `3`，直接报告 TP/FP/TN/FN、IoU、F1、P/R、准确率及有效/忽略像素数量。
+不扫描阈值或输出最优阈值；报告中的生成阈值仅作来源记录。可显式指定原始二值图：
+
+```bash
+python HA-CQI/scripts/evaluate_sar_scene.py \
+  --binary HA-CQI/outputs/<run>/mosaic/change_binary_raw.tif \
+  --ground-truth datasets/GF3_Zhuozhou/GF3_Zhuozhou_label.tif
+```
+
+历史概率图仍可通过 `--probability` 或旧版 `--prediction-dir` 评估并扫描阈值。
+为保持兼容，历史概率模式保留原先“覆盖区内未知 GT 归背景”的口径，与新二值模式不同；
+报告记录 mode 和 label_policy，不能混用不同口径直接宣称精度提升。
 评估报告不再计算 PR-AUC、Brier、ECE，也不再输出 `calibration` 指标块；
 诊断的 `calibration` 数据角色与验证 IoU 阈值搜索保留。
 
-统一跨域特征诊断（新 checkpoint 可额外输出 P1–P5/CQI 指标）：
+以下跨域特征诊断依赖已有历史概率 TIFF，不适用于新生成的仅二值输出：
 
 ```bash
 python HA-CQI/scripts/diagnose_cross_domain_features.py \
@@ -352,6 +376,11 @@ python HA-CQI/scripts/diagnose_cross_domain_features.py \
   --role calibration \
   --output /tmp/<run>_henan_feature_diagnostic.json
 ```
+
+2026-09-12 补充 LT 样本：从原推理数据复制 6 组 train、2 组 val 的 A/B/label，来源保留；
+现场成员为 train 4747、val 1597，后续仍以实时配对扫描为准，`stats_mode=auto` 自动刷新统计。
+本次检查新增 LT 样本没有训练/验证窗口面积重叠，但不代表整个数据集空间独立。
+广西已参与训练，其完整场景不能称为完全未见的外部测试。
 
 Zhuozhou 必须使用 `--role locked_test`；LT1 使用 `--role qualitative` 且不能据此选模型。
 

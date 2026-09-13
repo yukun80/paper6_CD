@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""对 HA-CQI 整景概率图执行 nodata-aware 洪水二值评估。"""
+"""评估 HA-CQI 整景二值图，兼容历史概率图与阈值扫描。"""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from data.tif_io import decode_binary_label, read_raster_valid_mask  # noqa: E40
 from utils.flood_evaluation import (  # noqa: E402
     FloodEvaluationAccumulator,
     build_threshold_grid,
+    evaluate_binary_arrays,
 )
 
 
@@ -37,9 +38,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--prediction-dir",
         type=Path,
         default=None,
-        help="整景输出目录；自动读取 mosaic/change_prob.tif 与可选 change_binary.tif。",
+        help="整景输出目录；新报告默认评估最终二值图，兼容历史概率输出。",
     )
     parser.add_argument("--probability", type=Path, default=None)
+    parser.add_argument("--binary", type=Path, default=None,
+                        help="仅评估指定二值 TIFF，可显式选择 change_binary_raw.tif；不扫描阈值。")
     parser.add_argument("--ground-truth", type=Path, required=True)
     parser.add_argument("--filtered-binary", type=Path, default=None)
     parser.add_argument("--valid-mask", type=Path, default=None)
@@ -54,11 +57,21 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def resolve_inputs(args: argparse.Namespace) -> argparse.Namespace:
+    args.binary = getattr(args, "binary", None)
+    if args.binary is not None and args.probability is not None:
+        raise ValueError("--binary and --probability are mutually exclusive")
     if args.prediction_dir is not None:
         prediction_dir = args.prediction_dir.expanduser().resolve()
         mosaic_dir = prediction_dir / "mosaic"
-        if args.probability is None:
-            args.probability = mosaic_dir / "change_prob.tif"
+        infer_report = prediction_dir / "infer_report.json"
+        payload = json.loads(infer_report.read_text(encoding="utf-8")) if infer_report.is_file() else {}
+        if args.probability is None and args.binary is None:
+            if payload.get("probability_saved") is False:
+                args.binary = mosaic_dir / "change_binary.tif"
+            elif (mosaic_dir / "change_prob.tif").is_file():
+                args.probability = mosaic_dir / "change_prob.tif"
+            else:
+                args.binary = mosaic_dir / "change_binary.tif"
         if args.filtered_binary is None:
             candidate = mosaic_dir / "change_binary.tif"
             if candidate.is_file():
@@ -72,27 +85,31 @@ def resolve_inputs(args: argparse.Namespace) -> argparse.Namespace:
                     args.threshold_source = "infer_report"
         if args.report is None:
             args.report = prediction_dir / "scene_evaluation.json"
-    if args.probability is None:
-        raise ValueError("Provide --prediction-dir or --probability")
-    args.probability = args.probability.expanduser().resolve()
+    if args.probability is None and args.binary is None:
+        raise ValueError("Provide --prediction-dir, --binary or --probability")
+    args.mode = "binary" if args.binary is not None else "probability"
+    if args.probability is not None:
+        args.probability = args.probability.expanduser().resolve()
+    if args.binary is not None:
+        args.binary = args.binary.expanduser().resolve()
     args.ground_truth = args.ground_truth.expanduser().resolve()
     if args.filtered_binary is not None:
         args.filtered_binary = args.filtered_binary.expanduser().resolve()
     if args.valid_mask is not None:
         args.valid_mask = args.valid_mask.expanduser().resolve()
     if args.report is None:
-        args.report = args.probability.with_name("scene_evaluation.json")
+        args.report = (args.binary or args.probability).with_name("scene_evaluation.json")
     else:
         args.report = args.report.expanduser().resolve()
-    if args.threshold is None:
+    if args.threshold is None and args.mode == "probability":
         raise ValueError(
             "Evaluation requires --threshold or prediction-dir/infer_report.json threshold"
         )
     elif not hasattr(args, "threshold_source"):
-        args.threshold_source = "explicit_cli"
-    if not 0.0 <= args.threshold <= 1.0:
+        args.threshold_source = "explicit_cli" if args.threshold is not None else "not_applicable"
+    if args.threshold is not None and not 0.0 <= args.threshold <= 1.0:
         raise ValueError("--threshold must be within [0, 1]")
-    for path in (args.probability, args.ground_truth, args.filtered_binary, args.valid_mask):
+    for path in (args.binary, args.probability, args.ground_truth, args.filtered_binary, args.valid_mask):
         if path is not None and not path.is_file():
             raise FileNotFoundError(path)
     return args
@@ -143,10 +160,41 @@ def evaluate_probability(
     return result
 
 
+def evaluate_binary_scene(args: argparse.Namespace) -> dict[str, object]:
+    """直接对固定二值预测计数，排除预测和标签 NoData，不生成伪概率。"""
+    with rasterio.open(args.binary) as reference:
+        prediction, pred_valid, pred_meta = read_aligned(args.binary)
+        if not np.isin(prediction[pred_valid], [0, 1]).all():
+            raise ValueError("Binary prediction must contain 0/1 on valid pixels")
+        ground_truth, gt_valid, gt_meta = read_aligned(args.ground_truth, reference)
+        target, gt_valid = decode_binary_label(ground_truth, gt_meta["nodata"], gt_valid)
+        valid = pred_valid & gt_valid
+        if args.valid_mask is not None:
+            external, external_valid, _ = read_aligned(args.valid_mask, reference)
+            valid &= external_valid & (external > 0)
+    metrics = evaluate_binary_arrays(prediction == 1, target == 1, valid)
+    return {
+        "format_version": 2,
+        "mode": "binary",
+        "label_policy": "exclude_prediction_and_ground_truth_nodata",
+        "generation_threshold": args.threshold,
+        "threshold_source": args.threshold_source,
+        "valid_pixels": metrics["valid_pixels"],
+        "ignored_pixels": metrics["ignored_pixels"],
+        "rasters": {"binary": pred_meta, "ground_truth": gt_meta},
+        "metrics": metrics,
+    }
+
+
 def main() -> None:
     args = resolve_inputs(build_parser().parse_args())
+    if args.mode == "binary":
+        report = evaluate_binary_scene(args)
+        atomic_json_save(report, args.report)
+        print(f"binary | {report['metrics']}\nreport={args.report}")
+        return
     with rasterio.open(args.probability) as probability_dataset:
-        probabilities = probability_dataset.read(1).astype(np.float32, copy=False)
+        probabilities = probability_dataset.read(1).astype(np.float64, copy=False)
         probability_valid = read_raster_valid_mask(probability_dataset, probabilities)
         probability_meta = {
             "path": str(args.probability),
@@ -197,6 +245,7 @@ def main() -> None:
 
     report = {
         "format_version": 1,
+        "mode": "probability",
         "label_policy": "unknown_gt_as_background_within_valid_coverage",
         "threshold": float(args.threshold),
         "threshold_source": str(args.threshold_source),

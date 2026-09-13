@@ -8,7 +8,6 @@ DEFAULT_WORKDIR_ROOT="${OPENCD_DIR}/work_dirs"
 DEFAULT_DATA_ROOT="${OPENCD_DIR}/../../datasets/GF3_Henan_CD_infer"
 DEFAULT_DEVICE="cuda:0"
 DEFAULT_BATCH_SIZE=1
-DEFAULT_THRESHOLD=0.5
 CALLER_PWD="$(pwd)"
 
 usage() {
@@ -24,7 +23,6 @@ Options:
   --device <device>       inference device, default: cuda:0
   --batch-size <n>        tile group size; forward always uses one tile, default: 1
   --output-root <path>   output root, default: baselines/open-cd/outputs
-  --threshold <x>         threshold on stitched probability map, default: 0.5
   --limit <n>             optional cap on tiles per model, default: all
   --skip-mosaic           only save tile-level PNG predictions
   -h, --help              show this help
@@ -61,18 +59,7 @@ resolve_latest_batch_dir() {
 }
 
 resolve_checkpoint() {
-  local work_dir="$1"
-  local ckpt=""
-
-  ckpt="$(find "${work_dir}" -maxdepth 1 -type f -name 'best_*.pth' | sort | head -n 1 || true)"
-  if [[ -z "${ckpt}" && -f "${work_dir}/latest.pth" ]]; then
-    ckpt="${work_dir}/latest.pth"
-  fi
-  if [[ -z "${ckpt}" ]]; then
-    echo "No checkpoint found in ${work_dir}" >&2
-    return 1
-  fi
-  printf '%s\n' "${ckpt}"
+  "${PYTHON:-python}" "${SCRIPT_DIR}/select_checkpoint.py" "$1"
 }
 
 resolve_config() {
@@ -110,7 +97,6 @@ WORKDIR_ROOT="${DEFAULT_WORKDIR_ROOT}"
 DATA_ROOT="${DEFAULT_DATA_ROOT}"
 DEVICE="${DEFAULT_DEVICE}"
 BATCH_SIZE="${DEFAULT_BATCH_SIZE}"
-THRESHOLD="${DEFAULT_THRESHOLD}"
 LIMIT=0
 SKIP_MOSAIC=0
 
@@ -128,8 +114,6 @@ while [[ $# -gt 0 ]]; do
       DEVICE="$2"; shift 2;;
     --batch-size)
       BATCH_SIZE="$2"; shift 2;;
-    --threshold)
-      THRESHOLD="$2"; shift 2;;
     --limit)
       LIMIT="$2"; shift 2;;
     --skip-mosaic)
@@ -168,15 +152,6 @@ if ! [[ "${BATCH_SIZE}" =~ ^[0-9]+$ ]] || [[ "${BATCH_SIZE}" -le 0 ]]; then
 fi
 if ! [[ "${LIMIT}" =~ ^[0-9]+$ ]] || [[ "${LIMIT}" -lt 0 ]]; then
   echo "Invalid --limit: ${LIMIT}" >&2
-  exit 1
-fi
-if ! python - "${THRESHOLD}" <<'PY'
-import sys
-value = float(sys.argv[1])
-raise SystemExit(0 if 0.0 <= value <= 1.0 else 1)
-PY
-then
-  echo "Invalid --threshold: ${THRESHOLD}" >&2
   exit 1
 fi
 
@@ -269,7 +244,6 @@ for model_tag in "${MODEL_TAGS[@]}"; do
     --mosaic-dir "${mosaic_dir}"
     --device "${DEVICE}"
     --batch-size "${BATCH_SIZE}"
-    --threshold "${THRESHOLD}"
   )
   if [[ "${LIMIT}" -gt 0 ]]; then
     cmd+=(--limit "${LIMIT}")
@@ -297,6 +271,32 @@ for model_tag in "${MODEL_TAGS[@]}"; do
 done
 
 echo
+# 将实际构建后的判别规则写入汇总；失败行不读取可能遗留的旧日志。
+python - "${SUMMARY_FILE}" <<'PYRULE'
+import csv
+import json
+import sys
+from pathlib import Path
+path = Path(sys.argv[1])
+with path.open() as stream:
+    reader = csv.DictReader(stream, delimiter="\t")
+    fields = reader.fieldnames + ["threshold", "threshold_source", "tile_rule", "mosaic_rule"]
+    rows = list(reader)
+for row in rows:
+    rule = {}
+    if row["status"] == "success":
+        for line in Path(row["log_file"]).read_text().splitlines():
+            if line.startswith("[DECISION] "):
+                rule = json.loads(line[len("[DECISION] "):])
+        if not rule:
+            raise RuntimeError(f"Missing decision rule: {row['model_tag']}")
+    row.update({key: rule.get(key, "") for key in fields[-4:]})
+with path.open("w", newline="") as stream:
+    writer = csv.DictWriter(stream, fieldnames=fields, delimiter="\t")
+    writer.writeheader()
+    writer.writerows(rows)
+PYRULE
+
 echo "Inference finished."
 echo "Succeeded: ${success_count}"
 echo "Failed: ${failed_count}"

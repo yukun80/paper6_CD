@@ -256,8 +256,8 @@ class FloodEvaluationAccumulator:
         if not 0.0 <= reference_threshold <= 1.0:
             raise ValueError("reference_threshold must be within [0, 1]")
         self.thresholds = np.asarray(values, dtype=np.float64)
-        # 报告保留原始阈值；比较网格允许 float32 转换后的重复值。
-        self._comparison_thresholds = self.thresholds.astype(np.float32)
+        # 比较与报告均保留 FP64，避免邻近阈值被 FP32 舍入合并。
+        self._comparison_thresholds = self.thresholds.copy()
         self.reference_threshold = float(reference_threshold)
         self.pos_pass_bins = np.zeros(len(values) + 1, dtype=np.int64)
         self.neg_pass_bins = np.zeros(len(values) + 1, dtype=np.int64)
@@ -285,7 +285,7 @@ class FloodEvaluationAccumulator:
         target: np.ndarray,
         valid_mask: np.ndarray | None = None,
     ) -> None:
-        probs = np.asarray(probabilities, dtype=np.float32)
+        probs = np.asarray(probabilities, dtype=np.float64)
         gt = np.asarray(target).astype(bool)
         if probs.shape != gt.shape:
             raise ValueError(f"probabilities/target shape mismatch: {probs.shape} != {gt.shape}")
@@ -299,7 +299,7 @@ class FloodEvaluationAccumulator:
             return
 
         passed_count = np.searchsorted(
-            self._comparison_thresholds, flat_probs.astype(np.float32), side="right"
+            self._comparison_thresholds, flat_probs, side="right"
         )
         self.pos_pass_bins += np.bincount(
             passed_count[flat_gt], minlength=len(self.thresholds) + 1

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+from copy import deepcopy
 import json
 import os
 import sys
@@ -19,6 +20,8 @@ from PIL import Image
 import rasterio
 from rich.progress import track
 import torch
+from mmengine.config import Config
+from mmengine.dataset import pseudo_collate
 
 CURRENT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = CURRENT_DIR.parent
@@ -27,6 +30,70 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from opencd.apis import OpenCDInferencer
+
+
+class SceneInferencer(OpenCDInferencer):
+    """整景入口直接使用默认组装函数，保留自定义配置的原始行为。"""
+
+    def _init_collate(self, cfg):
+        if 'collate_fn' not in cfg.get('test_dataloader', {}):
+            return pseudo_collate
+        return super()._init_collate(cfg)
+
+
+def resolve_decision_rule(config: Config) -> dict:
+    """解析主输出头的训练验证规则，不把辅助头阈值当作模型阈值。"""
+    head = config.model.decode_head
+    if not isinstance(head, dict):
+        raise ValueError("Unsupported main decode_head configuration")
+    channels = head.get('out_channels')
+    if channels is None:
+        channels = head.get('num_classes')
+    if channels == 1:
+        explicit = head.get('threshold')
+        threshold = 0.3 if explicit is None else float(explicit)
+        source = 'mmseg_default' if explicit is None else 'training_config'
+        tile_rule = 'foreground_probability > threshold'
+    elif channels == 2:
+        threshold, source, tile_rule = 0.5, 'two_class_argmax', 'argmax; ties=background'
+    else:
+        raise ValueError(f"Unsupported main output channels: {channels}")
+    if not np.isfinite(threshold) or not 0 <= threshold <= 1:
+        raise ValueError(f"Invalid training threshold: {threshold}")
+    return dict(threshold=threshold, threshold_source=source, out_channels=channels,
+                tile_rule=tile_rule, mosaic_rule='foreground_probability > threshold')
+
+
+def verify_decision_rule(model, rule: dict) -> None:
+    """构建后核对真实主头，防止配置解析与框架行为偏离。"""
+    head = model.decode_head
+    if head.out_channels != rule['out_channels']:
+        raise ValueError("Built main head output channels differ from training configuration")
+    if head.out_channels == 1 and float(head.threshold) != rule['threshold']:
+        raise ValueError("Built main head threshold differs from training configuration")
+
+
+def prepare_inference_config(config: Config) -> Config:
+    """仅修改内存副本的推理设置，不改动训练配置和网络参数。"""
+    config = deepcopy(config)
+    if 'visualizer' in config:
+        config.visualizer.vis_backends = []
+
+    def set_head_threshold(head):
+        if isinstance(head, (list, tuple)):
+            for item in head:
+                set_head_threshold(item)
+        elif isinstance(head, dict):
+            if head.get('out_channels', head.get('num_classes')) == 1 and head.get('threshold') is None:
+                head['threshold'] = 0.3
+            # ChangeStar 构造时将内部 FarSeg 头固定为单通道。
+            if str(head.get('type', '')).split('.')[-1] == 'ChangeStarHead':
+                if head['seg_head_cfg'].get('threshold') is None:
+                    head['seg_head_cfg']['threshold'] = 0.3
+
+    for name in ('decode_head', 'auxiliary_head'):
+        set_head_threshold(config.model.get(name))
+    return config
 
 
 PROB_NODATA = -1.0
@@ -89,12 +156,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=0,
         help="optional cap on number of tiles, 0 means all tiles",
-    )
-    parser.add_argument(
-        "--threshold",
-        type=float,
-        default=0.5,
-        help="threshold applied on the stitched probability map, default: 0.5",
     )
     parser.add_argument(
         "--skip-mosaic",
@@ -251,13 +312,16 @@ def write_preview_png(binary_map: np.ndarray, out_path: Path) -> None:
     rgb = np.zeros((binary_map.shape[0], binary_map.shape[1], 3), dtype=np.uint8)
     rgb[binary_map == 0] = np.array([40, 40, 40], dtype=np.uint8)
     rgb[binary_map == 1] = np.array([255, 255, 255], dtype=np.uint8)
+    rgb[binary_map == BINARY_NODATA] = 255  # NoData 仅在 PNG 预览中显示为白色。
     Image.fromarray(rgb, mode="RGB").save(out_path)
 
 
 def save_binary_prediction(prediction, save_path: Path) -> None:
-    """将 tile 预测结果保存为黑白 PNG。"""
+    """保存原生预测，保留单通道严格比较和双通道 argmax 的边界行为。"""
     pred_mask = prediction.pred_sem_seg.data.squeeze().detach().cpu().numpy()
-    pred_mask = (pred_mask > 0).astype(np.uint8) * 255
+    if not np.isin(pred_mask, [0, 1]).all():
+        raise ValueError("Expected binary native prediction")
+    pred_mask = pred_mask.astype(np.uint8) * 255
     save_path.parent.mkdir(parents=True, exist_ok=True)
     Image.fromarray(pred_mask, mode="L").save(save_path)
 
@@ -315,6 +379,7 @@ def finalize_mosaic_outputs(
     tile_output_dir: Path,
     total_tiles: int,
     used_tiles: int,
+    decision_rule: dict,
 ) -> None:
     """将累积结果写成整景概率图、二值图和报告。"""
     source = prepare_report["source"]
@@ -325,7 +390,7 @@ def finalize_mosaic_outputs(
     prob_map[valid_output] = accum_prob[valid_output] / np.maximum(accum_weight[valid_output], 1e-6)
 
     binary_map = np.full(accum_prob.shape, BINARY_NODATA, dtype=np.uint8)
-    binary_map[valid_output] = (prob_map[valid_output] >= float(threshold)).astype(np.uint8)
+    binary_map[valid_output] = (prob_map[valid_output] > float(threshold)).astype(np.uint8)
 
     prob_path = mosaic_dir / "change_prob.tif"
     binary_tif_path = mosaic_dir / "change_binary.tif"
@@ -343,6 +408,11 @@ def finalize_mosaic_outputs(
         "checkpoint": str(checkpoint_path),
         "tile_output_dir": str(tile_output_dir),
         "threshold": float(threshold),
+        "tile_threshold": float(threshold),
+        "mosaic_threshold": float(threshold),
+        "binarization_rule": decision_rule['mosaic_rule'],
+        "decision_rule": decision_rule,
+        "threshold_source": decision_rule['threshold_source'],
         "partial_run": used_tiles < total_tiles,
         "used_tiles": used_tiles,
         "total_tiles": total_tiles,
@@ -380,8 +450,6 @@ def main() -> None:
     if args.batch_size > 1:
         print(f"[INFO] Requested group size {args.batch_size}; effective forward batch size is 1.")
     os.environ.setdefault("TORCH_HOME", str(PROJECT_ROOT / "pretrained/torch"))
-    if not 0.0 <= args.threshold <= 1.0:
-        raise ValueError("--threshold must be within [0, 1].")
     if args.device.startswith("cuda") and not torch.cuda.is_available():
         print(f"Requested device {args.device} is unavailable, fallback to cpu.")
         args.device = "cpu"
@@ -413,15 +481,19 @@ def main() -> None:
     print(f"Mosaic output dir: {mosaic_dir if mosaic_dir is not None else '<skipped>'}")
     print(f"Tiles used: {len(tile_records)} / {total_tiles}")
     print(f"Batch size: {args.batch_size}")
-    print(f"Threshold: {args.threshold}")
     print(f"Device: {args.device}")
 
-    inferencer = OpenCDInferencer(
-        model=str(config_path),
+    training_config = Config.fromfile(str(config_path))
+    decision_rule = resolve_decision_rule(training_config)
+    inference_config = prepare_inference_config(training_config)
+    inferencer = SceneInferencer(
+        model=inference_config,
         weights=str(checkpoint_path),
         device=args.device,
         scope="opencd",
     )
+    verify_decision_rule(inferencer.model, decision_rule)
+    print('[DECISION] ' + json.dumps(decision_rule), flush=True)
 
     accum_prob = None
     accum_weight = None
@@ -441,11 +513,11 @@ def main() -> None:
         predictions = predict_single_tiles(inferencer, inputs)
 
         for (_, _, rel_path, row), prediction in zip(batch, predictions):
+            prob_tile = extract_change_probability(prediction)
             save_binary_prediction(prediction, tile_output_dir / rel_path)
             total_saved += 1
 
             if mosaic_dir is not None:
-                prob_tile = extract_change_probability(prediction)
                 accumulate_tile_probability(
                     data_root,
                     row,
@@ -461,13 +533,14 @@ def main() -> None:
             mosaic_dir,
             accum_prob,
             accum_weight,
-            args.threshold,
+            decision_rule['threshold'],
             data_root=data_root,
             config_path=config_path,
             checkpoint_path=checkpoint_path,
             tile_output_dir=tile_output_dir,
             total_tiles=total_tiles,
             used_tiles=len(tile_records),
+            decision_rule=decision_rule,
         )
 
     print(f"Saved tile PNGs: {total_saved}")

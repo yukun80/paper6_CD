@@ -1,4 +1,4 @@
-# Open-CD 11 模型批量重训
+# Open-CD 10 模型批量重训
 
 ## 三地区推理输出（2026-09-12 更新）
 
@@ -11,7 +11,7 @@ do
     --batch-dir baselines/open-cd/work_dirs/s1gfloods-batch-20260911-234448 \
     --data-root "datasets/$tiles" \
     --output-root baselines/open-cd/outputs \
-    --batch-size 1 --device cuda:0 --threshold 0.5 || break
+    --batch-size 1 --device cuda:0 || break
 done
 ```
 
@@ -21,9 +21,15 @@ done
 
 少量验证可指定独立 `/tmp` 输出目录并使用 `--limit 5 --skip-mosaic`；此模式只保存5个切片，不能视为完整整景结果。正式推理不指定这两个参数。
 
-统一入口 `run_all_s1gfloods.sh` 默认依次训练：FC-Siam-Diff、IFN、BIT、ChangeStar、LightCDNet、ChangeFormer、CGNet、STANet、SNUNet、HANet、TTP ViT-SAM-B。**不包含 Changer**。`run_all_s1gfloods_extra.sh` 复用同一实现，默认只运行后六个模型。
+切片 PNG 保存模型原生 `pred_sem_seg`：IFN 使用框架单通道默认 `>0.3`，CGNet、ChangeStar、STANet 使用训练配置的 `>0.5`；其他7模型使用双通道 argmax，平局归背景。整景先融合前景概率，再按对应阈值严格 `>` 二值化；双通道的整景判别边界为0.5。重叠融合结果与单张切片不保证逐像素一致。
 
-默认数据为 `datasets/S1GFloods_CD_DINO_BG_75_25`（末尾无下划线）。现场目录决定成员，不读取旧 CSV 决定训练集。默认 seed=42，单 GPU 串行；保留各模型的学习率、优化器、增强、40k 迭代、每4000迭代验证和 mIoU 选优。普通模型 batch=8，TTP=2，不加载旧训练 checkpoint，不续训。
+两个推理入口均已移除 `--threshold`，旧命令携带该参数会报错，请删除该参数。这里恢复的是训练验证规则，11个checkpoint没有保存经验证集搜索的最优阈值。程序从主头配置解析规则并在模型构建后核对，辅助头和ChangeStar内部头不参与最终规则选择。日志的 `[DECISION]`、整景报告的 `decision_rule` 以及批量TSV记录阈值、来源、切片和整景规则；`--skip-mosaic` 仍在日志及汇总记录规则。
+
+推理仅在内存配置中补齐单通道缺省阈值、关闭未使用的可视化后端，并直接使用默认 `pseudo_collate`；不改写训练配置、权重或环境。保留输出通道建议、损失设置提示和第三方接口弃用 warning，没有全局屏蔽警告。
+
+统一入口 `run_all_s1gfloods.sh` 默认依次训练：FC-Siam-Diff、IFN、BIT、ChangeStar、LightCDNet、ChangeFormer、CGNet、SNUNet、HANet、TTP ViT-SAM-B。**不包含 Changer、STANet**。`run_all_s1gfloods_extra.sh` 复用同一实现，默认只运行后五个模型。
+
+默认数据为 `datasets/S1GFloods_CD_DINO_BG_75_25`（末尾无下划线）。现场目录决定成员，不读取旧 CSV 决定训练集。默认 seed=42，单 GPU 串行；保留模型结构、损失、优化器类型、参数衰减、40k 迭代及每4000迭代验证；使用下述 SAR 优化方案。普通模型 batch=8，TTP=2，不加载旧训练 checkpoint，不续训。
 
 ## 当前环境结论与准备边界
 
@@ -113,7 +119,7 @@ bash baselines/open-cd/scripts/s1gfloods/run_all_s1gfloods.sh full-train --dry-r
 bash baselines/open-cd/scripts/s1gfloods/run_all_s1gfloods.sh smoke-train
 ```
 
-仅全部11模型短训练成功，才可判定该环境和入口已通过基础运行验证；这不证明完整40k训练一定成功。安装验收后可显式保存环境快照：
+仅全部10模型短训练成功，才可判定该环境和入口已通过基础运行验证；这不证明完整40k训练一定成功。安装验收后可显式保存环境快照：
 
 ```bash
 python -m pip freeze > baselines/open-cd/pretrained/opencd-environment-freeze.txt
@@ -158,3 +164,24 @@ python -m unittest discover -s baselines/open-cd/scripts/s1gfloods -p test_batch
 ```
 
 这些测试使用临时合成PNG和轻量子进程，验证统计、配置与编排行为，不构建/训练实际模型。
+
+## SAR 训练优化（2026-09-13）
+
+- 专用 `SharedSARRadiometric`：A/B 共用亮度偏移（±10）和对比度（0.8–1.2），各以0.5概率启用，先亮度后对比度并裁剪至0–255。不使用色相/饱和度增强，保留同步旋转和翻转。
+- 删除256→256无效裁剪。训练标签按前景比例0、(0,10%]、(10%,100%]分组；非空组概率为原比例的一半加均衡比例的一半，组内均匀有放回。验证集不重采样，批次 `sampling.json` 保存实际分组及概率。
+- FC-Siam-Diff、IFN、BIT、SNUNet、HANet学习率为5e-4，LightCDNet为1e-3；ChangeStar为1e-3、ChangeFormer为6e-5（head×10）、CGNet为5e-4、TTP为4e-4，后四项保持原值。
+- 同时保存 `best_FloodIoU` 与 `best_mIoU`。默认 `--save-best FloodIoU` 决定主权重，可显式选择mIoU。FloodIoU使用change类未舍入IoU百分数；前景并集为零返回NaN，不生成伪造最优分数。若主指标始终不可用、没有best权重，该模型不能报告成功。
+- 新批次推理按summary.tsv中的主权重解析，旧批次保持历史行为。主权重记录缺失或失效时明确报错，不偷偷回退。
+- 以上配置是待验证实验方案，不代表已经证明性能提升。基础两迭代验证不代表40k训练或跨地区精度验收。
+
+从仓库根目录依次执行（前一步成功后再执行下一步）：
+
+```bash
+conda activate opencd
+export CUDA_VISIBLE_DEVICES=0
+bash baselines/open-cd/scripts/s1gfloods/run_all_s1gfloods.sh check-env
+bash baselines/open-cd/scripts/s1gfloods/run_all_s1gfloods.sh smoke-train
+bash baselines/open-cd/scripts/s1gfloods/run_all_s1gfloods.sh full-train
+```
+
+`full-train --dry-run` 只打印生效配置和命令；`--models bit ifn` 可选择子集。训练STANet参数会被拒绝，但历史STANet推理仍可使用。
