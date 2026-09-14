@@ -81,7 +81,7 @@ class Options:
             default="./checkpoints",
             help="models are saved here",
         )
-        
+
         self.parser.add_argument(
             "--save_test", action="store_true"
         )
@@ -125,6 +125,8 @@ class Options:
         self.parser.add_argument("--alpha", type=float, default=0.25)
         self.parser.add_argument("--gamma", type=int, default=4, help="gamma for Focal loss")
 
+        self.parser.add_argument('--seed', type=int, default=42, help='训练初始化及采样随机种子')
+        self.parser.add_argument('--smoke_train', action='store_true', help='两迭代训练与小规模验证')
         self.parser.add_argument("--batch_size", type=int, default=16)
         self.parser.add_argument("--num_epochs", type=int, default=100)
         self.parser.add_argument(

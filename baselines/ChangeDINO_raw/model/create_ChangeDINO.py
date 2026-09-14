@@ -41,7 +41,7 @@ class Model(nn.Module):
         )
         self.focal = FocalLoss(alpha=opt.alpha, gamma=opt.gamma)
         self.dice = DICELoss()
-        
+
 
         self.optimizer = optim.AdamW(
             self.model.parameters(), lr=opt.lr, weight_decay=opt.weight_decay
@@ -87,6 +87,10 @@ class Model(nn.Module):
     def _build_checkpoint_meta(self):
         """保存推理重建模型所需的最小配置，避免不同 DINO 尺寸下靠默认值猜结构。"""
         return {
+            "normalization": {"mean": list(self.opt.mean), "std": list(self.opt.std),
+                              "stats_file": self.opt.stats_file, "scale": "0_1"},
+            "dataset": {"name": self.opt.dataset, "dataroot": self.opt.dataroot},
+            "seed": getattr(self.opt, "seed", 42),
             "model_config": {
                 "backbone": self.opt.backbone,
                 "fpn_channels": int(self.opt.fpn_channels),

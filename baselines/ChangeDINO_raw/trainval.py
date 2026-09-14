@@ -23,9 +23,9 @@ def setup_seed(seed):
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = False 
-    torch.backends.cudnn.benchmark = True  
-    torch.backends.cudnn.enabled = True  
+    torch.backends.cudnn.deterministic = False
+    torch.backends.cudnn.benchmark = True
+    torch.backends.cudnn.enabled = True
 
 
 class Trainval(object):
@@ -66,7 +66,7 @@ class Trainval(object):
                 )
                 f.write("# time,epoch,train_loss,train_focal,train_dice,lr,")
                 f.write("val_metrics(json)\n")
-    
+
     def _rescheduler(self, opt):
         self.model.optimizer = optim.AdamW(
             self.model.model.parameters(), lr=opt.lr*0.2, weight_decay=opt.weight_decay
@@ -76,7 +76,7 @@ class Trainval(object):
         )
         self.optimizer = self.model.optimizer
         self.schedular = self.model.schedular
-        
+
 
     def _append_log_line(self, epoch: int, train_stats: dict, val_scores: dict):
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -114,14 +114,22 @@ class Trainval(object):
         last_lr = self.optimizer.param_groups[0]["lr"]
 
         for i, data in enumerate(tbar):
+            if self.opt.smoke_train and i >= 2:
+                break
             self.model.model.train()
             pred, focal, dice = self.model(
                 data["img1"].cuda(), data["img2"].cuda(), data["cd_label"].cuda()
             )
-            
+
             loss = focal * self.alpha + dice
             self.optimizer.zero_grad()
+            if not torch.isfinite(loss):
+                raise RuntimeError('Nonfinite training loss')
             loss.backward()
+            if self.opt.smoke_train:
+                grads = [p.grad for p in self.model.model.parameters() if p.requires_grad and p.grad is not None]
+                if not grads or not all(torch.isfinite(g).all() for g in grads) or not any(torch.count_nonzero(g) for g in grads):
+                    raise RuntimeError('Smoke gradient check failed')
             self.optimizer.step()
 
             _loss += loss.item()
@@ -146,7 +154,7 @@ class Trainval(object):
                 )
         self.schedular.step()
 
-        n = max(1, i + 1)
+        n = 2 if self.opt.smoke_train else max(1, i + 1)
         return {
             "loss": _loss / n,
             "focal": _focal_loss / n,
@@ -157,14 +165,18 @@ class Trainval(object):
     def val(self, epoch):
         tbar = tqdm(self.val_data, ncols=80)
         self.running_metric.clear()
-        opt.phase = "val"
+        self.opt.phase = "val"
         self.model.eval()
 
         with torch.no_grad():
             for i, _data in enumerate(tbar):
+                if self.opt.smoke_train and i >= 1:
+                    break
                 val_pred = self.model.inference(
                     _data["img1"].cuda(), _data["img2"].cuda()
                 )
+                if not torch.isfinite(val_pred).all():
+                    raise RuntimeError('Nonfinite validation logits')
                 val_target = _data["cd_label"].detach()
                 val_pred = torch.argmax(val_pred.detach(), dim=1)
                 _ = self.running_metric.update_cm(
@@ -194,10 +206,12 @@ class Trainval(object):
 
 if __name__ == "__main__":
     opt = Options().parse()
+    setup_seed(seed=opt.seed)
     trainval = Trainval(opt)
-    setup_seed(seed=1)
+    with open(os.path.join(trainval.model.save_dir, 'options.json'), 'w') as stream:
+        json.dump(vars(opt), stream, indent=2)
 
-    for epoch in range(1, opt.num_epochs + 1):
+    for epoch in range(1, (1 if opt.smoke_train else opt.num_epochs) + 1):
         print(
             "\n==> Name %s, Epoch %i, previous best = %.3f"
             % (opt.name, epoch, trainval.previous_best * 100)
@@ -211,4 +225,13 @@ if __name__ == "__main__":
         if opt.save_epoch_freq > 0 and epoch % opt.save_epoch_freq == 0:
             trainval.model.save_epoch(opt.name, opt.backbone, epoch)
 
+    if opt.smoke_train:
+        path = os.path.join(trainval.model.save_dir, f'{opt.name}_{opt.backbone}_best.pth')
+        saved = torch.load(path, map_location='cpu', weights_only=False)
+        trainval.model.model.load_state_dict(saved['network'], strict=True)
+        assert saved['meta']['normalization']['mean'] == opt.mean
+        with open(os.path.join(trainval.model.save_dir, 'smoke_report.json'), 'w') as stream:
+            json.dump(dict(training_iterations=2, validation_batches=1, batch_size=opt.batch_size,
+                           loss=train_stats['loss'], checkpoint_reload='strict_passed',
+                           peak_cuda_bytes=torch.cuda.max_memory_allocated()), stream, indent=2)
     print("Done!")
