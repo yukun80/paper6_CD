@@ -1,4 +1,4 @@
-# Open-CD 10 模型批量重训
+# Open-CD 9 模型批量重训
 
 ## 三地区推理输出（2026-09-12 更新）
 
@@ -27,9 +27,17 @@ done
 
 推理仅在内存配置中补齐单通道缺省阈值、关闭未使用的可视化后端，并直接使用默认 `pseudo_collate`；不改写训练配置、权重或环境。保留输出通道建议、损失设置提示和第三方接口弃用 warning，没有全局屏蔽警告。
 
-统一入口 `run_all_s1gfloods.sh` 默认依次训练：FC-Siam-Diff、IFN、BIT、ChangeStar、LightCDNet、ChangeFormer、CGNet、SNUNet、HANet、TTP ViT-SAM-B。**不包含 Changer、STANet**。`run_all_s1gfloods_extra.sh` 复用同一实现，默认只运行后五个模型。
+统一入口 `run_all_s1gfloods.sh` 默认依次训练：FC-Siam-Diff、IFN、BIT、LightCDNet、ChangeFormer、CGNet、SNUNet、HANet、TTP ViT-SAM-B。**不包含 Changer、STANet、ChangeStar**。`run_all_s1gfloods_extra.sh` 复用同一实现，默认只运行后五个模型。
 
-默认数据为 `datasets/S1GFloods_CD_DINO_BG_75_25`（末尾无下划线）。现场目录决定成员，不读取旧 CSV 决定训练集。默认 seed=42，单 GPU 串行；保留模型结构、损失、优化器类型、参数衰减、40k 迭代及每4000迭代验证；使用下述 SAR 优化方案。普通模型 batch=8，TTP=2，不加载旧训练 checkpoint，不续训。
+默认数据为 `datasets/S1GFloods_CD_DINO_BG_75_25`（末尾无下划线）。现场目录决定成员，不读取旧 CSV 决定训练集。默认 seed=42，单 GPU 串行；保留模型结构、损失、优化器类型和参数衰减，使用下述 SAR 优化方案。默认普通模型 batch=16、TTP=4，训练20000迭代，每2000迭代验证及定期保存，不加载旧训练 checkpoint，不续训。
+
+## Batch 翻倍配置（2026-09-14，待手动验收）
+
+`--batch-scale` 支持1或2，默认2。相对于原普通模型8、TTP 2的配置，batch翻倍，总迭代40000→20000，warmup 1000→500，PolyLR从500衰减至20000，验证及定期保存间隔4000→2000。学习率不自动放大，验证/测试batch不变，短训练保持新batch但仍只训练两次迭代。
+
+`--batch-scale 1` 恢复原batch、40000迭代及原调度；两种设置累计抽样量相同，但优化更新次数不同，不保证精度等价或完整训练一定提速。生效配置、终端输出和 `batch_plan.json` 的 `training_settings` 记录实际batch与调度。
+
+本次只修改代码和相关测试，不自动执行测试、短训练、吞吐量基准或正式训练。旧batch的验收不能代表新配置通过。手动验收需检查9个模型的显存、有限损失、梯度和权重保存，并比较原/新batch各25次训练迭代的吞吐量（前5次预热，后20次CUDA同步计时）。显存不足或吞吐量下降应如实记录，不自动降低batch。验收通过后再更新 `baselines/open-cd/run.md`；该文件目前仍是旧版命令说明。
 
 ## 当前环境结论与准备边界
 
@@ -67,7 +75,7 @@ python -m pip check
 
 ## 2. 显式准备本地预训练权重
 
-VGG16 为 IFN 代码的内部 torchvision 初始化依赖；BIT 和 ChangeStar 使用 ResNet18-v1c。下面命令联网下载并验证官方文件名中的 SHA256 前缀。TTP 使用已存在的 `baselines/open-cd/pretrained/vit-base-p16_sam-pre_3rdparty_sa1b-1024px_20230411-2320f9cc.pth`，不下载替代权重。
+VGG16 为 IFN 代码的内部 torchvision 初始化依赖；BIT 使用 ResNet18-v1c。下面命令联网下载并验证官方文件名中的 SHA256 前缀。TTP 使用已存在的 `baselines/open-cd/pretrained/vit-base-p16_sam-pre_3rdparty_sa1b-1024px_20230411-2320f9cc.pth`，不下载替代权重。
 
 ```bash
 python - <<'PY'
@@ -97,7 +105,7 @@ for url in urls:
 PY
 ```
 
-训练入口统一设置 `TORCH_HOME=baselines/open-cd/pretrained/torch`，并将 BIT/ChangeStar/TTP 的初始化路径改为本地文件。预检验证存在性及 SHA256 前缀；IFN 使用同一 Torch 缓存。缺权重时停止，不在队列中下载。
+训练入口统一设置 `TORCH_HOME=baselines/open-cd/pretrained/torch`，并将 BIT/TTP 的初始化路径改为本地文件。预检验证存在性及 SHA256 前缀；IFN 使用同一 Torch 缓存。缺权重时停止，不在队列中下载。
 
 ## 3. 检查、预览和短训练验证
 
@@ -119,7 +127,7 @@ bash baselines/open-cd/scripts/s1gfloods/run_all_s1gfloods.sh full-train --dry-r
 bash baselines/open-cd/scripts/s1gfloods/run_all_s1gfloods.sh smoke-train
 ```
 
-仅全部10模型短训练成功，才可判定该环境和入口已通过基础运行验证；这不证明完整40k训练一定成功。安装验收后可显式保存环境快照：
+仅全部9模型短训练成功，才可判定该环境和入口已通过基础运行验证；这不证明完整40k训练一定成功。安装验收后可显式保存环境快照：
 
 ```bash
 python -m pip freeze > baselines/open-cd/pretrained/opencd-environment-freeze.txt
@@ -138,7 +146,7 @@ bash baselines/open-cd/scripts/s1gfloods/run_all_s1gfloods.sh full-train \
   --models bit changeformer ttp --seed 42
 ```
 
-可用短名：`fc_siam_diff ifn bit changestar lightcdnet changeformer cgnet stanet snunet hanet ttp`。`--gpus`仅接受1；多卡训练不属于此次协议。每个模型固定seed但不强制确定性算子，不承诺跨环境逐位一致。
+可用短名：`fc_siam_diff ifn bit lightcdnet changeformer cgnet snunet hanet ttp`。`--gpus`仅接受1；多卡训练不属于此次协议。每个模型固定seed但不强制确定性算子，不承诺跨环境逐位一致。
 
 每次批次运行重新校验全量 train/val，并只从 train/A、train/B PNG联合计算 RGB 总体均值/标准差：float64累积、0–255数值尺度，重复为六通道。val不参与统计；不再对PNG做拉伸。结果保存在新批次，数据集及旧统计不改写。成员指纹基于相对路径、大小和mtime，属于变更检测摘要，不是逐文件内容哈希。训练期间应保持数据不变。
 
@@ -169,7 +177,7 @@ python -m unittest discover -s baselines/open-cd/scripts/s1gfloods -p test_batch
 
 - 专用 `SharedSARRadiometric`：A/B 共用亮度偏移（±10）和对比度（0.8–1.2），各以0.5概率启用，先亮度后对比度并裁剪至0–255。不使用色相/饱和度增强，保留同步旋转和翻转。
 - 删除256→256无效裁剪。训练标签按前景比例0、(0,10%]、(10%,100%]分组；非空组概率为原比例的一半加均衡比例的一半，组内均匀有放回。验证集不重采样，批次 `sampling.json` 保存实际分组及概率。
-- FC-Siam-Diff、IFN、BIT、SNUNet、HANet学习率为5e-4，LightCDNet为1e-3；ChangeStar为1e-3、ChangeFormer为6e-5（head×10）、CGNet为5e-4、TTP为4e-4，后四项保持原值。
+- FC-Siam-Diff、IFN、BIT、SNUNet、HANet学习率为5e-4，LightCDNet为1e-3；ChangeFormer为6e-5（head×10）、CGNet为5e-4、TTP为4e-4，后三项保持原值。
 - 同时保存 `best_FloodIoU` 与 `best_mIoU`。默认 `--save-best FloodIoU` 决定主权重，可显式选择mIoU。FloodIoU使用change类未舍入IoU百分数；前景并集为零返回NaN，不生成伪造最优分数。若主指标始终不可用、没有best权重，该模型不能报告成功。
 - 新批次推理按summary.tsv中的主权重解析，旧批次保持历史行为。主权重记录缺失或失效时明确报错，不偷偷回退。
 - 以上配置是待验证实验方案，不代表已经证明性能提升。基础两迭代验证不代表40k训练或跨地区精度验收。
@@ -184,4 +192,4 @@ bash baselines/open-cd/scripts/s1gfloods/run_all_s1gfloods.sh smoke-train
 bash baselines/open-cd/scripts/s1gfloods/run_all_s1gfloods.sh full-train
 ```
 
-`full-train --dry-run` 只打印生效配置和命令；`--models bit ifn` 可选择子集。训练STANet参数会被拒绝，但历史STANet推理仍可使用。
+`full-train --dry-run` 只打印生效配置和命令；`--models bit ifn` 可选择子集。训练STANet、ChangeStar参数会被拒绝，但历史模型推理仍可使用。

@@ -56,13 +56,20 @@ class BatchTests(unittest.TestCase):
 
     def test_model_configs_and_defaults(self):
         args = b.parse_args(['full-train'])
-        self.assertEqual(len(args.models), 10)
+        self.assertEqual(len(args.models), 9)
         self.assertNotIn('changer', args.models)
         self.assertNotIn('stanet', args.models)
+        self.assertNotIn('changestar', args.models)
+        with self.assertRaises(SystemExit):
+            b.parse_args(['full-train', '--models', 'changestar'])
+        self.assertEqual(b.EXTRA, ['changeformer', 'cgnet', 'snunet', 'hanet', 'ttp'])
         with self.assertRaises(SystemExit):
             b.parse_args(['full-train', '--models', 'stanet'])
         self.assertEqual(args.save_best, 'FloodIoU')
         self.assertEqual(args.seed, 42)
+        self.assertEqual(args.batch_scale, 2)
+        with self.assertRaises(SystemExit):
+            b.parse_args(['full-train', '--batch-scale', '3'])
         self.assertEqual(b.parse_args(['--group', 'extra', 'full-train']).models, b.EXTRA)
         stats = {'six_channel_mean': [20, 25, 30]*2, 'six_channel_std': [10]*6}
         from mmengine.config import Config
@@ -71,7 +78,7 @@ class BatchTests(unittest.TestCase):
             cfg = b.make_config(model, args, stats, {"one.png": 1.})
             self.assertEqual(cfg.optim_wrapper.optimizer.weight_decay, old.optim_wrapper.optimizer.weight_decay)
             expected_lr = dict(fc_siam_diff=5e-4, ifn=5e-4, bit=5e-4, snunet=5e-4,
-                               hanet=5e-4, lightcdnet=1e-3, changestar=1e-3,
+                               hanet=5e-4, lightcdnet=1e-3,
                                changeformer=6e-5, cgnet=5e-4, ttp=4e-4)[model]
             self.assertEqual(cfg.optim_wrapper.optimizer.lr, expected_lr)
             self.assertEqual(cfg.optim_wrapper.get('paramwise_cfg'), old.optim_wrapper.get('paramwise_cfg'))
@@ -79,10 +86,28 @@ class BatchTests(unittest.TestCase):
             self.assertEqual(cfg.val_dataloader.sampler, old.val_dataloader.sampler)
             self.assertEqual(cfg.val_dataloader.dataset.pipeline, old.val_dataloader.dataset.pipeline)
             self.assertEqual(cfg.train_dataloader.sampler.type, 'ForegroundInfiniteSampler')
-            self.assertEqual(cfg.param_scheduler, old.param_scheduler)
+            for actual, source in zip(cfg.param_scheduler, old.param_scheduler):
+                expected = dict(source)
+                expected['begin'] //= 2
+                expected['end'] //= 2
+                self.assertEqual(actual, expected)
             self.assertNotIn('MultiImgRandomCrop', [t['type'] for t in cfg.train_pipeline])
-            self.assertEqual(cfg.train_cfg, old.train_cfg)
-            self.assertEqual(cfg.train_dataloader.batch_size, 2 if model == 'ttp' else 8)
+            self.assertEqual(cfg.train_cfg.max_iters, 20000)
+            self.assertEqual(cfg.train_cfg.val_interval, 2000)
+            self.assertEqual(cfg.default_hooks.checkpoint.interval, 2000)
+            self.assertEqual(cfg.train_dataloader.batch_size, 4 if model == 'ttp' else 16)
+            self.assertEqual(cfg.train_dataloader.batch_size * cfg.train_cfg.max_iters,
+                             old.train_dataloader.batch_size * old.train_cfg.max_iters)
+            self.assertEqual(cfg.val_dataloader.batch_size, old.val_dataloader.batch_size)
+            self.assertEqual(cfg.test_dataloader.batch_size, old.test_dataloader.batch_size)
+            args.batch_scale = 1
+            baseline = b.make_config(model, args, stats, {'one.png': 1.})
+            self.assertEqual(baseline.train_cfg, old.train_cfg)
+            self.assertEqual(baseline.param_scheduler, old.param_scheduler)
+            self.assertEqual(baseline.train_dataloader.batch_size, old.train_dataloader.batch_size)
+            self.assertEqual(baseline.default_hooks.checkpoint.interval, old.default_hooks.checkpoint.interval)
+            self.assertEqual(baseline.optim_wrapper, cfg.optim_wrapper)
+            args.batch_scale = 2
             file_cfg = b.make_config(model, args, stats, {'one.png': 1.}, self.root/'sampling.json')
             self.assertNotIn('ratios', file_cfg.train_dataloader.sampler)
             self.assertEqual(file_cfg.train_dataloader.sampler.sampling_file, str(self.root/'sampling.json'))
@@ -99,6 +124,9 @@ class BatchTests(unittest.TestCase):
             smoke = b.make_config(model, args, stats, {"one.png": 1.})
             self.assertEqual(smoke.train_dataloader.batch_size, cfg.train_dataloader.batch_size)
             self.assertEqual(smoke.train_cfg.max_iters, 2)
+            self.assertEqual(smoke.train_cfg.val_interval, 2)
+            self.assertEqual(smoke.default_hooks.checkpoint.interval, 2)
+            self.assertEqual(smoke.param_scheduler, cfg.param_scheduler)
             self.assertEqual(smoke.val_dataloader.dataset.indices, 2)
             args.mode = 'full-train'
 

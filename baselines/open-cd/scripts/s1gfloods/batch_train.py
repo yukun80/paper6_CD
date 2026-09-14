@@ -25,7 +25,6 @@ MODELS = {
     'fc_siam_diff': 'fcsn/fc_siam_diff_256x256_40k_s1gfloods.py',
     'ifn': 'ifn/ifn_256x256_40k_s1gfloods.py',
     'bit': 'bit/bit_r18_256x256_40k_s1gfloods.py',
-    'changestar': 'changestar/changestar_farseg_1x96_256x256_40k_s1gfloods.py',
     'lightcdnet': 'lightcdnet/lightcdnet_s_256x256_40k_s1gfloods.py',
     'changeformer': 'changeformer/changeformer_mit-b0_256x256_40k_s1gfloods.py',
     'cgnet': 'cgnet/cgnet_256x256_40k_s1gfloods.py',
@@ -33,7 +32,7 @@ MODELS = {
     'hanet': 'hanet/hanet_256x256_40k_s1gfloods.py',
     'ttp': 'ttp/ttp_vit-sam-b_256x256_40k_s1gfloods.py',
 }
-EXTRA = list(MODELS)[5:]
+EXTRA = ['changeformer', 'cgnet', 'snunet', 'hanet', 'ttp']
 VGG = 'vgg16-397923af.pth'
 RESNET = 'resnet18_v1c-b5776b93.pth'
 SAM = 'vit-base-p16_sam-pre_3rdparty_sa1b-1024px_20230411-2320f9cc.pth'
@@ -50,6 +49,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument('--batch-root', type=Path, default=OPENCD / 'work_dirs')
     p.add_argument('--torch-home', type=Path, default=OPENCD / 'pretrained/torch')
     p.add_argument('--seed', type=int, default=42)
+    p.add_argument('--batch-scale', type=int, choices=[1, 2], default=2,
+                   help='训练 batch 倍数；同步缩短迭代及调度，保持累计抽样量。1 恢复原安排。')
     p.add_argument('--gpus', type=int, choices=[1], default=1)
     p.add_argument('--save-best', choices=['FloodIoU', 'mIoU'], default='FloodIoU')
     p.add_argument('--dry-run', action='store_true')
@@ -142,7 +143,7 @@ def assets_for(models: list[str], torch_home: Path) -> dict[str, Path]:
     assets = {}
     if 'ifn' in models:
         assets['vgg16'] = cache / VGG
-    if {'bit', 'changestar'} & set(models):
+    if 'bit' in models:
         assets['resnet18'] = cache / RESNET
     if 'ttp' in models:
         assets['sam'] = OPENCD / 'pretrained' / SAM
@@ -279,11 +280,28 @@ def make_config(model: str, args: argparse.Namespace, stats: dict, ratios: dict,
     cfg.default_hooks.checkpoint.save_best = ['FloodIoU', 'mIoU']
     cfg.primary_metric = args.save_best
     cfg.default_hooks.checkpoint.rule = 'greater'
+    # 只改变新运行的生效配置；学习率不随 batch 自动放大。
+    scale = args.batch_scale
+    cfg.train_dataloader.batch_size *= scale
+    for key in ('max_iters', 'val_interval'):
+        if cfg.train_cfg[key] % scale:
+            raise ValueError(f'{model}: {key} cannot be divided by batch scale {scale}')
+        cfg.train_cfg[key] //= scale
+    interval = cfg.default_hooks.checkpoint.interval
+    if interval % scale:
+        raise ValueError(f'{model}: checkpoint interval cannot be divided by {scale}')
+    cfg.default_hooks.checkpoint.interval = interval // scale
+    for scheduler in cfg.param_scheduler:
+        if scheduler.get('by_epoch', True):
+            raise ValueError(f'{model}: batch scaling requires iteration-based schedulers')
+        for key in ('begin', 'end'):
+            if scheduler[key] % scale:
+                raise ValueError(f'{model}: scheduler {key} cannot be divided by {scale}')
+            scheduler[key] //= scale
+    cfg.batch_scale = scale
     assets = assets_for([model], args.torch_home)
     if model == 'bit':
         cfg.model.pretrained = str(assets['resnet18'])
-    elif model == 'changestar':
-        cfg.model.backbone.init_cfg.checkpoint = str(assets['resnet18'])
     elif model == 'ttp':
         cfg.model.backbone.encoder_cfg.init_cfg.checkpoint = str(assets['sam'])
     if args.mode == 'smoke-train':
@@ -423,6 +441,16 @@ def main(argv: list[str] | None = None) -> int:
         for cfg in configs.values():
             for split in ('val', 'test'):
                 cfg[f'{split}_dataloader']['dataset']['indices'] = min(2, snapshot['counts']['val'])
+    training_settings = {
+        name: dict(batch_scale=args.batch_scale,
+                   batch_size=cfg.train_dataloader.batch_size,
+                   max_iters=cfg.train_cfg.max_iters,
+                   val_interval=cfg.train_cfg.val_interval,
+                   checkpoint_interval=cfg.default_hooks.checkpoint.interval,
+                   param_scheduler=[dict(s) for s in cfg.param_scheduler])
+        for name, cfg in configs.items()
+    }
+    print(json.dumps(dict(training_settings=training_settings), indent=2))
     for error in errors:
         print('[BLOCKED] ' + error, file=sys.stderr)
     if args.mode == 'check-env' and not args.dry_run:
@@ -465,7 +493,8 @@ def main(argv: list[str] | None = None) -> int:
     write_json(batch / 'normalization.json', stats)
     from scripts.s1gfloods.training_components import sampling_plan
     write_json(batch / 'sampling.json', sampling_plan(snapshot['foreground_ratios']))
-    write_json(batch / 'batch_plan.json', dict(mode=args.mode, seed=args.seed, jobs=jobs))
+    write_json(batch / 'batch_plan.json', dict(mode=args.mode, seed=args.seed,
+                                              training_settings=training_settings, jobs=jobs))
     print(f'Batch directory: {batch}', flush=True)
     return execute_jobs(jobs, batch, child_env(args.torch_home, batch))
 
