@@ -4,48 +4,34 @@
  *
  * Core assumption
  * ---------------------------------------------------------------------------
- * Input `image` is a binary CHANGE-DEFINED flood extent:
+ * Input `image2` is a binary CHANGE-DEFINED flood extent:
  *
  *   1 = newly inundated area
  *   0 = non-newly-inundated background
  *
- * Permanent/pre-existing water bodies have ALREADY been excluded from the
- * change-defined flood extent upstream (e.g. HA-CQI/change detection).
+ * Permanent/pre-existing water bodies are assumed to have already been
+ * excluded upstream by the change-detection stage (e.g. HA-CQI).
  *
- * IMPORTANT:
- * The permanent-water mask used below DOES NOT modify the flood support.
- * It is used only as a boundary-semantic constraint to distinguish:
- *
- *   valid flood-dry boundary
- *
- * from:
- *
- *   invalid flood-permanent-water boundary
- *
- * Thus:
+ * This version does NOT load or use any external permanent-water dataset.
+ * The flood support is therefore defined directly as:
  *
  *   floodSupport = input change-defined flood extent
- *
- * rather than:
- *
- *   floodSupport = flood extent AND NOT permanent water
  *
  *
  * Main workflow
  * ---------------------------------------------------------------------------
  * 1. Align change-defined flood extent to FABDEM.
  *
- * 2. Identify raw outer boundary.
+ * 2. Identify the raw outer boundary.
  *
- * 3. Reject unreliable WSE boundary constraints:
- *      - permanent-water-adjacent boundary;
- *      - steep terrain boundary;
- *      - local DEM outlier boundary.
+ * 3. Reject unreliable WSE boundary constraints using:
+ *      - terrain-slope filtering;
+ *      - local DEM robust-outlier filtering.
  *
  * 4. Construct robust boundary WSE anchors using paired wet-side and
  *    dry-side terrain elevations.
  *
- * 5. Propagate nearest reachable valid WSE anchor only as an INITIAL WSE.
+ * 5. Propagate the nearest reachable valid WSE anchor only as an INITIAL WSE.
  *
  * 6. Apply component-confined WSE continuity refinement.
  *
@@ -56,29 +42,13 @@
  *
  * Required GEE import
  * ---------------------------------------------------------------------------
- * `image`
+ * `image2`
  *
  * Uploaded 0/1 GeoTIFF:
  *      1 = newly inundated area
  *      0 = background
  *
- *
- * Optional import
- * ---------------------------------------------------------------------------
- * `permanentWaterImage`
- *
- * Uploaded 0/1 permanent-water mask.
- *
- * If unavailable:
- * JRC Global Surface Water is used ONLY for boundary filtering.
- *
- *
- * For Brazos controlled validation
- * ---------------------------------------------------------------------------
- * Prefer an event/benchmark-consistent permanent-water mask and set:
- *
- *      useUploadedPermanentWater = true;
- *
+ * No external permanent-water mask is required.
  *******************************************************************************/
 
 
@@ -91,50 +61,22 @@
 // Change-defined flood extent
 // -----------------------------------------------------------------------------
 
-var floodRaw = ee.Image(image2)
+var floodRaw = ee.Image(image9)
   .select(0)
   .rename('flood_raw');
-
-
-// -----------------------------------------------------------------------------
-// Permanent-water configuration
-// -----------------------------------------------------------------------------
-
-// false:
-//   use JRC Global Surface Water as ancillary permanent-water information.
-//
-// true:
-//   use imported 0/1 image `permanentWaterImage`.
-var useUploadedPermanentWater = false;
-
-
-// Example when using an uploaded permanent-water mask:
-//
-// var permanentWaterImage = ee.Image(
-//   'projects/your-project/assets/permanent_water'
-// );
-//
-// var useUploadedPermanentWater = true;
 
 
 // -----------------------------------------------------------------------------
 // Export
 // -----------------------------------------------------------------------------
 
-var exportName = 'CFDepth_v2';
+var exportName = 'CFDepth';
 var exportFolder = 'FloodDepth';
 
 
 // -----------------------------------------------------------------------------
 // Boundary quality-control parameters
 // -----------------------------------------------------------------------------
-
-// Number of DEM pixels around permanent water that are forbidden from
-// contributing WSE boundary constraints.
-//
-// For FABDEM (~30 m):
-// 1 pixel is a conservative default.
-var permanentWaterBufferPixels = 1;
 
 
 // Maximum terrain slope allowed for a valid WSE boundary source.
@@ -290,12 +232,36 @@ var firstTile = ee.Image(
 ).select(0);
 
 
+// -----------------------------------------------------------------------------
+// FABDEM native projection
+// -----------------------------------------------------------------------------
+
+// Server-side projection used by Earth Engine image calculations.
 var demProj = firstTile.projection();
 
 
+// Nominal pixel size used for reduceRegion and related server-side operations.
 var demScale = demProj.nominalScale();
 
 
+// IMPORTANT:
+// Export.image.toDrive() is configured on the client side.
+// Convert the server-side ee.Projection into a client-side JS object
+// before passing CRS information to Export.
+var demProjInfo = demProj.getInfo();
+
+var exportCrs = demProjInfo.crs;
+var exportTransform = demProjInfo.transform;
+
+
+// Diagnostic output.
+print('FABDEM projection:', demProj);
+print('FABDEM export CRS:', exportCrs);
+print('FABDEM export transform:', exportTransform);
+print('FABDEM nominal scale (m):', demScale);
+
+
+// Build DEM mosaic and explicitly restore the native FABDEM projection.
 var dem = demCol
   .mosaic()
   .select(0)
@@ -327,18 +293,15 @@ var floodBinary = flood01Raw
 // -----------------------------------------------------------------------------
 // IMPORTANT
 //
-// The change-defined flood map has already excluded permanent water upstream.
+// The input is already a change-defined newly inundated extent.
+// No external permanent-water product is loaded or applied in CFDepth.
 //
 // Therefore:
 //
 //     floodSupportBinary = floodBinary
 //
-// We DO NOT perform:
-//
-//     floodBinary.and(permanentWater.not())
-//
-// Permanent-water information is only used later to reject invalid WSE
-// boundary constraints.
+// Permanent/pre-existing water is assumed to have been handled upstream by the
+// change-detection stage.
 // -----------------------------------------------------------------------------
 
 var floodSupportBinary = floodBinary
@@ -352,90 +315,7 @@ var floodSupport = floodSupportBinary
 
 
 // =============================================================================
-// 5. PERMANENT-WATER ANCILLARY MASK
-// =============================================================================
-
-
-// This mask DOES NOT redefine floodSupport.
-//
-// Its sole methodological purpose is:
-//
-// identify flood-permanent-water interfaces that must not be interpreted as
-// ordinary flood-dry terrain boundaries.
-
-
-var permanentWaterRaw;
-
-
-if (useUploadedPermanentWater) {
-
-  // ---------------------------------------------------------------------------
-  // User-provided benchmark/event-consistent permanent-water mask
-  // ---------------------------------------------------------------------------
-
-  permanentWaterRaw = ee.Image(
-    permanentWaterImage
-  )
-    .select(0)
-    .gt(0);
-
-} else {
-
-  // ---------------------------------------------------------------------------
-  // Generic fallback:
-  // JRC Global Surface Water
-  //
-  // seasonality >= 10 months/year
-  // OR
-  // occurrence >= 90%
-  //
-  // This is used ONLY for boundary semantics.
-  // ---------------------------------------------------------------------------
-
-  var gsw = ee.Image(
-    'JRC/GSW1_4/GlobalSurfaceWater'
-  );
-
-
-  permanentWaterRaw = gsw
-    .select('seasonality')
-    .gte(10)
-    .or(
-      gsw
-        .select('occurrence')
-        .gte(90)
-    );
-}
-
-
-// Align permanent-water mask to FABDEM.
-var permanentWater = permanentWaterRaw
-  .clip(aoi)
-  .reduceResolution({
-    reducer: ee.Reducer.max(),
-    bestEffort: true,
-    maxPixels: 4096
-  })
-  .reproject(demProj)
-  .unmask(0)
-  .gt(0)
-  .toByte()
-  .rename('permanent_water');
-
-
-// Buffer permanent water to avoid mixed/adjacent pixels acting as WSE sources.
-var permanentWaterBuffer = permanentWater
-  .focal_max(
-    permanentWaterBufferPixels,
-    'square',
-    'pixels'
-  )
-  .gt(0)
-  .rename('permanent_water_buffer');
-
-
-// =============================================================================
-// 6. HELPER FUNCTION:
+// 5. HELPER FUNCTION:
 //    PROPAGATE NEAREST REACHABLE SOURCE VALUE
 // =============================================================================
 //
@@ -468,6 +348,11 @@ function propagateNearestValue(
 
   var travelCost = ee.Image
     .constant(largeCost)
+    .rename('travel_cost')
+  
+    // Explicitly place the constant image on the FABDEM grid.
+    .setDefaultProjection(demProj)
+  
     .clip(aoi)
     .updateMask(traversalMask);
 
@@ -540,7 +425,7 @@ function propagateNearestValue(
 
 
 // =============================================================================
-// 7. RAW OUTER BOUNDARY
+// 6. RAW OUTER BOUNDARY
 // =============================================================================
 //
 // Raw outer boundary:
@@ -572,7 +457,7 @@ var rawOuterBoundary = rawOuterBoundary01
 
 
 // =============================================================================
-// 8. TERRAIN SLOPE
+// 7. TERRAIN SLOPE
 // =============================================================================
 
 
@@ -582,31 +467,19 @@ var terrainSlopeDeg = ee.Terrain
 
 
 // =============================================================================
-// 9. INITIAL VALID-BOUNDARY SELECTION
+// 8. INITIAL VALID-BOUNDARY SELECTION
 // =============================================================================
 //
 // A raw boundary pixel is eligible only when:
 //
-// 1. it is NOT adjacent to permanent water;
-// 2. local terrain slope is acceptable;
-// 3. DEM value is valid.
+// 1. local terrain slope is acceptable;
+// 2. DEM value is valid.
+//
+// No permanent-water ancillary mask is used.
 // =============================================================================
 
 
 var boundaryCandidate01 = rawOuterBoundary01
-
-  // ---------------------------------------------------------------------------
-  // Reject flood-permanent-water interfaces.
-  //
-  // This is the key distinction:
-  //
-  // flood-dry interface       -> potentially informative WSE constraint
-  // flood-permanent-water     -> wet-wet interface; invalid as terrain WSE source
-  // ---------------------------------------------------------------------------
-
-  .and(
-    permanentWaterBuffer.not()
-  )
 
   // ---------------------------------------------------------------------------
   // Reject steep terrain edges.
@@ -640,7 +513,7 @@ var boundaryElevationCandidate = dem
 
 
 // =============================================================================
-// 10. ROBUST DEM OUTLIER FILTER ON BOUNDARY
+// 9. ROBUST DEM OUTLIER FILTER ON BOUNDARY
 // =============================================================================
 //
 // Local robust statistics:
@@ -752,7 +625,7 @@ var validOuterBoundary = validOuterBoundary01
 
 
 // =============================================================================
-// 11. INNER WET BOUNDARY
+// 10. INNER WET BOUNDARY
 // =============================================================================
 //
 // Construct the wet-side edge of the change-defined flood support.
@@ -784,7 +657,7 @@ var innerWetBoundary = innerWetBoundary01
 
 
 // =============================================================================
-// 12. ROBUST WSE ANCHORS
+// 11. ROBUST WSE ANCHORS
 // =============================================================================
 //
 // Principle:
@@ -921,7 +794,7 @@ var boundaryWseAnchor = dryBoundaryMedianAtWetSide
 
 
 // =============================================================================
-// 13. INITIAL WSE:
+// 12. INITIAL WSE:
 //     NEAREST REACHABLE VALID ANCHOR
 // =============================================================================
 //
@@ -964,10 +837,17 @@ var nearestAnchorWse = propagateNearestValue(
 
 var nearestAnchorDistance = ee.Image
   .constant(1)
+  .rename('unit_travel_cost')
+
+  // Keep the cumulative-cost computation on the FABDEM analysis grid.
+  .setDefaultProjection(demProj)
+
   .clip(aoi)
+
   .updateMask(
     supportTraversalMask
   )
+
   .cumulativeCost({
 
     source: boundaryWseAnchor
@@ -977,22 +857,22 @@ var nearestAnchorDistance = ee.Image
       maxPropagationDistanceMeters
 
   })
+
   .rename(
     'nearest_anchor_distance'
   );
 
 
 // =============================================================================
-// 14. LOW-CONFIDENCE FALLBACK
+// 13. LOW-CONFIDENCE FALLBACK
 // =============================================================================
 //
 // A component may contain no valid WSE anchor because:
 //
-// - almost all its boundaries touch permanent water;
 // - boundaries are too steep;
 // - DEM boundary values are rejected as outliers;
-// - component is very small;
-// - valid anchor is outside maximum propagation distance.
+// - the component is very small;
+// - a valid anchor is outside the maximum propagation distance.
 //
 // These pixels are NOT discarded.
 //
@@ -1051,7 +931,7 @@ var wseInitial = nearestAnchorWse
 
 
 // =============================================================================
-// 15. WSE CONTINUITY REFINEMENT
+// 14. WSE CONTINUITY REFINEMENT
 // =============================================================================
 //
 // We refine WATER SURFACE ELEVATION, not depth.
@@ -1205,7 +1085,7 @@ var wseRefined = ee.Image(
 
 
 // =============================================================================
-// 16. FINAL FLOOD DEPTH
+// 15. FINAL FLOOD DEPTH
 // =============================================================================
 //
 // The final depth definition remains physically transparent:
@@ -1225,22 +1105,48 @@ var finalDepthRaw = wseRefined
   )
 
   .rename(
-    'CFDepth_v2_raw'
+    'CFDepth_raw'
   );
 
 
 var finalDepth = finalDepthRaw
-
   .max(0)
-
   .updateMask(
     floodSupport
   )
-
   .rename(
-    'CFDepth_v2'
+    'CFDepth'
   );
 
+// =============================================================================
+// SINGLE-BAND DEPTH FOR EXPORT
+// =============================================================================
+
+// Explicit NoData value for GeoTIFF.
+var noDataValue = -9999;
+
+
+// Keep only physically valid positive water depth.
+//
+// Pixels with depth <= minPositiveDepth are treated as NoData.
+var exportDepth = finalDepth
+
+  .updateMask(
+    finalDepth.gt(
+      minPositiveDepth
+    )
+  )
+
+  // Explicitly encode masked pixels as NoData in exported GeoTIFF.
+  .unmask(
+    noDataValue
+  )
+
+  .toFloat()
+
+  .rename(
+    'CFDepth'
+  );
 
 // Display only depth clearly greater than dmin.
 var finalDepthDisplay = finalDepth
@@ -1253,23 +1159,8 @@ var finalDepthDisplay = finalDepth
 
 
 // =============================================================================
-// 17. QA / DIAGNOSTIC LAYERS
+// 16. QA / DIAGNOSTIC LAYERS
 // =============================================================================
-
-
-// -----------------------------------------------------------------------------
-// Invalid permanent-water-adjacent raw boundary
-// -----------------------------------------------------------------------------
-
-var permanentWaterAdjacentBoundary01 = rawOuterBoundary01
-
-  .and(
-    permanentWaterBuffer
-  )
-
-  .rename(
-    'permanent_water_adjacent_boundary_01'
-  );
 
 
 // -----------------------------------------------------------------------------
@@ -1282,10 +1173,6 @@ var steepRejectedBoundary01 = rawOuterBoundary01
     terrainSlopeDeg.gt(
       maxBoundarySlopeDeg
     )
-  )
-
-  .and(
-    permanentWaterBuffer.not()
   )
 
   .rename(
@@ -1327,102 +1214,7 @@ var wseGradient = ee.Terrain
 
 
 // =============================================================================
-// 18. QA / DIAGNOSTIC STACK
-// =============================================================================
-//
-// Retained for interactive QA and diagnostic inspection.
-//
-// This multi-band stack is NOT used by the final GeoTIFF export.
-//
-// Final depth band:
-//     CFDepth_v2
-//
-// Other bands support:
-//     boundary diagnosis,
-//     permanent-water adjacency diagnosis,
-//     WSE continuity analysis,
-//     low-confidence component diagnosis.
-// =============================================================================
-
-
-var qaBands = ee.Image.cat([
-
-  // ---------------------------------------------------------------------------
-  // Main outputs
-  // ---------------------------------------------------------------------------
-
-  finalDepth,
-
-  wseInitial,
-
-  wseRefined,
-
-  nearestAnchorDistance
-    .updateMask(
-      floodSupport
-    ),
-
-
-  // ---------------------------------------------------------------------------
-  // Flood domain
-  // ---------------------------------------------------------------------------
-
-  floodSupportBinary,
-
-
-  // ---------------------------------------------------------------------------
-  // Permanent-water ancillary layers
-  // ---------------------------------------------------------------------------
-
-  permanentWater,
-
-  permanentWaterBuffer,
-
-
-  // ---------------------------------------------------------------------------
-  // Boundary layers
-  // ---------------------------------------------------------------------------
-
-  rawOuterBoundary01,
-
-  validOuterBoundary01,
-
-  permanentWaterAdjacentBoundary01,
-
-  steepRejectedBoundary01,
-
-  demOutlierRejectedBoundary01,
-
-  innerWetBoundary01,
-
-
-  // ---------------------------------------------------------------------------
-  // Boundary WSE anchors
-  // ---------------------------------------------------------------------------
-
-  boundaryWseAnchor
-    .unmask(-9999),
-
-
-  // ---------------------------------------------------------------------------
-  // Low-confidence region
-  // ---------------------------------------------------------------------------
-
-  lowConfidenceFallback01,
-
-
-  // ---------------------------------------------------------------------------
-  // Terrain / QA
-  // ---------------------------------------------------------------------------
-
-  terrainSlopeDeg
-
-])
-  .toFloat();
-
-
-// =============================================================================
-// 19. MAP VISUALIZATION
+// 18. MAP VISUALIZATION
 // =============================================================================
 
 
@@ -1459,50 +1251,6 @@ Map.addLayer(
 
 
 // -----------------------------------------------------------------------------
-// Permanent water
-// -----------------------------------------------------------------------------
-
-Map.addLayer(
-
-  permanentWater
-    .selfMask(),
-
-  {
-    palette: [
-      'cyan'
-    ]
-  },
-
-  'permanent water - boundary constraint only',
-
-  false
-
-);
-
-
-// -----------------------------------------------------------------------------
-// Permanent-water buffer
-// -----------------------------------------------------------------------------
-
-Map.addLayer(
-
-  permanentWaterBuffer
-    .selfMask(),
-
-  {
-    palette: [
-      '00FFFF'
-    ]
-  },
-
-  'permanent water buffer',
-
-  false
-
-);
-
-
-// -----------------------------------------------------------------------------
 // Raw outer boundary
 // -----------------------------------------------------------------------------
 
@@ -1517,28 +1265,6 @@ Map.addLayer(
   },
 
   'raw outer boundary',
-
-  false
-
-);
-
-
-// -----------------------------------------------------------------------------
-// Raw boundaries rejected because they are adjacent to permanent water
-// -----------------------------------------------------------------------------
-
-Map.addLayer(
-
-  permanentWaterAdjacentBoundary01
-    .selfMask(),
-
-  {
-    palette: [
-      '00FFFF'
-    ]
-  },
-
-  'invalid flood-permanent-water boundary',
 
   false
 
@@ -1729,7 +1455,7 @@ Map.addLayer(
 
 
 // =============================================================================
-// 20. OPTIONAL SUMMARY DIAGNOSTICS
+// 19. OPTIONAL SUMMARY DIAGNOSTICS
 // =============================================================================
 
 
@@ -1790,33 +1516,6 @@ print(
 
 
 // -----------------------------------------------------------------------------
-// Permanent-water-adjacent rejected boundary count
-// -----------------------------------------------------------------------------
-
-var permanentBoundaryRejectedCount =
-  permanentWaterAdjacentBoundary01
-    .reduceRegion({
-
-      reducer: ee.Reducer.sum(),
-
-      geometry: aoi,
-
-      scale: demScale,
-
-      maxPixels: 1e13,
-
-      tileScale: 4
-
-    });
-
-
-print(
-  'Permanent-water-adjacent rejected boundary count',
-  permanentBoundaryRejectedCount
-);
-
-
-// -----------------------------------------------------------------------------
 // Low-confidence fallback count
 // -----------------------------------------------------------------------------
 
@@ -1843,24 +1542,41 @@ print(
 
 
 // =============================================================================
-// 21. EXPORT
+// 20. EXPORT
 // =============================================================================
 //
-// Final GeoTIFF contains one water-depth band only:
-//     CFDepth_v2
+// Main depth is the first band:
+//     CFDepth
+//
+// Remaining bands are QA outputs.
 // =============================================================================
 
 
-var finalDepthExport = finalDepth
-  .select(
-    'CFDepth_v2'
-  )
-  .toFloat();
+// =============================================================================
+// EXPORT
+// =============================================================================
+//
+// IMPORTANT:
+//
+// Do NOT pass:
+//
+//     crs: demProj.crs()
+//
+// directly into Export.image.toDrive(), because demProj.crs() is a
+// server-side ee.String rather than the client-side String expected by Export.
+//
+// Use the client-side CRS and affine transform obtained from
+// demProj.getInfo().
+//
+// Using crs + crsTransform also preserves exact FABDEM pixel-grid alignment.
+// Therefore, do NOT specify scale here.
+// =============================================================================
 
 
 Export.image.toDrive({
 
-  image: finalDepthExport,
+  // Single-band water-depth image.
+  image: exportDepth,
 
   description: exportName,
 
@@ -1870,10 +1586,17 @@ Export.image.toDrive({
 
   region: aoi,
 
-  scale: demScale,
+  // Exact FABDEM grid.
+  crs: exportCrs,
 
-  crs: demProj.crs(),
+  crsTransform: exportTransform,
 
-  maxPixels: 1e13
+  maxPixels: 1e13,
+
+  fileFormat: 'GeoTIFF',
+
+  formatOptions: {
+    noData: noDataValue
+  }
 
 });

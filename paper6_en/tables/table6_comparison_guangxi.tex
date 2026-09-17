@@ -1,0 +1,33 @@
+% Source: HA-CQI/outputs/scene_metrics_{Zhengzhou,Zhuozhou,Guangxi}.tsv.
+% Zhengzhou HarmoSSM: current saved Zhengzhou_change_binary_final_0508.tif (epoch80 directory); not asserted to be an unedited model output.
+% Zhengzhou comparison rows FC-Siam-Diff, BIT, ChangeFormer, CGNet, SNUNet, TTP, and ChangeDINO use Zhengzhou_paper as the reference; see the corresponding TSV label_path.
+% Guangxi HarmoSSM: previously verified epoch30 full-scene binary result; current source directory is not retained.
+% Rankings use unrounded metrics among the nine displayed methods.
+% Values are preserved from the former combined table; reference sources differ across some rows.
+\begingroup
+\begin{table}[H]
+\centering
+\comparisonfont
+\captionsetup{name=Table,font=comparisoncaption,labelfont=bf,labelsep=newline,justification=raggedright,singlelinecheck=false}
+\caption{Flood-change detection results in Guangxi. Best and second-best reported values are bold and underlined, respectively.}
+\label{tab:comparison_guangxi}
+\fontsize{10}{12}\selectfont
+\setlength{\tabcolsep}{6pt}
+\renewcommand{\arraystretch}{1.15}
+\begin{tabular*}{\linewidth}{@{\extracolsep{\fill}}lrrrrr@{}}
+\toprule
+Method & P (\%) & R (\%) & F1 (\%) & IoU (\%) & OA (\%) \\
+\midrule
+FC-Siam-Diff & \underline{96.12} & 49.54 & 65.38 & 48.57 & 97.97 \\
+HANet & 92.27 & 45.38 & 60.84 & 43.72 & 97.74 \\
+SNUNet & 91.90 & 46.95 & 62.15 & 45.08 & 97.79 \\
+BIT & \textbf{96.76} & 43.18 & 59.71 & 42.56 & 97.75 \\
+ChangeFormer & 88.54 & 58.78 & 70.65 & 54.62 & 98.11 \\
+CGNet & 91.59 & 55.15 & 68.84 & 52.49 & 98.07 \\
+TTP & 90.27 & 58.74 & \underline{71.17} & \underline{55.24} & \underline{98.16} \\
+ChangeDINO & 48.84 & \underline{62.93} & 54.99 & 37.93 & 96.02 \\
+HarmoSSM & 91.62 & \textbf{88.40} & \textbf{89.98} & \textbf{81.79} & \textbf{99.24} \\
+\bottomrule
+\end{tabular*}
+\end{table}
+\endgroup
