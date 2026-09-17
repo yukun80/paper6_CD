@@ -8,6 +8,8 @@
   bottom=20mm
 ]{geometry}
 
+\usepackage[no-math]{fontspec}
+\newfontfamily\comparisonfont{Times New Roman}
 \usepackage{amssymb}
 \usepackage{amsmath}
 \usepackage{algorithm}
@@ -28,6 +30,7 @@
 \usepackage{tikz}
 \usepackage{tabularx}
 \usepackage{caption}
+\DeclareCaptionFont{comparisoncaption}{\comparisonfont\fontsize{9}{11}\selectfont}
 \usepackage{textcomp}
 \usepackage{hyperref}
 \usepackage{graphicx}
@@ -79,7 +82,7 @@
 
 \begin{frontmatter}
 
-\title{HarmoSSM for Bi-Temporal SAR Flood Change Detection with Change-Defined Depth Estimation}
+\title{DDFlood: From Bi-Temporal SAR Flood Change Detection to DEM-Constrained Depth Estimation}
 
 \author[inst1,inst2,inst3]{Yukun Fan}
 \author[inst4,inst5]{Zhongqi Shi}
@@ -129,7 +132,7 @@
 }
 
 \begin{abstract}
-Rapid flood assessment requires information on both inundation extent and water depth. Synthetic aperture radar (SAR) supports observation during adverse weather, but complex surface conditions complicate temporal feature comparison, while extensive inundation may coexist with small or weak-contrast patches, narrow corridors, and fragmented margins. Moreover, change-defined inundation excludes pre-existing water, so not all its boundaries provide dry-shoreline elevation constraints. We develop a two-stage flood mapping approach comprising HarmoSSM change detection and Change-defined Flood Depth Estimation (CFDepth). HarmoSSM combines paired states and differences through harmonized change encoding, then uses omni-scale state-space decoding to reconstruct newly flooded extents from regional context and shallow detail. CFDepth combines this extent, screened boundary elevations, and a digital elevation model (DEM) to estimate first-order depth within the supplied flood support. Reference panels from Zhengzhou and Zhuozhou, covering built-up land, cropland, and river-adjacent terrain, illustrate localized and narrow inundation alongside broad flooded areas and fragmented margins. In a separate comparison of existing Brazos depth products, positive-depth coverage over the positive-depth reference domain is 95.81\% for the product labeled CFDepth and 41.91\% for the Floodwater Depth Estimation Tool (FwDET). Mean absolute errors on common-valid pixels are 1.016 and 1.673 m, respectively, although both products have low spatial correlation and negative Nash--Sutcliffe efficiency. The approach combines flood-change mapping with depth estimation conditional on the supplied extent and terrain, providing complementary information on inundation distribution and severity.
+Rapid flood assessment requires information on both inundation extent and water depth. Synthetic aperture radar (SAR) supports observation during adverse weather, but complex surface conditions complicate temporal feature comparison, while extensive inundation may coexist with small or weak-contrast patches, narrow corridors, and fragmented margins. Moreover, change-defined inundation excludes pre-existing water, so not all its boundaries provide dry-shoreline elevation constraints. We develop a two-stage flood mapping approach comprising HarmoSSM change detection and Change-defined Flood Depth Estimation (CFDepth). HarmoSSM combines paired states and differences through harmonized change encoding, then uses omni-scale state-space decoding to reconstruct newly flooded extents from regional context and shallow detail. CFDepth combines this extent, screened boundary elevations, and a digital elevation model (DEM) to estimate first-order depth within the supplied flood support. Reference panels from Zhengzhou and Zhuozhou, covering built-up land, cropland, and river-adjacent terrain, illustrate localized and narrow inundation alongside broad flooded areas and fragmented margins. In a separate comparison of existing Brazos depth products, positive-depth coverage over the positive-depth reference domain is 94.57\% for the product labeled CFDepth and 46.65\% for the Floodwater Depth Estimation Tool (FwDET). Mean absolute errors on common-valid pixels are 0.828 and 1.099 m, respectively, although both products have low spatial correlation and negative Nash--Sutcliffe efficiency. The approach combines flood-change mapping with depth estimation conditional on the supplied extent and terrain, providing complementary information on inundation distribution and severity.
 \end{abstract}
 
 \begin{keyword}
@@ -179,7 +182,7 @@ The Guangxi study area lies near Binyang County and Hengzhou and is delineated b
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\textwidth,height=.65\textheight,keepaspectratio]{figure/figure1.jpg}
+  \includegraphics[width=\textwidth,height=.65\textheight,keepaspectratio]{figure/Figure1.jpg}
   \caption{Locations, land cover, and flood settings of the three study areas. Panel (a) shows their locations in China, and (b)--(d) show land cover in central Zhengzhou, Zhuozhou, and Guangxi, respectively. P1--P4, P5--P8, and P9--P12 illustrate local flood conditions in the three areas.}
   \label{fig:dataset}
 \end{figure}
@@ -204,7 +207,7 @@ In the depth estimation stage, CFDepth first intersects the detected extent with
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/figure2.jpg}
+  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure2.jpg}
   \caption{Overall workflow of HarmoSSM and CFDepth.}
   \label{fig:framework}
 \end{figure}
@@ -217,9 +220,9 @@ Shared spatial representations retain location cues, while semantic assistance s
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/figure3.jpg}
-  \caption{Shared representation and paired harmonization in HCE. The upper part shows the bi-temporal shared CNN--FPN, DINO semantic fusion, and \(P1\)--\(P5\) paths; the lower part details paired statistical calibration and local soft alignment. \(A/B\) denote pre-event/post-event inputs; \(Q\) comes from post-event features and sampled \(K/V\) from pre-event features. Local alignment updates the pre-event branch.}
-  \label{fig:encoder_ha}
+  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure3.jpg}
+  \caption{Complete Harmonized Change Encoder. Shared CNN--FPN and frozen DINO features form the bi-temporal pyramid; paired calibration, local alignment, and change query interaction produce multiscale change features.}
+  \label{fig:encoder_ha}\label{fig:cqi}
 \end{figure}
 
 Paired statistical calibration establishes a common reference for shallow-feature comparison from the current image pair. At \(P1/P2\), Harmonized Alignment (HA) computes channel-wise means \(\boldsymbol\mu_i^{AB}\) and variances \(\mathbf v_i^{AB}\) jointly over both times and spatial locations. The same statistics normalize both feature sets before a shared learnable affine transformation:
@@ -277,13 +280,6 @@ The operators \(\operatorname{LN}_{q,i}\) and \(\operatorname{LN}_{t,i}\) denote
 \end{equation}
 Here, \(\mathcal O_i\) denotes the CQI output mapping. The dense residual preserves a direct path for the original paired information alongside query interaction. Each of the five scales has independent query and interaction parameters, exchanges information within that scale, and outputs \(\mathbf D_1\)--\(\mathbf D_5\) for OSCD flood-extent reconstruction. Input conversion and numerical settings are specified in Section~\ref{sec:eval_protocol}.
 
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/figure4.jpg}
-  \caption{Change query interaction in HCE. Paired states, directed difference, and absolute difference are projected into dense feature \(Z_i\), flattened into \(T_i\), and processed by query and spatial-token updates. A residual FFN and dense residual then produce change output \(D_i\). \(Q_i^0/Q_i^1\) denote queries before/after updating; \(C\) and plus signs denote concatenation and addition.}
-  \label{fig:cqi}
-\end{figure}
-
 \subsection{Omni-Scale State-Space Change Decoder (OSCD)}\label{sec:oscd}\label{sec:loss}
 
 Flood-extent reconstruction must translate regional change judgments into the spatial coverage and local positions of affected areas. The Omni-Scale State-Space Change Decoder (OSCD) organizes deep context aggregation followed by shallow-detail recovery. Features \(\mathbf D_3\)--\(\mathbf D_5\) establish a regional representation \(\mathbf R_3\), which is then combined with \(\mathbf D_2\) and \(\mathbf D_1\) on progressively finer grids. The left part of Fig.~\ref{fig:oscd} shows the complete path from HCE change features to extent prediction, connecting broader change relationships with local positioning.
@@ -339,8 +335,8 @@ Here, \(\rho_i^d\) is a detail projection, \(\mathcal R_i\) is the convolutional
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/figure5.jpg}
-  \caption{Flood-extent reconstruction in OSCD. The left part shows regional aggregation of \(D_3\)--\(D_5\), progressive recovery with \(D_2/D_1\), and extent output. The upper-right part details regional-context aggregation, and the lower-right part constructs multiresolution input \(G\) from fused feature \(F\). \(O\), \(S\), and \(J\) denote context output, its upsampled representation, and the reinjection projection; \(R_i\) denotes reconstructed features and PU denotes pixel unshuffle.}
+  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure4.jpg}
+  \caption{Omni-Scale State-Space Change Decoder. Deep change features are fused and processed with multiscale state-space context before progressive recovery with shallow detail.}
   \label{fig:oscd}
 \end{figure}
 
@@ -422,14 +418,7 @@ The experimental data serve three purposes: learning bi-temporal flood changes, 
 
 Learning samples use \(256\times256\) image tiles, a three-channel representation of the available SAR band, and binary labels for newly inundated areas. Normalization statistics come from the selected dataset. The semantic branch separately restores the image range and converts it to the normalization required by the pretrained model, as described in Section~\ref{sec:experiment_implementation}. Scene-specific preprocessing versions, label sources, invalid-pixel rules, and registration records still require association with the evaluated products; tile dimensions and input channels alone do not establish that association.
 
-The scene comparison uses bi-temporal SAR imagery and flood-change reference labels for Zhengzhou, Zhuozhou, and Guangxi (Fig.~\ref{fig:gf3_eval_data}). Zhengzhou and Zhuozhou use GF3 imagery, while Guangxi uses LT-1B imagery. Observation parameters are listed in Table~\ref{tab:gf3_eval}, and terrain data are described in Section~\ref{sec:depth_data}. Zhengzhou and Zhuozhou use image pairs from different years, whereas the Guangxi pair was acquired in May and July 2026. The reference labels support spatial comparison with predictions, and the red boxes in the Zhengzhou and Zhuozhou panels indicate local inspection areas.
-
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=\textwidth,keepaspectratio]{figure/figure6.jpg}
-  \caption{Bi-temporal SAR imagery and flood-change reference labels for the three study areas. Panels (a1)--(a3), (b1)--(b3), and (c1)--(c3) correspond to Zhengzhou, Zhuozhou, and Guangxi, respectively. Within each group, indices 1, 2, and 3 denote pre-event SAR imagery, post-event SAR imagery, and flood-change reference labels. Zhengzhou and Zhuozhou use GF3 data, while Guangxi uses LT-1B data. Red boxes indicate local inspection areas.}
-  \label{fig:gf3_eval_data}
-\end{figure}
+The scene comparison uses bi-temporal SAR imagery and flood-change reference labels for Zhengzhou, Zhuozhou, and Guangxi. Zhengzhou and Zhuozhou use GF3 imagery, while Guangxi uses LT-1B imagery. Observation parameters are listed in Table~\ref{tab:gf3_eval}, and terrain data are described in Section~\ref{sec:depth_data}. Zhengzhou and Zhuozhou use image pairs from different years, whereas the Guangxi pair was acquired in May and July 2026. The reference labels support spatial comparison with predictions, and local inspection regions are shown in the qualitative comparison figures.
 
 Depth data follow a separate evaluation arrangement. The GF3 depth illustrations use prescribed inundation supports and the FABDEM data introduced in Section~\ref{sec:depth_data}. The Brazos river--floodplain comparison uses existing CFDepth and FwDET depth products and a reference raster attributed to USGS. It evaluates depth products within a supplied domain, independently of HarmoSSM flood detection. The reference product, vertical datum, exact support, and generating implementation remain incompletely linked; conclusions are therefore limited to the supplied products.
 
@@ -525,64 +514,60 @@ The supplied results place HarmoSSM highest in IoU and F1 in both scenes, while 
 
 \subsection{Qualitative comparison in complex scenes}
 
-Qualitative comparison examines spatial errors that aggregate metrics cannot locate. Figures~\ref{fig:qual_zhengzhou} and~\ref{fig:qual_zhuozhou} present pre-event and post-event images, references, and archived outputs for Zhengzhou and Zhuozhou, respectively. Relative to the reference, white denotes TP, blue FN, red FP, and black TN. Output columns have not been linked to specific methods and checkpoints. The following interpretation therefore uses identifiable scene structures and error patterns without assigning the main-table method order to panel columns.
+\setcounter{figure}{5}
 
-The Zhengzhou locations emphasize retention of small patches and narrow inundated strips within built-up and linear-feature backgrounds. The upper reference rows contain isolated patches, and the lower rows include narrow structures represented by relatively few pixels. Output panels show blue omissions and red commissions at different positions around these features. Omitting a few pixels can weaken the representation of a local inundated area, while commissions in adjacent background enlarge the predicted extent, making recall and precise localization relevant together. This observation explains the joint use of P, R, and overlap measures in Section~4.2, but the selected panels do not establish a detectable-width threshold or weak-contrast accuracy.
+Figure~\ref{fig:qual_zhengzhou} shows the pre-event and post-event SAR images, reference labels, and flood-change predictions from HarmoSSM and the eight comparison methods in Zhengzhou. The lower local enlargements allow the inundated-area distribution and boundary positions to be compared across methods.
 
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\textwidth,height=.76\textheight,keepaspectratio]{figure/figure7.jpg}
-  \caption{Flood-change detection results in Zhengzhou: (a) pre-event SAR; (b) post-event SAR; (c) reference mask; (d)--(l) predictions. White, blue, red, and black denote TP, FN, FP, and TN, respectively.}
+  \includegraphics[width=\textwidth,height=.40\textheight,keepaspectratio]{figure/Figure6.jpg}
+  \caption{Flood-change detection results and local enlargements in Zhengzhou.}
   \label{fig:qual_zhengzhou}
 \end{figure*}
 
-The Zhuozhou locations require both coverage of contiguous areas and retention of local separations. The second reference row contains a broad inundated region; subsequent rows show field margins, fragmented areas near settlements, and finer separations. Differences in interior coverage and boundary errors across outputs indicate that regional judgments must be translated into specific spatial extents: filling interior omissions and retaining real separations impose different requirements. Together with Zhengzhou, these examples place regional context and local position cues within the same reconstruction task. They explain scene-level mapping needs but do not constitute scene-wide morphology-stratified statistics or causal validation of model components.
+Figure~\ref{fig:qual_zhuozhou} shows the bi-temporal SAR images, reference labels, and predictions from the compared methods in Zhuozhou. The full-scene results and local enlargements together show differences in regional coverage and local spatial details.
 
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\textwidth,height=.76\textheight,keepaspectratio]{figure/figure8.jpg}
-  \caption{Flood-change detection results in Zhuozhou: (a) pre-event SAR; (b) post-event SAR; (c) reference mask; (d)--(l) predictions. White, blue, red, and black denote TP, FN, FP, and TN, respectively.}
+  \includegraphics[width=\textwidth,height=.40\textheight,keepaspectratio]{figure/Figure7.jpg}
+  \caption{Flood-change detection results and local enlargements in Zhuozhou.}
   \label{fig:qual_zhuozhou}
+\end{figure*}
+
+Figure~\ref{fig:qual_guangxi} shows the bi-temporal SAR images, reference labels, and flood-change predictions from the compared methods in Guangxi. The full-scene comparison shows the distribution of predicted inundation and its correspondence with the reference labels.
+
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth,height=.40\textheight,keepaspectratio]{figure/Figure8.jpg}
+  \caption{Flood-change detection results in Guangxi.}
+  \label{fig:qual_guangxi}
 \end{figure*}
 
 \subsection{Conditional depth-estimation results}
 
-Depth results evaluate conditional estimates within a supplied extent through spatial availability and error within a reference domain. The GF3 illustrations show the spatial distributions of existing depth products, whereas the Brazos comparison uses an independent reference raster and common-valid pixels for quantitative assessment. These data address different questions; neither provides joint accuracy validation of the full HarmoSSM detection and CFDepth estimation chain.
+Depth results are evaluated through spatial distribution, valid output coverage, and error within a reference domain. Figure~\ref{fig:depth_overview} summarizes CFDepth and FwDET products for Zhengzhou, Zhuozhou, and Guangxi, including valid-depth ratios, WSE-gradient distributions, and a cross-source comparison; Figure~\ref{fig:depth_brazos} further presents spatial errors, estimate--reference relationships, and statistics in the Brazos reference domain. These evaluations are conditional on the supplied support, valid DEM, and reference data and do not provide joint accuracy validation of the complete HarmoSSM--CFDepth chain.
 
-Figures~\ref{fig:depth_zhengzhou} and~\ref{fig:depth_zhuozhou} show GF3 products labeled FwDET and CFDepth, with differences in colored coverage and unresolved areas. Availability of a depth estimate depends on the supplied support, valid DEM, and usable boundary constraints, so these differences first indicate where the products provide information. Support masks and generating versions remain incompletely linked; no coverage percentage, smoothness metric, or photo-based accuracy is derived from the illustrations. Figure~\ref{fig:wse_gradient_cdf} retains the archived WSE-gradient diagnostic for layout review; its source statistics are unverified and are not used quantitatively.
-
-\begin{figure*}[!t]
-  \centering
-  \includegraphics[width=\textwidth,height=.69\textheight,keepaspectratio]{figure/figure9.jpg}
-  \caption{Flood-depth estimates in Zhengzhou: (a) FwDET; (b) CFDepth. Insets p1--p4 correspond to the photograph locations in Fig.~\ref{fig:dataset}; white denotes unresolved depth.}
-  \label{fig:depth_zhengzhou}
-\end{figure*}
+The valid-depth ratios in Figure~\ref{fig:depth_overview} are 37.83\% for FwDET and 93.89\% for CFDepth in Zhengzhou, 61.26\% and 91.70\% in Zhuozhou, and 40.79\% and 94.11\% in Guangxi, respectively. These ratios describe the spatial extent with positive depth, while the WSE-gradient and cross-source panels provide complementary views of surface continuity and product distributions; they are not used to infer independent contributions from the detection modules.
 
 \begin{figure*}[!t]
+  \setcounter{figure}{9}
   \centering
-  \includegraphics[width=\textwidth,height=.69\textheight,keepaspectratio]{figure/figure10.jpg}
-  \caption{Flood-depth estimates in Zhuozhou: (a) FwDET; (b) CFDepth. Insets p5--p8 correspond to the photograph locations in Fig.~\ref{fig:dataset}; white denotes unresolved depth.}
-  \label{fig:depth_zhuozhou}
+  \includegraphics[width=\textwidth,height=.66\textheight,keepaspectratio]{figure/Figure10.jpg}
+  \caption{Flood-depth estimates and summary statistics for the three study areas: (a) CFDepth and FwDET spatial distributions; (b) valid-depth ratios; (c) WSE-gradient distributions; (d) cross-source flood-depth comparison.}
+  \label{fig:depth_overview}
 \end{figure*}
 
-\begin{figure*}[!t]
-  \centering
-  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/figure11.jpg}
-  \caption{Cumulative distributions of water-surface elevation (WSE) gradients for FwDET and CFDepth. Dashed lines indicate the corresponding medians.}
-  \label{fig:wse_gradient_cdf}
-\end{figure*}
-
-The Brazos product comparison shows differences in coverage and common-domain error in the same direction (Table~\ref{tab:cfdepth_validation}; Fig.~\ref{fig:usgs_depth_validation}). The CFDepth-labeled product has positive-depth coverage of 95.810\%, compared with 41.910\% for FwDET. On common-valid pixels, its MAE and RMSE are 1.016 and 1.416 m, compared with 1.673 and 2.454 m, respectively. Bias is positive for both products, at 0.316 and 1.030 m. Thus, the CFDepth-labeled product supplies broader positive-depth coverage in this reference domain and has lower absolute error, squared error, and positive bias where both products provide valid depths. The additional coverage itself does not enter the common-domain error calculation.
+The common-valid Brazos comparison is shown in Figure~\ref{fig:depth_brazos} and Table~\ref{tab:cfdepth_validation}. Positive-depth coverage is 94.570\% for the CFDepth-labeled product and 46.650\% for FwDET; on common-valid pixels, MAE is 0.828 and 1.099 m and RMSE is 1.100 and 1.359 m, respectively. Signed Bias, defined as prediction minus reference, is -0.139 and -0.895 m, while squared Pearson correlation is 0.072 and 0.052 and NSE is -1.014 and -2.032. These values compare the supplied products under the stated support and reference conditions; the bias bars in the summary panel show magnitudes, whereas the table retains the signed definition.
 
 \input{tables/table_cfdepth_validation.tex}
 
-Lower aggregate error does not coincide with close spatial agreement in depth. Pearson \(r^2\) is 0.150 for CFDepth and 0.053 for FwDET, while NSE is \(-1.828\) and \(-7.493\), respectively. Low correlation and negative NSE indicate limited representation of reference depth variation. In particular, negative NSE means that squared error exceeds that of a constant prediction equal to the common-domain reference mean. The comparison therefore supports relative differences in coverage and error between the supplied products while limiting their interpretation as detailed depth distributions. The evaluated rasters have not been fully linked to the current implementation, so these differences cannot be attributed to specific CFDepth operations or generalized to measured urban flood-depth accuracy.
+Lower aggregate error does not imply complete representation of reference depth variation. The scatter, error-map, and WSE-gradient panels in Figure~\ref{fig:depth_brazos} provide spatial and distributional context, while negative NSE indicates that squared error exceeds that of a constant prediction equal to the common-domain reference mean. The evaluated rasters remain tied to the supplied reference and support conditions, so their differences cannot be attributed to a single CFDepth operation or generalized to measured urban flood-depth accuracy.
 
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\textwidth,height=.43\textheight,keepaspectratio]{figure/figure12.jpg}
-  \caption{Spatial distributions of flood depth in the Brazos River floodplain: (a) reference depth; (b) CFDepth; (c) FwDET.}
-  \label{fig:usgs_depth_validation}
+  \includegraphics[width=\textwidth,height=.50\textheight,keepaspectratio]{figure/Figure11.jpg}
+  \caption{Spatial errors and quantitative comparison of flood-depth estimates in the Brazos region: (a) spatial depth maps; (b) estimate--reference density scatter; (c) depth-error maps; (d) WSE-gradient cumulative distributions; (e) coverage and accuracy metrics.}
+  \label{fig:depth_brazos}
 \end{figure*}
 
 \section{Discussion}

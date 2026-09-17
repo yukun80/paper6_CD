@@ -1,4 +1,4 @@
-\begin{thebibliography}{43}
+\begin{thebibliography}{38}
 \expandafter\ifx\csname natexlab\endcsname\relax\def\natexlab#1{#1}\fi
 \providecommand{\url}[1]{\texttt{#1}}
 \providecommand{\href}[2]{#2}
@@ -210,15 +210,6 @@
 \newblock \bibinfo{journal}{Journal of Hydrology} \bibinfo{volume}{653},
   \bibinfo{pages}{132777}.
 \newblock \DOIprefix\doi{10.1016/j.jhydrol.2025.132777}.
-%Type = Article
-\bibitem[{Li et~al.(2026)Li, Liu and Wang}]{li2026rafnet}
-\bibinfo{author}{Li, S.}, \bibinfo{author}{Liu, K.}, \bibinfo{author}{Wang,
-  Q.}, \bibinfo{year}{2026}.
-\newblock \bibinfo{title}{{Near-real-time SAR flood detection using feature
-  fusion and region-adaptive deep learning method}}.
-\newblock \bibinfo{journal}{Journal of Hydrology} \bibinfo{volume}{674},
-  \bibinfo{pages}{135523}.
-\newblock \DOIprefix\doi{10.1016/j.jhydrol.2026.135523}.
 %Type = Inproceedings
 \bibitem[{Lin et~al.(2017a)Lin, Doll{\'a}r, Girshick, He, Hariharan and
   Belongie}]{lin2017fpn}
@@ -261,17 +252,6 @@
 \newblock \bibinfo{journal}{Nature Communications} \bibinfo{volume}{16},
   \bibinfo{pages}{5762}.
 \newblock \DOIprefix\doi{10.1038/s41467-025-60973-1}.
-%Type = Article
-\bibitem[{Portal{\'{e}}s-Juli{\`{a}} et~al.(2025)Portal{\'{e}}s-Juli{\`{a}},
-  Mateo-Garc{\'{i}}a and G{\'{o}}mez-Chova}]{portales2025flood}
-\bibinfo{author}{Portal{\'{e}}s-Juli{\`{a}}, E.},
-  \bibinfo{author}{Mateo-Garc{\'{i}}a, G.}, \bibinfo{author}{G{\'{o}}mez-Chova,
-  L.}, \bibinfo{year}{2025}.
-\newblock \bibinfo{title}{{Understanding flood detection models across
-  Sentinel-1 and Sentinel-2 modalities and benchmark datasets}}.
-\newblock \bibinfo{journal}{Remote Sensing of Environment}
-  \bibinfo{volume}{328}, \bibinfo{pages}{114882}.
-\newblock \DOIprefix\doi{10.1016/j.rse.2025.114882}.
 %Type = Article
 \bibitem[{Saleh et~al.(2024)Saleh, Weng, Holail, Hao and Xia}]{saleh2024dam}
 \bibinfo{author}{Saleh, T.}, \bibinfo{author}{Weng, X.},
@@ -359,29 +339,6 @@
   \bibinfo{pages}{e2025WR042384}.
 \newblock \DOIprefix\doi{10.1029/2025wr042384}.
 %Type = Article
-\bibitem[{Travert et~al.(2026)Travert, Goeury, Boyaval, Bacchi and
-  Zaoui}]{travert2026uncertainty}
-\bibinfo{author}{Travert, J.P.}, \bibinfo{author}{Goeury, C.},
-  \bibinfo{author}{Boyaval, S.}, \bibinfo{author}{Bacchi, V.},
-  \bibinfo{author}{Zaoui, F.}, \bibinfo{year}{2026}.
-\newblock \bibinfo{title}{{Evaluating the effects of preprocessing, method
-  selection, and hyperparameter tuning on SAR-based flood mapping and water
-  depth estimation}}.
-\newblock \bibinfo{journal}{Natural Hazards and Earth System Sciences}
-  \bibinfo{volume}{26}, \bibinfo{pages}{2387--2413}.
-\newblock \DOIprefix\doi{10.5194/nhess-26-2387-2026}.
-%Type = Article
-\bibitem[{Tsyganskaya et~al.(2018)Tsyganskaya, Martinis, Marzahn and
-  Ludwig}]{tsyganskaya2018vegetation}
-\bibinfo{author}{Tsyganskaya, V.}, \bibinfo{author}{Martinis, S.},
-  \bibinfo{author}{Marzahn, P.}, \bibinfo{author}{Ludwig, R.},
-  \bibinfo{year}{2018}.
-\newblock \bibinfo{title}{{Detection of Temporary Flooded Vegetation Using
-  Sentinel-1 Time Series Data}}.
-\newblock \bibinfo{journal}{Remote Sensing} \bibinfo{volume}{10},
-  \bibinfo{pages}{1286}.
-\newblock \DOIprefix\doi{10.3390/rs10081286}.
-%Type = Article
 \bibitem[{Wagner et~al.(2026)Wagner, Bauer-Marschallinger, Roth, Raiger-Stachl,
   Reimer, McCormick, Matgen, Chini, Li, Martinis, Wieland, Kraft, Festa,
   Hassaan, Tupas, Zhao, Seewald, Riffler, Molini, Kidd, Briese and
@@ -444,21 +401,6 @@
   and Spatial Information Sciences} \bibinfo{volume}{XI-3-2026},
   \bibinfo{pages}{493--500}.
 \newblock \DOIprefix\doi{10.5194/isprs-annals-XI-3-2026-493-2026}.
-%Type = Article
-\bibitem[{Zhang et~al.(2025)Zhang, Giezendanner, Mukherjee, Tellman, Melancon,
-  Purri, Gurung, Lall, Barnard and Molthan}]{zhang2025floodplanet}
-\bibinfo{author}{Zhang, Z.}, \bibinfo{author}{Giezendanner, J.},
-  \bibinfo{author}{Mukherjee, R.}, \bibinfo{author}{Tellman, B.},
-  \bibinfo{author}{Melancon, A.}, \bibinfo{author}{Purri, M.},
-  \bibinfo{author}{Gurung, I.}, \bibinfo{author}{Lall, U.},
-  \bibinfo{author}{Barnard, K.}, \bibinfo{author}{Molthan, A.},
-  \bibinfo{year}{2025}.
-\newblock \bibinfo{title}{{Assessing Inundation Semantic Segmentation Models
-  Trained on High- versus Low-Resolution Labels using FloodPlanet, a Manually
-  Labeled Multi-Sourced High-Resolution Flood Dataset}}.
-\newblock \bibinfo{journal}{Journal of Remote Sensing} \bibinfo{volume}{5},
-  \bibinfo{pages}{0575}.
-\newblock \DOIprefix\doi{10.34133/remotesensing.0575}.
 %Type = Article
 \bibitem[{Zhao et~al.(2023)Zhao, Sui and Liu}]{zhao2023siamdwenet}
 \bibinfo{author}{Zhao, B.}, \bibinfo{author}{Sui, H.}, \bibinfo{author}{Liu,
