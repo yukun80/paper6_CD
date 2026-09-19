@@ -3,9 +3,6 @@
 \providecommand*\HyPL@Entry[1]{}
 \emailauthor{zhanghong@radi.ac.cn}{Hong Zhang\corref {cor1}}
 \Newlabel{cor1}{1}
-\citation{credUndrr2020disasters}
-\citation{tellman2021exposure}
-\citation{wagner2026gfm}
 \HyPL@Entry{0<</S/D>>}
 \providecommand \oddpage@label [2]{}
 \Newlabel{inst1}{a}
@@ -13,6 +10,9 @@
 \Newlabel{inst3}{c}
 \Newlabel{inst4}{d}
 \Newlabel{inst5}{e}
+\citation{credUndrr2020disasters}
+\citation{tellman2021exposure}
+\citation{wagner2026gfm}
 \citation{dong2022urbanrisk}
 \citation{amitrano2024sarFloodReview}
 \citation{cian2018flood}
@@ -34,7 +34,6 @@
 \citation{betterle2024water}
 \citation{tian2026floodxdepth}
 \citation{yang2026csmamba}
-\citation{betterle2024water}
 \citation{cohen2019floodwater}
 \citation{yang2026csmamba}
 \citation{lan2025haihe}
@@ -55,61 +54,60 @@
 \citation{tan2019efficientnet,lin2017fpn}
 \citation{simeoni2025dinov3}
 \citation{woo2018cbam}
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces DDFlood总体框架。HarmoSSM通过HCE变化编码与OSCD密集重建生成新增洪水掩膜；CFDepth结合掩膜和DEM，依次进行边界约束构建、水面初始化与连续性细化，输出检测区域内的条件水深估计。}}{8}{figure.caption.3}\protected@file@percent }
-\newlabel{fig:framework}{{2}{8}{DDFlood总体框架。HarmoSSM通过HCE变化编码与OSCD密集重建生成新增洪水掩膜；CFDepth结合掩膜和DEM，依次进行边界约束构建、水面初始化与连续性细化，输出检测区域内的条件水深估计。}{figure.caption.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces DDFlood总体框架。HarmoSSM通过HCE变化编码与OSCD空间重建生成新增洪水掩膜；CFDepth以掩膜和DEM为输入，依次完成边界筛选与锚点构建、水面初始化、连续性细化及地形相减，输出检测范围内的水深。}}{8}{figure.caption.3}\protected@file@percent }
+\newlabel{fig:framework}{{2}{8}{DDFlood总体框架。HarmoSSM通过HCE变化编码与OSCD空间重建生成新增洪水掩膜；CFDepth以掩膜和DEM为输入，依次完成边界筛选与锚点构建、水面初始化、连续性细化及地形相减，输出检测范围内的水深。}{figure.caption.3}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.2}HarmoSSM for Flood Change Detection}{8}{subsection.3.2}\protected@file@percent }
 \newlabel{sec:harmossm}{{3.2}{8}{HarmoSSM for Flood Change Detection}{subsection.3.2}{}}
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}Harmonized Change Encoder}{8}{subsubsection.3.2.1}\protected@file@percent }
 \newlabel{sec:encoder}{{3.2.1}{8}{Harmonized Change Encoder}{subsubsection.3.2.1}{}}
 \newlabel{sec:ha}{{3.2.1}{8}{Harmonized Change Encoder}{subsubsection.3.2.1}{}}
 \newlabel{sec:cqi}{{3.2.1}{8}{Harmonized Change Encoder}{subsubsection.3.2.1}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces HCE结构。共享CNN--FPN与冻结DINO语义特征形成双时相金字塔，成对协调后，各尺度通过状态、差异与查询交互生成变化特征。协调分支以灾后特征为查询，对灾前特征进行局部软对齐；CQI依次完成查询汇聚与密集token反馈。图中的\(P1\)--\(P3\)完整统计校准为目标设计，其实现状态见正文审阅注。}}{9}{figure.caption.4}\protected@file@percent }
-\newlabel{fig:encoder_ha}{{3}{9}{HCE结构。共享CNN--FPN与冻结DINO语义特征形成双时相金字塔，成对协调后，各尺度通过状态、差异与查询交互生成变化特征。协调分支以灾后特征为查询，对灾前特征进行局部软对齐；CQI依次完成查询汇聚与密集token反馈。图中的\(P1\)--\(P3\)完整统计校准为目标设计，其实现状态见正文审阅注。}{figure.caption.4}{}}
-\newlabel{fig:cqi}{{3}{9}{HCE结构。共享CNN--FPN与冻结DINO语义特征形成双时相金字塔，成对协调后，各尺度通过状态、差异与查询交互生成变化特征。协调分支以灾后特征为查询，对灾前特征进行局部软对齐；CQI依次完成查询汇聚与密集token反馈。图中的\(P1\)--\(P3\)完整统计校准为目标设计，其实现状态见正文审阅注。}{figure.caption.4}{}}
-\newlabel{eq:ha_calibration}{{1}{10}{Harmonized Change Encoder}{equation.3.1}{}}
-\newlabel{eq:ha_alignment}{{2}{10}{Harmonized Change Encoder}{equation.3.2}{}}
-\newlabel{eq:cqi_pair}{{3}{10}{Harmonized Change Encoder}{equation.3.3}{}}
-\citation{fu2025segman}
-\newlabel{eq:cqi_query}{{4}{11}{Harmonized Change Encoder}{equation.3.4}{}}
-\newlabel{eq:cqi_token}{{5}{11}{Harmonized Change Encoder}{equation.3.5}{}}
-\newlabel{eq:cqi_output}{{6}{11}{Harmonized Change Encoder}{equation.3.6}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}Omni-Scale State-Space Change Decoder}{11}{subsubsection.3.2.2}\protected@file@percent }
-\newlabel{sec:oscd}{{3.2.2}{11}{Omni-Scale State-Space Change Decoder}{subsubsection.3.2.2}{}}
-\newlabel{eq:oscd_deep_fusion}{{7}{11}{Omni-Scale State-Space Change Decoder}{equation.3.7}{}}
+\@writefile{toc}{\contentsline {paragraph}{Harmonized Alignment (HA)}{8}{section*.4}\protected@file@percent }
+\newlabel{eq:ha_calibration}{{1}{9}{Harmonized Alignment (HA)}{equation.3.1}{}}
+\newlabel{eq:ha_affine}{{2}{9}{Harmonized Alignment (HA)}{equation.3.2}{}}
+\newlabel{eq:ha_recovery}{{3}{9}{Harmonized Alignment (HA)}{equation.3.3}{}}
+\newlabel{eq:ha_alignment}{{4}{9}{Harmonized Alignment (HA)}{equation.3.4}{}}
+\newlabel{eq:ha_output}{{5}{9}{Harmonized Alignment (HA)}{equation.3.5}{}}
+\@writefile{toc}{\contentsline {paragraph}{Change Query Interaction (CQI)}{9}{section*.6}\protected@file@percent }
+\newlabel{eq:cqi_pair}{{6}{9}{Change Query Interaction (CQI)}{equation.3.6}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces HA结构。配对共享统计量归一化双时相特征，共享仿射和残差恢复完成校准；灾后特征提供查询，灾前特征提供键和值，可变形采样在局部窗口中完成对齐。}}{10}{figure.caption.5}\protected@file@percent }
+\newlabel{fig:ha}{{3}{10}{HA结构。配对共享统计量归一化双时相特征，共享仿射和残差恢复完成校准；灾后特征提供查询，灾前特征提供键和值，可变形采样在局部窗口中完成对齐。}{figure.caption.5}{}}
+\newlabel{eq:cqi_query}{{7}{10}{Change Query Interaction (CQI)}{equation.3.7}{}}
+\newlabel{eq:cqi_token}{{8}{10}{Change Query Interaction (CQI)}{equation.3.8}{}}
+\newlabel{eq:cqi_output}{{9}{10}{Change Query Interaction (CQI)}{equation.3.9}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}Omni-Scale State-Space Change Decoder}{10}{subsubsection.3.2.2}\protected@file@percent }
+\newlabel{sec:oscd}{{3.2.2}{10}{Omni-Scale State-Space Change Decoder}{subsubsection.3.2.2}{}}
+\newlabel{eq:oscd_deep_fusion}{{10}{10}{Omni-Scale State-Space Change Decoder}{equation.3.10}{}}
 \citation{gu2023mamba,liu2024vmamba}
-\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces OSCD结构。\(D_3\)--\(D_5\)经多尺度状态空间上下文建模得到区域表征\(R_3\)，随后结合\(D_2\)、\(D_1\)逐级恢复至\(R_2\)、\(R_1\)。展开部分展示多分辨率输入构建及区域上下文汇聚；PU为pixel unshuffle，\(O\)、\(S\)、\(J\)分别为扫描输出、上采样结果和再注入投影。}}{12}{figure.caption.5}\protected@file@percent }
-\newlabel{fig:oscd}{{4}{12}{OSCD结构。\(D_3\)--\(D_5\)经多尺度状态空间上下文建模得到区域表征\(R_3\)，随后结合\(D_2\)、\(D_1\)逐级恢复至\(R_2\)、\(R_1\)。展开部分展示多分辨率输入构建及区域上下文汇聚；PU为pixel unshuffle，\(O\)、\(S\)、\(J\)分别为扫描输出、上采样结果和再注入投影。}{figure.caption.5}{}}
-\newlabel{eq:oscd_scan_input}{{8}{12}{Omni-Scale State-Space Change Decoder}{equation.3.8}{}}
-\newlabel{eq:oscd_context_flow}{{9}{12}{Omni-Scale State-Space Change Decoder}{equation.3.9}{}}
-\newlabel{eq:oscd_context_reconstruction}{{10}{12}{Omni-Scale State-Space Change Decoder}{equation.3.10}{}}
-\newlabel{eq:oscd_reconstruction}{{11}{13}{Omni-Scale State-Space Change Decoder}{equation.3.11}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Change-Defined Flood Depth Estimation}{13}{subsection.3.3}\protected@file@percent }
-\newlabel{sec:cfdepth}{{3.3}{13}{Change-Defined Flood Depth Estimation}{subsection.3.3}{}}
-\newlabel{eq:cfdepth_boundary}{{12}{13}{Change-Defined Flood Depth Estimation}{equation.3.12}{}}
-\newlabel{eq:cfdepth_boundary_screen}{{13}{14}{Change-Defined Flood Depth Estimation}{equation.3.13}{}}
-\newlabel{eq:cfdepth_anchor}{{14}{14}{Change-Defined Flood Depth Estimation}{equation.3.14}{}}
-\newlabel{eq:cfdepth_continuity}{{15}{14}{Change-Defined Flood Depth Estimation}{equation.3.15}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces CQI结构。四路配对特征经卷积投影和token化后，可学习查询与token执行双向多头注意力，随后通过前馈网络、残差恢复和CBAM输出变化特征。图中展示单个尺度，五个尺度使用结构相同且参数独立的CQI模块。}}{11}{figure.caption.7}\protected@file@percent }
+\newlabel{fig:cqi}{{4}{11}{CQI结构。四路配对特征经卷积投影和token化后，可学习查询与token执行双向多头注意力，随后通过前馈网络、残差恢复和CBAM输出变化特征。图中展示单个尺度，五个尺度使用结构相同且参数独立的CQI模块。}{figure.caption.7}{}}
+\newlabel{eq:oscd_scan_input}{{11}{11}{Omni-Scale State-Space Change Decoder}{equation.3.11}{}}
+\newlabel{eq:oscd_context_flow}{{12}{11}{Omni-Scale State-Space Change Decoder}{equation.3.12}{}}
+\newlabel{eq:oscd_context_reconstruction}{{13}{11}{Omni-Scale State-Space Change Decoder}{equation.3.13}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces OSCD结构。左侧为深层区域建模及浅层逐级恢复流程；右上展示区域上下文构建，右下展示多分辨率输入构造。\(D_3\)--\(D_5\)生成\(\mathbf  F\)并经过状态空间上下文建模得到\(\mathbf  R_3\)，随后结合\(D_2\)、\(D_1\)恢复\(\mathbf  R_2\)和\(\mathbf  R_1\)。}}{12}{figure.caption.8}\protected@file@percent }
+\newlabel{fig:oscd}{{5}{12}{OSCD结构。左侧为深层区域建模及浅层逐级恢复流程；右上展示区域上下文构建，右下展示多分辨率输入构造。\(D_3\)--\(D_5\)生成\(\mathbf F\)并经过状态空间上下文建模得到\(\mathbf R_3\)，随后结合\(D_2\)、\(D_1\)恢复\(\mathbf R_2\)和\(\mathbf R_1\)。}{figure.caption.8}{}}
+\newlabel{eq:oscd_reconstruction}{{14}{12}{Omni-Scale State-Space Change Decoder}{equation.3.14}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Change-Defined Flood Depth Estimation}{12}{subsection.3.3}\protected@file@percent }
+\newlabel{sec:cfdepth}{{3.3}{12}{Change-Defined Flood Depth Estimation}{subsection.3.3}{}}
+\newlabel{eq:cfdepth_depth}{{15}{13}{Change-Defined Flood Depth Estimation}{equation.3.15}{}}
+\newlabel{eq:cfdepth_boundary}{{16}{13}{Change-Defined Flood Depth Estimation}{equation.3.16}{}}
+\newlabel{eq:cfdepth_boundary_screen}{{17}{13}{Change-Defined Flood Depth Estimation}{equation.3.17}{}}
+\newlabel{eq:cfdepth_anchor}{{18}{13}{Change-Defined Flood Depth Estimation}{equation.3.18}{}}
 \citation{lin2017focal}
+\newlabel{eq:cfdepth_initialization}{{19}{14}{Change-Defined Flood Depth Estimation}{equation.3.19}{}}
+\newlabel{eq:cfdepth_continuity}{{20}{14}{Change-Defined Flood Depth Estimation}{equation.3.20}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces CFDepth procedure.}}{14}{table.caption.9}\protected@file@percent }
+\newlabel{tab:cfdepth_algorithm}{{2}{14}{CFDepth procedure}{table.caption.9}{}}
 \citation{salehi2017tversky}
-\newlabel{eq:cfdepth_depth}{{16}{15}{Change-Defined Flood Depth Estimation}{equation.3.16}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Loss Function}{15}{subsection.3.4}\protected@file@percent }
 \newlabel{sec:loss}{{3.4}{15}{Loss Function}{subsection.3.4}{}}
 \newlabel{sec:training_objective}{{3.4}{15}{Loss Function}{subsection.3.4}{}}
-\newlabel{eq:focal_loss}{{17}{15}{Loss Function}{equation.3.17}{}}
-\newlabel{eq:tversky_loss}{{18}{15}{Loss Function}{equation.3.18}{}}
-\newlabel{eq:segmentation_loss}{{19}{15}{Loss Function}{equation.3.19}{}}
-\newlabel{eq:total_loss}{{20}{16}{Loss Function}{equation.3.20}{}}
+\newlabel{eq:focal_loss}{{21}{15}{Loss Function}{equation.3.21}{}}
+\newlabel{eq:tversky_loss}{{22}{15}{Loss Function}{equation.3.22}{}}
+\newlabel{eq:segmentation_loss}{{23}{15}{Loss Function}{equation.3.23}{}}
+\newlabel{eq:total_loss}{{24}{15}{Loss Function}{equation.3.24}{}}
 \citation{saleh2024dam}
 \citation{du2026high}
-\@writefile{toc}{\contentsline {section}{\numberline {4}Experiments and Results}{17}{section.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Experimental Design}{17}{subsection.4.1}\protected@file@percent }
-\newlabel{sec:eval_protocol}{{4.1}{17}{Experimental Design}{subsection.4.1}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.1}Datasets and Experimental Splits}{17}{subsubsection.4.1.1}\protected@file@percent }
-\newlabel{sec:experiment_data}{{4.1.1}{17}{Datasets and Experimental Splits}{subsubsection.4.1.1}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Training and validation dataset composition.}}{17}{table.caption.6}\protected@file@percent }
-\newlabel{tab:training_split}{{2}{17}{Training and validation dataset composition}{table.caption.6}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.2}Implementation Settings and Comparison Methods}{17}{subsubsection.4.1.2}\protected@file@percent }
-\newlabel{sec:experiment_implementation}{{4.1.2}{17}{Implementation Settings and Comparison Methods}{subsubsection.4.1.2}{}}
 \citation{daudt2018fully}
 \citation{han2023hanet}
 \citation{fang2022snunet}
@@ -118,69 +116,96 @@
 \citation{han2023change}
 \citation{chen2023ttp}
 \citation{cheng2025changedino}
-\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Key implementation settings for HarmoSSM and CFDepth.}}{18}{table.caption.7}\protected@file@percent }
-\newlabel{tab:method_config}{{3}{18}{Key implementation settings for HarmoSSM and CFDepth}{table.caption.7}{}}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.3}Evaluation Metrics and Protocols}{19}{subsubsection.4.1.3}\protected@file@percent }
-\newlabel{sec:experiment_metrics}{{4.1.3}{19}{Evaluation Metrics and Protocols}{subsubsection.4.1.3}{}}
-\newlabel{eq:precision}{{21}{19}{Evaluation Metrics and Protocols}{equation.4.21}{}}
-\newlabel{eq:f1}{{22}{19}{Evaluation Metrics and Protocols}{equation.4.22}{}}
-\newlabel{eq:oa}{{23}{19}{Evaluation Metrics and Protocols}{equation.4.23}{}}
-\newlabel{eq:valid_depth_ratio}{{24}{19}{Evaluation Metrics and Protocols}{equation.4.24}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Experimental Results}{20}{subsection.4.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Flood-change detection accuracy in Zhengzhou, Zhuozhou, and Guangxi.}}{20}{table.caption.8}\protected@file@percent }
-\newlabel{tab:main_comparison}{{4}{20}{Flood-change detection accuracy in Zhengzhou, Zhuozhou, and Guangxi}{table.caption.8}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces 郑州洪水变化检测结果的可视化对比。（A）整景结果；（B）局部放大对比。（a）灾前SAR影像；（b）灾后SAR影像；（c）参考标签；（d）FC-Siam-Diff；（e）CGNet；（f）HANet；（g）SNUNet；（h）BIT；（i）ChangeFormer；（j）TTP；（k）ChangeDINO；（l）HarmoSSM。其中，（d）—（l）为各方法的检测结果。}}{20}{figure.caption.9}\protected@file@percent }
-\newlabel{fig:qual_zhengzhou}{{6}{20}{郑州洪水变化检测结果的可视化对比。（A）整景结果；（B）局部放大对比。（a）灾前SAR影像；（b）灾后SAR影像；（c）参考标签；（d）FC-Siam-Diff；（e）CGNet；（f）HANet；（g）SNUNet；（h）BIT；（i）ChangeFormer；（j）TTP；（k）ChangeDINO；（l）HarmoSSM。其中，（d）—（l）为各方法的检测结果。}{figure.caption.9}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces 涿州洪水变化检测结果的可视化对比。（A）整景结果；（B）局部放大对比。（a）灾前SAR影像；（b）灾后SAR影像；（c）参考标签；（d）FC-Siam-Diff；（e）CGNet；（f）HANet；（g）SNUNet；（h）BIT；（i）ChangeFormer；（j）TTP；（k）ChangeDINO；（l）HarmoSSM。其中，（d）—（l）为各方法的检测结果。}}{21}{figure.caption.10}\protected@file@percent }
-\newlabel{fig:qual_zhuozhou}{{7}{21}{涿州洪水变化检测结果的可视化对比。（A）整景结果；（B）局部放大对比。（a）灾前SAR影像；（b）灾后SAR影像；（c）参考标签；（d）FC-Siam-Diff；（e）CGNet；（f）HANet；（g）SNUNet；（h）BIT；（i）ChangeFormer；（j）TTP；（k）ChangeDINO；（l）HarmoSSM。其中，（d）—（l）为各方法的检测结果。}{figure.caption.10}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces 广西洪水变化检测结果的可视化对比。（A）整景结果；（B）局部放大对比。（a）灾前SAR影像；（b）灾后SAR影像；（c）参考标签；（d）FC-Siam-Diff；（e）CGNet；（f）HANet；（g）SNUNet；（h）BIT；（i）ChangeFormer；（j）TTP；（k）ChangeDINO；（l）HarmoSSM。其中，（d）—（l）为各方法的检测结果。}}{21}{figure.caption.11}\protected@file@percent }
-\newlabel{fig:qual_guangxi}{{8}{21}{广西洪水变化检测结果的可视化对比。（A）整景结果；（B）局部放大对比。（a）灾前SAR影像；（b）灾后SAR影像；（c）参考标签；（d）FC-Siam-Diff；（e）CGNet；（f）HANet；（g）SNUNet；（h）BIT；（i）ChangeFormer；（j）TTP；（k）ChangeDINO；（l）HarmoSSM。其中，（d）—（l）为各方法的检测结果。}{figure.caption.11}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Comparison of flood-depth estimates in the Brazos River floodplain.}}{22}{table.caption.12}\protected@file@percent }
-\newlabel{tab:cfdepth_validation}{{5}{22}{Comparison of flood-depth estimates in the Brazos River floodplain}{table.caption.12}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces 三研究区洪水水深估算及统计结果：（a）CFDepth与FwDET空间分布；（b）有效水深比例；（c）WSE梯度分布；（d）跨来源水深比较。}}{22}{figure.caption.13}\protected@file@percent }
-\newlabel{fig:depth_overview}{{10}{22}{三研究区洪水水深估算及统计结果：（a）CFDepth与FwDET空间分布；（b）有效水深比例；（c）WSE梯度分布；（d）跨来源水深比较。}{figure.caption.13}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Brazos区域水深空间误差与定量比较：（a）空间水深图；（b）估计值与参考值散点密度；（c）水深误差图；（d）WSE梯度累积分布；（e）覆盖率与精度指标。}}{22}{figure.caption.14}\protected@file@percent }
-\newlabel{fig:depth_brazos}{{11}{22}{Brazos区域水深空间误差与定量比较：（a）空间水深图；（b）估计值与参考值散点密度；（c）水深误差图；（d）WSE梯度累积分布；（e）覆盖率与精度指标。}{figure.caption.14}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Experiments and Results}{16}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Experimental Design}{16}{subsection.4.1}\protected@file@percent }
+\newlabel{sec:eval_protocol}{{4.1}{16}{Experimental Design}{subsection.4.1}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.1}Datasets and Experimental Splits}{16}{subsubsection.4.1.1}\protected@file@percent }
+\newlabel{sec:experiment_data}{{4.1.1}{16}{Datasets and Experimental Splits}{subsubsection.4.1.1}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces Training and validation dataset composition.}}{16}{table.caption.10}\protected@file@percent }
+\newlabel{tab:training_split}{{3}{16}{Training and validation dataset composition}{table.caption.10}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.2}Implementation Settings and Comparison Methods}{16}{subsubsection.4.1.2}\protected@file@percent }
+\newlabel{sec:experiment_implementation}{{4.1.2}{16}{Implementation Settings and Comparison Methods}{subsubsection.4.1.2}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Key implementation settings for HarmoSSM and CFDepth.}}{17}{table.caption.11}\protected@file@percent }
+\newlabel{tab:method_config}{{4}{17}{Key implementation settings for HarmoSSM and CFDepth}{table.caption.11}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.1.3}Evaluation Metrics and Protocols}{17}{subsubsection.4.1.3}\protected@file@percent }
+\newlabel{sec:experiment_metrics}{{4.1.3}{17}{Evaluation Metrics and Protocols}{subsubsection.4.1.3}{}}
+\newlabel{eq:precision}{{25}{17}{Evaluation Metrics and Protocols}{equation.4.25}{}}
+\newlabel{eq:f1}{{26}{17}{Evaluation Metrics and Protocols}{equation.4.26}{}}
+\newlabel{eq:oa}{{27}{17}{Evaluation Metrics and Protocols}{equation.4.27}{}}
+\newlabel{eq:valid_depth_ratio}{{28}{18}{Evaluation Metrics and Protocols}{equation.4.28}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}Flood Change Detection Results}{18}{subsection.4.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Flood-change detection results in Zhengzhou. Best and second-best reported values are bold and underlined, respectively.}}{19}{table.caption.12}\protected@file@percent }
+\newlabel{tab:comparison_zhengzhou}{{5}{19}{Flood-change detection results in Zhengzhou. Best and second-best reported values are bold and underlined, respectively}{table.caption.12}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces 郑州洪水变化检测结果的可视化对比。（A）整景结果；（B）局部放大对比。（a）灾前SAR影像；（b）灾后SAR影像；（c）参考标签；（d）FC-Siam-Diff；（e）CGNet；（f）HANet；（g）SNUNet；（h）BIT；（i）ChangeFormer；（j）TTP；（k）ChangeDINO；（l）HarmoSSM。其中，（d）—（l）为各方法的检测结果。}}{19}{figure.caption.13}\protected@file@percent }
+\newlabel{fig:qual_zhengzhou}{{6}{19}{郑州洪水变化检测结果的可视化对比。（A）整景结果；（B）局部放大对比。（a）灾前SAR影像；（b）灾后SAR影像；（c）参考标签；（d）FC-Siam-Diff；（e）CGNet；（f）HANet；（g）SNUNet；（h）BIT；（i）ChangeFormer；（j）TTP；（k）ChangeDINO；（l）HarmoSSM。其中，（d）—（l）为各方法的检测结果。}{figure.caption.13}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Flood-change detection results in Zhuozhou. Best and second-best reported values are bold and underlined, respectively.}}{20}{table.caption.14}\protected@file@percent }
+\newlabel{tab:comparison_zhuozhou}{{6}{20}{Flood-change detection results in Zhuozhou. Best and second-best reported values are bold and underlined, respectively}{table.caption.14}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces 涿州洪水变化检测结果的可视化对比。（A）整景结果；（B）局部放大对比。（a）灾前SAR影像；（b）灾后SAR影像；（c）参考标签；（d）FC-Siam-Diff；（e）CGNet；（f）HANet；（g）SNUNet；（h）BIT；（i）ChangeFormer；（j）TTP；（k）ChangeDINO；（l）HarmoSSM。其中，（d）—（l）为各方法的检测结果。}}{20}{figure.caption.15}\protected@file@percent }
+\newlabel{fig:qual_zhuozhou}{{7}{20}{涿州洪水变化检测结果的可视化对比。（A）整景结果；（B）局部放大对比。（a）灾前SAR影像；（b）灾后SAR影像；（c）参考标签；（d）FC-Siam-Diff；（e）CGNet；（f）HANet；（g）SNUNet；（h）BIT；（i）ChangeFormer；（j）TTP；（k）ChangeDINO；（l）HarmoSSM。其中，（d）—（l）为各方法的检测结果。}{figure.caption.15}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Flood-change detection results in Guangxi. Best and second-best reported values are bold and underlined, respectively.}}{21}{table.caption.16}\protected@file@percent }
+\newlabel{tab:comparison_guangxi}{{7}{21}{Flood-change detection results in Guangxi. Best and second-best reported values are bold and underlined, respectively}{table.caption.16}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces 广西洪水变化检测结果的可视化对比。（A）整景结果；（B）局部放大对比。（a）灾前SAR影像；（b）灾后SAR影像；（c）参考标签；（d）FC-Siam-Diff；（e）CGNet；（f）HANet；（g）SNUNet；（h）BIT；（i）ChangeFormer；（j）TTP；（k）ChangeDINO；（l）HarmoSSM。其中，（d）—（l）为各方法的检测结果。}}{21}{figure.caption.17}\protected@file@percent }
+\newlabel{fig:qual_guangxi}{{8}{21}{广西洪水变化检测结果的可视化对比。（A）整景结果；（B）局部放大对比。（a）灾前SAR影像；（b）灾后SAR影像；（c）参考标签；（d）FC-Siam-Diff；（e）CGNet；（f）HANet；（g）SNUNet；（h）BIT；（i）ChangeFormer；（j）TTP；（k）ChangeDINO；（l）HarmoSSM。其中，（d）—（l）为各方法的检测结果。}{figure.caption.17}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Ablation Study of HA, CQI, and OSCD}{22}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:ablation}{{4.3}{22}{Ablation Study of HA, CQI, and OSCD}{subsection.4.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Ablation study of HA, CQI, and OSCD on three study areas.}}{22}{table.caption.18}\protected@file@percent }
+\newlabel{tab:ablation_modules}{{8}{22}{Ablation study of HA, CQI, and OSCD on three study areas}{table.caption.18}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces 特征可视化。三行分别对应郑州、涿州和广西；列依次为灾前SAR、灾后SAR、参考标签、配对特征\(\mathbf  Z_3\)、CQI特征\(\mathbf  D_3\)、OSCD特征\(\mathbf  R_3\)和最终预测。}}{23}{figure.caption.19}\protected@file@percent }
+\newlabel{fig:feature_vis}{{9}{23}{特征可视化。三行分别对应郑州、涿州和广西；列依次为灾前SAR、灾后SAR、参考标签、配对特征\(\mathbf Z_3\)、CQI特征\(\mathbf D_3\)、OSCD特征\(\mathbf R_3\)和最终预测。}{figure.caption.19}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}Regional Flood Depth Estimation}{24}{subsection.4.4}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces 三研究区洪水水深估算及统计结果：（a）CFDepth与FwDET空间分布；（b）有效水深比例；（c）WSE梯度分布；（d）跨来源水深比较。}}{24}{figure.caption.20}\protected@file@percent }
+\newlabel{fig:depth_overview}{{10}{24}{三研究区洪水水深估算及统计结果：（a）CFDepth与FwDET空间分布；（b）有效水深比例；（c）WSE梯度分布；（d）跨来源水深比较。}{figure.caption.20}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}Conditional Depth Evaluation in Brazos}{25}{subsection.4.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces Brazos区域水深空间误差与定量比较：（a）空间水深图；（b）估计值与参考值散点密度；（c）水深误差图；（d）WSE梯度累积分布；（e）覆盖率与精度指标。}}{25}{figure.caption.21}\protected@file@percent }
+\newlabel{fig:depth_brazos}{{11}{25}{Brazos区域水深空间误差与定量比较：（a）空间水深图；（b）估计值与参考值散点密度；（c）水深误差图；（d）WSE梯度累积分布；（e）覆盖率与精度指标。}{figure.caption.21}{}}
+\citation{cohen2019floodwater}
+\citation{betterle2024water,tian2026floodxdepth}
+\@writefile{toc}{\contentsline {section}{\numberline {5}讨论}{26}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Change Representation and Spatial Reconstruction}{26}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Boundary-Constrained Depth Estimation}{26}{subsection.5.2}\protected@file@percent }
+\citation{wagner2026gfm,tsyganskaya2018vegetation}
+\citation{zhang2025floodplanet}
 \bibstyle{elsarticle-harv}
 \bibdata{reference}
 \bibcite{amitrano2024sarFloodReview}{{1}{2024}{{Amitrano et~al.}}{{Amitrano, Di~Martino, Di~Simone and Imperatore}}}
 \bibcite{bandara2022changeformer}{{2}{2022}{{Bandara and Patel}}{{}}}
 \bibcite{betterle2024water}{{3}{2024}{{Betterle and Salamon}}{{}}}
 \bibcite{chen2021remote}{{4}{2022}{{Chen et~al.}}{{Chen, Qi and Shi}}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Applicability and Future Work}{27}{subsection.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {6}结论}{27}{section.6}\protected@file@percent }
 \bibcite{chen2023ttp}{{5}{2024}{{Chen et~al.}}{{Chen, Liu, Li, Liu, Chen, Zhang, Zou and Shi}}}
 \bibcite{cheng2025changedino}{{6}{2025}{{Cheng and Hsu}}{{}}}
 \bibcite{cian2018flood}{{7}{2018}{{Cian et~al.}}{{Cian, Marconcini, Ceccato and Giupponi}}}
 \bibcite{cohen2019floodwater}{{8}{2019}{{Cohen et~al.}}{{Cohen, Raney, Munasinghe, Loftis, Molthan, Bell, Rogers, Galantowicz, Brakenridge, Kettner et~al.}}}
-\@writefile{toc}{\contentsline {section}{\numberline {5}讨论}{23}{section.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {6}结论}{23}{section.6}\protected@file@percent }
 \bibcite{credUndrr2020disasters}{{9}{2020}{{{CRED} and {UNDRR}}}{{}}}
 \bibcite{daudt2018fully}{{10}{2018}{{Daudt et~al.}}{{Daudt, Le~Saux and Boulch}}}
 \bibcite{dong2022urbanrisk}{{11}{2022}{{Dong et~al.}}{{Dong, Xia, Li and Zhou}}}
 \bibcite{du2026high}{{12}{2026}{{Du et~al.}}{{Du, Shao, Xiao, Zhang, Zhu, Wang, Balz and Li}}}
 \bibcite{fang2022snunet}{{13}{2022}{{Fang et~al.}}{{Fang, Li, Shao and Li}}}
-\bibcite{fu2025segman}{{14}{2025}{{Fu et~al.}}{{Fu, Lou and Yu}}}
-\bibcite{giustarini2013urbanFloodCd}{{15}{2013}{{Giustarini et~al.}}{{Giustarini, Hostache, Matgen, Schumann, Bates and Mason}}}
-\bibcite{gu2023mamba}{{16}{2024}{{Gu and Dao}}{{}}}
-\bibcite{han2023hanet}{{17}{2023a}{{Han et~al.}}{{Han, Wu, Guo, Hu and Chen}}}
-\bibcite{han2023change}{{18}{2023b}{{Han et~al.}}{{Han, Wu, Guo, Hu, Li and Chen}}}
-\bibcite{hawker2022fabdem}{{19}{2022}{{Hawker et~al.}}{{Hawker, Uhe, Paulo, Sosa, Savage, Sampson and Neal}}}
-\bibcite{lan2025haihe}{{20}{2025}{{Lan and Wang}}{{}}}
-\bibcite{lin2017fpn}{{21}{2017a}{{Lin et~al.}}{{Lin, Doll{\'a}r, Girshick, He, Hariharan and Belongie}}}
-\bibcite{lin2017focal}{{22}{2017b}{{Lin et~al.}}{{Lin, Goyal, Girshick, He and Doll{\'a}r}}}
-\bibcite{liu2024vmamba}{{23}{2024}{{Liu et~al.}}{{Liu, Tian, Zhao, Yu, Xie, Wang, Ye, Jiao and Liu}}}
-\bibcite{misra2025globalFloods}{{24}{2025}{{Misra et~al.}}{{Misra, White, Nsutezo, Straka and Lavista}}}
-\bibcite{saleh2024dam}{{25}{2024}{{Saleh et~al.}}{{Saleh, Weng, Holail, Hao and Xia}}}
-\bibcite{salehi2017tversky}{{26}{2017}{{Salehi et~al.}}{{Salehi, Erdogmus and Gholipour}}}
-\bibcite{simeoni2025dinov3}{{27}{2025}{{Sim{\'e}oni et~al.}}{{Sim{\'e}oni, Vo, Seitzer, Baldassarre, Oquab, Jose, Khalidov, Szafraniec, Yi, Ramamonjisoa, Massa, Haziza, Wehrstedt, Wang, Darcet, Moutakanni, Sentana, Roberts, Vedaldi, Tolan, Brandt, Couprie, Mairal, J{\'e}gou, Labatut and Bojanowski}}}
-\bibcite{tahermanesh2025siscnet}{{28}{2025}{{Tahermanesh et~al.}}{{Tahermanesh, Mohammadzadeh, Mohsenifar and Moghimi}}}
-\bibcite{tan2019efficientnet}{{29}{2019}{{Tan and Le}}{{}}}
-\bibcite{tellman2021exposure}{{30}{2021}{{Tellman et~al.}}{{Tellman, Sullivan, Kuhn, Kettner, Doyle, Brakenridge, Erickson and Slayback}}}
-\bibcite{tian2026floodxdepth}{{31}{2026}{{Tian et~al.}}{{Tian, Liu, Wang, Cohen and Mandal}}}
+\bibcite{giustarini2013urbanFloodCd}{{14}{2013}{{Giustarini et~al.}}{{Giustarini, Hostache, Matgen, Schumann, Bates and Mason}}}
+\bibcite{gu2023mamba}{{15}{2024}{{Gu and Dao}}{{}}}
+\bibcite{han2023hanet}{{16}{2023a}{{Han et~al.}}{{Han, Wu, Guo, Hu and Chen}}}
+\bibcite{han2023change}{{17}{2023b}{{Han et~al.}}{{Han, Wu, Guo, Hu, Li and Chen}}}
+\bibcite{hawker2022fabdem}{{18}{2022}{{Hawker et~al.}}{{Hawker, Uhe, Paulo, Sosa, Savage, Sampson and Neal}}}
+\bibcite{lan2025haihe}{{19}{2025}{{Lan and Wang}}{{}}}
+\bibcite{lin2017fpn}{{20}{2017a}{{Lin et~al.}}{{Lin, Doll{\'a}r, Girshick, He, Hariharan and Belongie}}}
+\bibcite{lin2017focal}{{21}{2017b}{{Lin et~al.}}{{Lin, Goyal, Girshick, He and Doll{\'a}r}}}
+\bibcite{liu2024vmamba}{{22}{2024}{{Liu et~al.}}{{Liu, Tian, Zhao, Yu, Xie, Wang, Ye, Jiao and Liu}}}
+\bibcite{misra2025globalFloods}{{23}{2025}{{Misra et~al.}}{{Misra, White, Nsutezo, Straka and Lavista}}}
+\bibcite{saleh2024dam}{{24}{2024}{{Saleh et~al.}}{{Saleh, Weng, Holail, Hao and Xia}}}
+\bibcite{salehi2017tversky}{{25}{2017}{{Salehi et~al.}}{{Salehi, Erdogmus and Gholipour}}}
+\bibcite{simeoni2025dinov3}{{26}{2025}{{Sim{\'e}oni et~al.}}{{Sim{\'e}oni, Vo, Seitzer, Baldassarre, Oquab, Jose, Khalidov, Szafraniec, Yi, Ramamonjisoa, Massa, Haziza, Wehrstedt, Wang, Darcet, Moutakanni, Sentana, Roberts, Vedaldi, Tolan, Brandt, Couprie, Mairal, J{\'e}gou, Labatut and Bojanowski}}}
+\bibcite{tahermanesh2025siscnet}{{27}{2025}{{Tahermanesh et~al.}}{{Tahermanesh, Mohammadzadeh, Mohsenifar and Moghimi}}}
+\bibcite{tan2019efficientnet}{{28}{2019}{{Tan and Le}}{{}}}
+\bibcite{tellman2021exposure}{{29}{2021}{{Tellman et~al.}}{{Tellman, Sullivan, Kuhn, Kettner, Doyle, Brakenridge, Erickson and Slayback}}}
+\bibcite{tian2026floodxdepth}{{30}{2026}{{Tian et~al.}}{{Tian, Liu, Wang, Cohen and Mandal}}}
+\bibcite{tsyganskaya2018vegetation}{{31}{2018}{{Tsyganskaya et~al.}}{{Tsyganskaya, Martinis, Marzahn and Ludwig}}}
 \bibcite{wagner2026gfm}{{32}{2026}{{Wagner et~al.}}{{Wagner, Bauer-Marschallinger, Roth, Raiger-Stachl, Reimer, McCormick, Matgen, Chini, Li, Martinis, Wieland, Kraft, Festa, Hassaan, Tupas, Zhao, Seewald, Riffler, Molini, Kidd, Briese and Salamon}}}
 \bibcite{woo2018cbam}{{33}{2018}{{Woo et~al.}}{{Woo, Park, Lee and Kweon}}}
 \bibcite{wu2022msdeeplab}{{34}{2022}{{Wu et~al.}}{{Wu, Song, Huang, Zhong, Zhan, Teng, Qiu, He and Cao}}}
 \bibcite{yadav2022attentive}{{35}{2022}{{Yadav et~al.}}{{Yadav, Nascetti and Ban}}}
 \bibcite{yang2026csmamba}{{36}{2026}{{Yang et~al.}}{{Yang, Yuan, Ran, Liu, Adriano, Shibasaki and Koshimura}}}
-\bibcite{zhao2023siamdwenet}{{37}{2023}{{Zhao et~al.}}{{Zhao, Sui and Liu}}}
-\bibcite{zhu2025globalfloodsar}{{38}{2025}{{Zhu et~al.}}{{Zhu, Yoshimura, Liu and Fu}}}
-\gdef \@abspage@last{27}
+\bibcite{zhang2025floodplanet}{{37}{2025}{{Zhang et~al.}}{{Zhang, Giezendanner, Mukherjee, Tellman, Melancon, Purri, Gurung, Lall, Barnard and Molthan}}}
+\bibcite{zhao2023siamdwenet}{{38}{2023}{{Zhao et~al.}}{{Zhao, Sui and Liu}}}
+\bibcite{zhu2025globalfloodsar}{{39}{2025}{{Zhu et~al.}}{{Zhu, Yoshimura, Liu and Fu}}}
+\gdef \@abspage@last{32}

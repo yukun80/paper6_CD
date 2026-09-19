@@ -1,4 +1,4 @@
-\begin{thebibliography}{38}
+\begin{thebibliography}{39}
 \expandafter\ifx\csname natexlab\endcsname\relax\def\natexlab#1{#1}\fi
 \providecommand{\url}[1]{\texttt{#1}}
 \providecommand{\href}[2]{#2}
@@ -141,14 +141,6 @@
 \newblock \bibinfo{journal}{IEEE Geoscience and Remote Sensing Letters}
   \bibinfo{volume}{19}, \bibinfo{pages}{1--5}.
 \newblock \DOIprefix\doi{10.1109/LGRS.2021.3056416}.
-%Type = Inproceedings
-\bibitem[{Fu et~al.(2025)Fu, Lou and Yu}]{fu2025segman}
-\bibinfo{author}{Fu, Y.}, \bibinfo{author}{Lou, M.}, \bibinfo{author}{Yu, Y.},
-  \bibinfo{year}{2025}.
-\newblock \bibinfo{title}{Segman: Omni-scale context modeling with state space
-  models and local attention for semantic segmentation}, in:
-  \bibinfo{booktitle}{Proceedings of the IEEE/CVF Conference on Computer Vision
-  and Pattern Recognition}, pp. \bibinfo{pages}{19077--19087}.
 %Type = Article
 \bibitem[{Giustarini et~al.(2013)Giustarini, Hostache, Matgen, Schumann, Bates
   and Mason}]{giustarini2013urbanFloodCd}
@@ -339,6 +331,17 @@
   \bibinfo{pages}{e2025WR042384}.
 \newblock \DOIprefix\doi{10.1029/2025wr042384}.
 %Type = Article
+\bibitem[{Tsyganskaya et~al.(2018)Tsyganskaya, Martinis, Marzahn and
+  Ludwig}]{tsyganskaya2018vegetation}
+\bibinfo{author}{Tsyganskaya, V.}, \bibinfo{author}{Martinis, S.},
+  \bibinfo{author}{Marzahn, P.}, \bibinfo{author}{Ludwig, R.},
+  \bibinfo{year}{2018}.
+\newblock \bibinfo{title}{{Detection of Temporary Flooded Vegetation Using
+  Sentinel-1 Time Series Data}}.
+\newblock \bibinfo{journal}{Remote Sensing} \bibinfo{volume}{10},
+  \bibinfo{pages}{1286}.
+\newblock \DOIprefix\doi{10.3390/rs10081286}.
+%Type = Article
 \bibitem[{Wagner et~al.(2026)Wagner, Bauer-Marschallinger, Roth, Raiger-Stachl,
   Reimer, McCormick, Matgen, Chini, Li, Martinis, Wieland, Kraft, Festa,
   Hassaan, Tupas, Zhao, Seewald, Riffler, Molini, Kidd, Briese and
@@ -401,6 +404,21 @@
   and Spatial Information Sciences} \bibinfo{volume}{XI-3-2026},
   \bibinfo{pages}{493--500}.
 \newblock \DOIprefix\doi{10.5194/isprs-annals-XI-3-2026-493-2026}.
+%Type = Article
+\bibitem[{Zhang et~al.(2025)Zhang, Giezendanner, Mukherjee, Tellman, Melancon,
+  Purri, Gurung, Lall, Barnard and Molthan}]{zhang2025floodplanet}
+\bibinfo{author}{Zhang, Z.}, \bibinfo{author}{Giezendanner, J.},
+  \bibinfo{author}{Mukherjee, R.}, \bibinfo{author}{Tellman, B.},
+  \bibinfo{author}{Melancon, A.}, \bibinfo{author}{Purri, M.},
+  \bibinfo{author}{Gurung, I.}, \bibinfo{author}{Lall, U.},
+  \bibinfo{author}{Barnard, K.}, \bibinfo{author}{Molthan, A.},
+  \bibinfo{year}{2025}.
+\newblock \bibinfo{title}{{Assessing Inundation Semantic Segmentation Models
+  Trained on High- versus Low-Resolution Labels using FloodPlanet, a Manually
+  Labeled Multi-Sourced High-Resolution Flood Dataset}}.
+\newblock \bibinfo{journal}{Journal of Remote Sensing} \bibinfo{volume}{5},
+  \bibinfo{pages}{0575}.
+\newblock \DOIprefix\doi{10.34133/remotesensing.0575}.
 %Type = Article
 \bibitem[{Zhao et~al.(2023)Zhao, Sui and Liu}]{zhao2023siamdwenet}
 \bibinfo{author}{Zhao, B.}, \bibinfo{author}{Sui, H.}, \bibinfo{author}{Liu,
