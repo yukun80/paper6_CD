@@ -1,111 +1,381 @@
-图4：ChatGPT网页端image2单尺度CQI重绘提示词
+@创建图片 
+Create one publication-quality scientific deep-learning diagram showing ONLY the complete internal computation of one Change Query Interaction (CQI) block at a generic scale i.
 
-一、使用说明
-对应方法3.2节HCE内部的CQI查询交互。保留紧凑双层布局，本版统一尺度符号、两次注意力端口和Reshape后的密集残差。将第二部分完整复制即可重新生成图片；如编辑既有图，使用第四部分的唯一局部修订提示词。第二、四部分独立可用。
-当前JPG仍为待修正工作图，本轮仅更新本TXT，不生成或替换图片，不修改正文及算法，不运行LaTeX构建。旧“只改输入、其他连接保持”指令失效，不再作为绘图约束。
+Do NOT include the full HCE architecture, CNN/DINO encoder, semantic fusion, HA, OSCD, prediction head, flood mask, CFDepth, or any multi-scale routing diagram.
+Do NOT add a figure title or figure number.
 
-二、完整英文重绘提示词（整体复制）
-Create one compact scientific deep-learning module diagram showing single-scale Change Query Interaction within HCE. Use a white landscape canvas approximately 1.6:1. Preserve a coherent two-tier organization: paired input construction on the left, query update above, spatial-token update below, and dense output on the right. Do not reproduce wiring from an earlier generated image; the connection specification below is authoritative.
+The figure must present CQI as ONE integrated computation graph, not as several visually separated panels.
 
-STYLE AND EXACT LETTERING
-Use Times New Roman-like lettering, italic mathematical variables, thin black orthogonal arrows, restrained pastel fills, thin feature slabs, and segmented query/token strips. Pre-event inputs are pale blue, post-event inputs pale orange, queries pale green, and fused spatial features neutral gray. Small operator rectangles and circled addition symbols carry the calculation. Use subtle local backgrounds, no three-panel split, no large text boxes, no decorative shadows or attention heatmaps.
+The purpose is to clearly explain the original CQI computation:
+paired temporal feature construction
+→ dense pair representation
+→ query update
+→ token update
+→ token FFN refinement
+→ spatial return
+→ dense residual return
+→ output refinement.
 
-The following LaTeX expressions specify mathematical typesetting. Render their mathematical appearance, not literal backslashes, braces, underscores, or dollar signs. Use ordinary uppercase A and B as superscripts, a lowercase italic i as the scale subscript, and true numeral 0/1 superscripts for query states. Never replace A/B with Unicode small capitals or omit i.
-Input slabs: X_i^A and X_i^B.
-Directed difference: X_i^B-X_i^A.
-Absolute difference: |X_i^B-X_i^A|.
-Dense paired feature: Z_i.
-Original tokens: T_i.
-Learnable and updated queries: Q_i^0 and Q_i^1.
-Updated spatial tokens: T_i^1.
-Output: D_i.
-Query normalization: \mathrm{LN}_{q,i}.
-Token normalization, used twice: \mathrm{LN}_{t,i}.
-Attention operation labels: \mathrm{MHA}_1 and \mathrm{MHA}_2.
-Attention port labels are plain “Q” and “K/V”, distinct from the mathematical query-state symbols.
-Other exact labels: “C”, “Pair proj”, “Flatten”, “FFN”, “Reshape”, “Conv”, “CBAM”, “Tokens → queries”, “Queries → tokens”, and “Shared token LN”. Do not add explanatory sentences inside operator boxes.
+Standard operators such as MHA, DSConv, CBAM, FFN, BN and LN should remain compact boxes.
+Do NOT expand their internal textbook structures.
+Only the CQI-specific information flow, residual topology, and query/token interaction logic should be explicitly highlighted.
 
-LAYOUT TO PREVENT MISCONNECTIONS
-Keep the upper query update compact and reduce the unused top margin. Position Q_i^1 above the second attention so it connects downward to that attention's K/V port. Original T_i branches upward to the first attention and toward the second attention without duplication.
+==================================================
+CANVAS AND OVERALL STYLE
+==================================================
 
-Place Reshape immediately next to the FINAL addition node. Arrange Conv, CBAM, and D_i on a short continuation at the lower right if required. Do not place an isolated feature slab beyond Reshape. Reserve a clear outer route for the Z_i residual. Keep the other three residuals as short local loops. No arrow may branch between the second token normalization and Reshape. Their connecting segment is a single unbranched edge.
+Use a wide landscape canvas, approximately 1.65:1.
 
-FOUR INPUTS AND CONVOLUTIONAL PROJECTION
-X_i^A and X_i^B each connect directly to C once. Both also feed a subtraction operation: mark the X_i^B input “+” and the X_i^A input “−”. The subtraction output X_i^B-X_i^A branches to C and to absolute value. The absolute-value output |X_i^B-X_i^A| supplies the fourth C input.
-C therefore has exactly four incoming feature edges; do not add a second direct post-event edge.
-C → Pair proj → Z_i → Flatten → T_i.
-Pair proj is a convolutional projection, not an MLP. Z_i also starts the outer dense residual, ending only at the final addition after Reshape.
+Use one large rounded outer container occupying most of the canvas.
+Background: white or very pale ivory.
+Outline: thin navy.
 
-QUERY UPDATE
-Q_i^0 enters MHA_1 at port Q.
-Original T_i enters MHA_1 at port K/V.
-Place port labels immediately beside their arrowheads on the MHA plate.
-MHA_1 output and a direct residual from Q_i^0 enter the first circled plus.
-The sum → LN_{q,i} → Q_i^1.
-Q_i^1 is an updated query state, not another learnable bank.
+Use ONE unified background for the whole module.
+Do NOT split the background into three different colored zones.
+If mild grouping is needed, use only very subtle local pale tints behind small regions, but the figure must remain visually unified as a single module.
 
-SPATIAL-TOKEN UPDATE
-Original T_i enters MHA_2 at its left Q port.
-Q_i^1 descends into MHA_2 at its upper K/V port.
-Do not place K/V text below the block or beside its residual loop.
-MHA_2 output and a direct residual from ORIGINAL T_i enter the second circled plus.
-The sum → first LN_{t,i} → T_i^1.
-T_i^1 branches through FFN and directly into the third circled plus; FFN output supplies the other input.
-The sum → second LN_{t,i} → Reshape.
-Both LN_{t,i} occurrences reuse the same normalization module. LN_{q,i} is separate. “Shared token LN” is an annotation only, not a data-flow arrow.
+Use a draw.io-like scientific style consistent with the model part of Figure 2:
 
-DENSE OUTPUT: MANDATORY SERIAL PATH
-The second LN_{t,i} has exactly one outgoing data-flow edge, leading to Reshape.
-Reshape has one outgoing edge, leading directly to the fourth circled plus.
-The other input of that fourth plus is the outer residual from Z_i.
-Fourth plus → Conv → CBAM → D_i.
-Do not connect either token normalization directly to the fourth plus. Do not bypass Reshape. Do not connect the dense residual after Conv or CBAM. The final plus receives two spatial feature tensors: the reshaped token result and Z_i, not a token sequence. Do not leave a dangling intermediate feature output.
+- Times New Roman-like text
+- italic mathematical symbols
+- thin navy or black orthogonal arrows
+- pastel feature slabs
+- pale blue pre-event feature
+- pale orange post-event feature
+- neutral gray dense feature / token
+- pale green learnable query
+- pale orange MHA boxes
+- pale blue LN / FFN boxes
+- pale green DSConv box
+- pale lavender CBAM and output feature
+- no gradients
+- no glossy effects
+- no heavy shadows
+- no realistic imagery
+- no paragraph text boxes
 
-LEGEND AND REFERENCES
-Use a compact two-row legend without a surrounding dashed frame:
-“C: concatenation”; “⊕: addition”; “MHA: multi-head attention”; “LN: layer normalization”; “FFN: feed-forward network”; “Pair proj: convolutional pair projection”; “A/B: pre/post”.
-Include “One scale shown; five independent CQI blocks” once. Query strip segment counts are schematic and do not encode classes or the configured number of queries. No cross-scale query links, low-rank query generation, matching, or prediction masks.
-If references are attached, borrow only their tiered layout, typography, feature slabs, and compact operation symbols. No reference architecture overrides this graph. The prompt is complete without local files or previous conversation.
+Reserve about 86–88% of the figure height for the main computation.
+Use only a compact bottom strip for the legend.
 
-FINAL CONNECTION CHECK
-Trace four residuals individually: Q_i^0 around MHA_1, original T_i around MHA_2, T_i^1 around FFN, and Z_i around the entire token route ending after Reshape.
-Count exactly four feature inputs to C and four residual addition nodes.
-Check the sources of both Q and K/V ports.
-Trace the unbranched segment from second LN_{t,i} through Reshape to the final plus.
-Check all subscripts and superscripts against the exact lettering list.
-Use junction dots only at real branches. Reroute crossings rather than obscuring text. Produce one readable, balanced diagram with no overall title or figure number.
+==================================================
+LAYOUT PRINCIPLE
+==================================================
 
-三、参考图使用说明
-- 参考图片.png：参考上下层布局、短距离垂直连接和紧凑尺度；不采用其ViT、Bridge和Extractor结构。
-- 参考图片2.png：参考特征薄片、短算子、局部残差及轻量浅底强调；不采用多模块拼图、频域处理或匹配流程。
-- 参考图片3.png：主要视觉参考，借鉴查询条带、运算符号、端口和清楚的残差；不引入低秩查询生成或其他模块。
-参考图不能覆盖第二部分的计算关系。三图可随主提示词上传，模型不需要读取本地路径；未上传时主提示词仍独立完整。旧版单行横向主线要求失效。
+Use a horizontally compact single-module layout with one dominant main path.
 
-四、统一英文局部修订提示词（独立复制）
-Correct the attached single-scale CQI figure while retaining its two-tier composition, Times-style font, blue/orange input slabs, green query strips, and subdued backgrounds. Correct all affected connections, not only the input edges. Reposition Reshape, the final addition, and output operators locally when needed to make the corrected path unambiguous.
+The token branch should form the horizontal visual backbone of the figure.
 
-Typeset these LaTeX labels as mathematics, without printing literal backslashes or underscores: X_i^A, X_i^B, X_i^B-X_i^A, |X_i^B-X_i^A|, Z_i, T_i, Q_i^0, Q_i^1, T_i^1, D_i, \mathrm{LN}_{q,i}, and \mathrm{LN}_{t,i}. Keep plain Q and K/V only as attention-port labels. Use the same i throughout this single-scale diagram.
+Recommended overall spatial organization:
 
-C must have exactly four inputs: X_i^A, X_i^B, their post-minus-pre difference, and its absolute value. Remove duplicate direct input edges. Mark subtraction inputs + for post and − for pre.
-MHA_1 receives Q_i^0 as Q and original T_i as K/V; add Q_i^0 to its output before LN_{q,i}, yielding Q_i^1.
-MHA_2 receives original T_i as Q and updated Q_i^1 as K/V; add original T_i before the first LN_{t,i}, yielding T_i^1. Put each port label beside its actual incoming arrowhead.
-Add T_i^1 around FFN, then apply the second, shared LN_{t,i}.
+left ~26%:
+paired temporal feature construction + pair projection
 
-Delete any downward or side branch from the segment between the second LN_{t,i} and Reshape. The second LN_{t,i} must feed ONLY Reshape. Connect Reshape directly to the final addition; connect Z_i to its other input. Then connect the sum to Conv, CBAM, and D_i in that order. Remove any dangling slab after Reshape. Keep Reshape adjacent to this final addition so the source is visually unmistakable.
+middle ~42%:
+token sequence backbone with query-update branch above it
 
-Retain four residual additions, the upper-to-lower Q_i^1 connection, and a clear original-T_i branch. Reduce the top margin and excess background space. Keep the legend in two compact rows without a frame. Do not add mechanisms, expand MHA internals, or preserve incorrect arrows merely to retain the old layout. Check both attention ports and the final spatial addition before rendering.
+right ~32%:
+FFN, reshape, dense residual return, output refinement
 
-五、验收清单
-- 字符：X的A/B为普通大写上标，i为尺度下标；Q的0/1为状态上标；密集Z_i与token T_i区分；LN_{q,i}与两处LN_{t,i}明确区分。不打印LaTeX转义文本，不混用小型大写字符。
-- 输入：C恰好四路，有向差顺序为灾后减灾前，直接灾后输入无重复。
-- 注意力：第一次Q来自Q_i^0、K/V来自T_i；第二次Q来自原始T_i、K/V来自Q_i^1。端口标签紧邻实际箭头。
-- 残差：Q_i^0、T_i、T_i^1及Z_i四条残差完整；两处token LN共享，query LN独立。
-- 密集输出：第二个token LN只接Reshape；Reshape只接最终加法，其另一输入为Z_i；然后Conv、CBAM、D_i。无归一化到最终加法的捷径，无悬空特征块。
-- 排版：双层保持，Reshape与最终加法相邻，图例两行无外框；缩至论文宽度检查上下标、箭头和留白。
-- 文本核对依据为当前CQI代码及两稿公式；生成后的图片需重新逐箭头核查。两轮针对性修订仍无法纠正的连接停止采用该输出。
+Do NOT leave a large empty upper area.
+Do NOT place the query update and token update as two widely separated islands.
+The upper query path should be a compact branch attached closely above the central token backbone.
 
-这是方法说明图，不是实验图或图文摘要。将来实际使用生成图时，记录网页显示的工具/模型版本、生成日期、原提示词及修订记录，并在图注和文章AI声明披露。当前版本信息不预填，不宣称已经完成生成或作者审核。
+==================================================
+EXACT NOTATION
+==================================================
 
-六、历史记录（不复制到生成模型）
-2026-09-08：正文与图注已区分密集Z_i和展平T_i，说明查询汇聚、上下文返回、残差FFN与密集残差；图4为HCE内部单尺度交互。
-2026-09-11：将主提示词和局部修订统一为完整计算契约。撤销旧“仅修输入、其他连接不变”及“单尺度图可省略i”的要求，避免保留Reshape前取值错误或尺度符号不一致。历史工作图不作为正确连接的依据。本轮仅修改本TXT，未生成或验收新图。
+Use correct mathematical notation:
+
+X_i^A
+X_i^B
+X_i^B − X_i^A
+|X_i^B − X_i^A|
+Z_i
+T_i
+Q_i^0
+Q_i^1
+T_i^1
+D_i
+LN_{q,i}
+LN_{t,i}
+
+A and B are uppercase temporal superscripts.
+i is the generic scale subscript.
+0 and 1 are state superscripts.
+
+Do not print literal LaTeX escape characters.
+
+==================================================
+1. PAIRED TEMPORAL FEATURE CONSTRUCTION
+==================================================
+
+At the far left place two feature slabs:
+
+upper:
+X_i^A
+blue
+
+lower:
+X_i^B
+orange
+
+Construct the directed difference:
+X_i^B − X_i^A
+
+Use one compact subtraction operator.
+Clearly preserve the direction: post-event minus pre-event.
+
+The directed difference branches in two ways:
+1. directly to concatenation
+2. through an Abs operator to produce |X_i^B − X_i^A|
+
+Both original X_i^A and X_i^B must also go directly to the same concatenation.
+
+Use one circled C with exactly four inputs:
+
+X_i^A
+X_i^B
+X_i^B − X_i^A
+|X_i^B − X_i^A|
+
+Place these four-input relations compactly so that the left side does not become too tall.
+
+==================================================
+2. DENSE PAIR REPRESENTATION
+==================================================
+
+After concatenation draw the implemented pair projection compactly:
+
+1×1 Conv
+→ BN
+→ SiLU
+→ DSConv
+→ Z_i
+
+Do not expand DSConv.
+Keep DSConv as one compact box.
+
+Draw Z_i as one gray spatial feature slab.
+
+Z_i branches into TWO routes:
+
+1. main route:
+Z_i → Flatten → T_i
+
+2. dense residual route:
+Z_i → a clean long residual path that returns only after Reshape
+
+Place Flatten and T_i near the horizontal centerline of the figure so that T_i can serve as the visual backbone.
+
+Draw T_i as a short horizontal gray token strip.
+
+==================================================
+3. QUERY UPDATE
+==================================================
+
+Place Q_i^0 above the T_i region, close to the center of the figure, not too high.
+
+Draw Q_i^0 as a green token strip.
+
+Use one compact attention box:
+MHA_1
+
+Explicitly label input roles near the incoming arrows:
+
+Q_i^0 → Q
+T_i → K/V
+
+MHA_1 output enters one circled addition.
+The second input of this addition is a direct residual from Q_i^0.
+
+Exactly two inputs enter this addition.
+
+Then:
+addition → LN_{q,i} → Q_i^1
+
+Draw Q_i^1 as a green updated query strip.
+
+Use only one small local label near this branch:
+Query update
+
+Do not use a large spanning caption such as “Tokens → queries” across a wide blank area.
+
+==================================================
+4. TOKEN UPDATE
+==================================================
+
+Keep the token backbone visually continuous.
+
+Place MHA_2 directly to the right of the T_i region, roughly along the horizontal midline.
+
+Inputs:
+
+original T_i → Q
+updated Q_i^1 → K/V
+
+Again place the role labels Q and K/V right beside the actual incoming arrowheads.
+
+MHA_2 output enters one circled addition.
+Its residual input is the ORIGINAL T_i.
+
+Exactly two inputs enter this addition.
+
+Then:
+addition → LN_{t,i} → T_i^1
+
+Draw T_i^1 as a gray updated token strip.
+
+Use only one small local label:
+Token update
+
+Do not place oversized title text above wide blank space.
+
+==================================================
+5. TOKEN FFN REFINEMENT
+==================================================
+
+From T_i^1 create the FFN residual block.
+
+Main path:
+T_i^1 → FFN → circled addition
+
+Residual:
+T_i^1 → same addition
+
+FFN remains one compact box.
+Do not expand Linear–GELU–Linear.
+
+Then:
+addition → LN_{t,i} → Reshape
+
+The two LN_{t,i} blocks share parameters.
+
+Show this with a compact dashed bracket or short dashed annotation placed close to the two LN boxes:
+shared LN_{t,i}
+
+The dashed sharing annotation must be short and compact.
+Do not let it occupy large empty upper-right space.
+
+==================================================
+6. SPATIAL RETURN AND DENSE RESIDUAL
+==================================================
+
+After Reshape, draw one gray spatial feature slab.
+
+This reshaped dense feature enters one circled addition.
+
+The other input is the long residual from original Z_i.
+
+Thus:
+Reshape output + Z_i → dense spatial feature
+
+Keep this addition close to Reshape and to the later output projection so that the dense residual purpose is visually clear.
+
+The residual path from Z_i should run neatly along the lower edge of the main graph, but not too low.
+Do not make the residual loop excessively large.
+
+==================================================
+7. OUTPUT REFINEMENT
+==================================================
+
+After the dense residual addition, use:
+
+DSConv
+→ CBAM
+→ D_i
+
+Do not expand DSConv or CBAM.
+Keep both as compact standard boxes.
+
+Draw D_i as one purple feature slab.
+
+D_i is a change feature, not a prediction mask.
+
+==================================================
+VISUAL COMPOSITION IMPROVEMENTS
+==================================================
+
+The main flow must occupy the canvas compactly, with minimal wasted space above the graph.
+
+Use the token path as the central horizontal axis:
+Z_i → Flatten → T_i → MHA_2 region → LN_t → T_i^1 → FFN → LN_t → Reshape → + Z_i → DSConv → CBAM → D_i
+
+Place the query-update branch immediately above the T_i / MHA_2 region, close enough that the figure reads as one coupled mechanism.
+
+Keep the vertical distance between Q_i^0 / MHA_1 / Q_i^1 and the token backbone modest.
+Avoid large empty whitespace in the upper half.
+
+The final figure should look like one compact and coherent CQI block, not like three separate stages pasted together.
+
+==================================================
+LEGEND
+==================================================
+
+Use a compact single-row or at most two-row legend in a narrow bottom strip.
+Do not surround the legend with a large heavy panel.
+
+Include only:
+
+blue slab = pre-event feature
+orange slab = post-event feature
+gray slab/token = pair feature / token
+green strip = learnable query
+purple slab = change feature
+C = concatenation
+⊕ = addition
+MHA = multi-head attention
+LN = layer normalization
+
+Do not include long descriptive phrases.
+
+==================================================
+FORBIDDEN ELEMENTS
+==================================================
+
+Do not include:
+- full HCE overview
+- HA
+- CNN
+- DINO
+- semantic fusion
+- OSCD
+- pyramid levels or scale-routing
+- DSConv internals
+- CBAM internals
+- MHA internals
+- lower detail panels
+- prediction head
+- flood map
+- decorative background segmentation into three colored blocks
+
+Do not visually overemphasize generic operators more than CQI-specific logic.
+
+==================================================
+FINAL AUDIT
+==================================================
+
+Before rendering verify:
+
+1. The whole CQI is drawn as ONE integrated module.
+2. There is no large empty upper region.
+3. The background is unified, not split into three obvious color zones.
+4. The token path forms the main horizontal visual backbone.
+5. Query update is a compact upper branch attached closely to the token backbone.
+6. C receives exactly four inputs:
+   X_i^A
+   X_i^B
+   X_i^B−X_i^A
+   |X_i^B−X_i^A|
+7. Z_i branches only into:
+   Flatten → T_i
+   and the long dense residual.
+8. MHA_1 uses Q_i^0 as Q and T_i as K/V.
+9. MHA_2 uses original T_i as Q and Q_i^1 as K/V.
+10. FFN has a residual from T_i^1.
+11. Reshape occurs before the final dense residual addition.
+12. The final dense residual comes from original Z_i.
+13. The shared LN_{t,i} annotation is short and compact.
+14. DSConv and CBAM remain simple boxes.
+15. The legend is compact and does not consume excessive height.
+
+Deliver one compact, visually unified, publication-quality CQI scientific diagram with no overall title or figure number.

@@ -1,139 +1,473 @@
-图3：Harmonized Change Encoder（HCE）三层整体流程与计算细节
+@创建图片 
+Create one publication-quality scientific deep-learning diagram showing ONLY the internal computation of one Harmonized Alignment (HA) block at a generic scale i.
 
-一、使用说明
-本文件整体替换旧图3提示词及所有补丁指令。图3现在规划为完整HCE编码器，整合原图4中的变化查询交互，图面以D1–D5结束，不显示下游解码器。HCE为整体编码器名称；HA为中层统一处理名称，内部连续执行统计校准与局部对齐；变化查询交互为后续编码处理，不与HCE并列。
-版本说明：本提示词按用户确定的目标设计绘制P1–P3均执行PSC及局部对齐。当前代码仅P1/P2执行PSC，P3的PSC由用户后续手动实现。本次不修改算法，不将已有实验结果归因于该目标设计。图片内不添加待实现等额外标注，本说明不属于英文主提示词。
-将第二部分完整复制到ChatGPT网页端image2。可附“参考图片2.png”作为布局和SCI图形语言参考，不继承参考图或旧生成图中的机制和连线。下方只交付一个独立完整的重绘主提示词，无追加修订提示词。当前JPG及图4仍是既有文件，本轮不生成、删除或替换图像，不修改正文引用和图号。
+Do NOT include the full HarmoSSM architecture, CNN/DINO encoder, semantic fusion, CQI, OSCD, prediction head, flood map, or any multi-scale routing diagram.
 
-二、完整英文重绘提示词（整体复制）
-Create a new scientific diagram titled “Harmonized Change Encoder (HCE)”. Depict the COMPLETE encoder from paired SAR inputs to five change-feature outputs. Use the supplied reference only for academic graphic style and the relationship between an overall workflow and unequal-sized detail areas. Do not copy its mechanisms or the wiring of previous generated diagrams. This specification is self-contained.
+Do NOT add a figure title or figure number.
 
-LAYOUT
-Use a slightly portrait canvas with width-to-height ratio about 0.95:1. Use three horizontal tiers: upper 28% for the complete overview; middle 38% for ONE unified HA computation spanning the full width, with calibration occupying approximately the left 35% and alignment the right 65% inside the same background; lower 29% for query interaction across the full width. Reserve the bottom 5% for one compact legend. Match the overview HA node to the middle-tier HA heading by name only. Inside HA connect calibration outputs directly to alignment inputs. Do not connect different tiers with arrows or leader lines. Use light fills or thin solid outlines for local grouping. Avoid all dashed or dotted correspondence lines and their legend entries.
+The purpose of this figure is to make the complete internal HA computation readable from left to right:
+paired temporal features
+→ pair-shared statistical calibration
+→ residual feature recovery
+→ deformable local alignment
+→ harmonized paired outputs.
 
-Use white background, Times-style lettering, italic mathematical variables, pastel feature slabs with shallow axonometric thickness, short operator plates, thin black orthogonal arrows, and circled addition nodes. Pre-event features are pale blue, post-event features pale orange, learnable queries pale green, and paired/change features neutral gray or lavender. Use one continuous subtle background for the ENTIRE middle-tier HA computation and another for the lower query-interaction detail. No dividing border, separate calibration/alignment enclosure, or isolated input restart is allowed within HA. No shadows, glossy rendering, realistic SAR imagery, synthetic masks, or decorative attention maps. Use “HA” as the ONLY middle-tier heading. Do not add separate Paired statistical calibration or Local feature alignment headings inside that tier. HCE remains the overall encoder name; HA and Change query interaction are its internal processing components.
+Use a generic scale index i only. Do not discuss which pyramid levels use HA; that information is already shown in the overall framework figure.
 
-Solid arrows represent computation within the overview or within a detail area. Put a filled junction dot only at a real branch. Other crossings do not imply connections. The lower areas explain existing operations, not extra sequential modules. No arrows or leader lines between tiers are permitted. Solid connections from calibration to alignment WITHIN the unified HA tier are required.
+==================================================
+CANVAS AND SCIENTIFIC STYLE
+==================================================
 
-DISPLAY LABELS AND NOTATION
-Render mathematical expressions with proper subscripts and superscripts, not literal LaTeX escape characters. A and B are uppercase temporal superscripts, i is a scale subscript, and 0/1 are query-state superscripts.
-Overview inputs: I^A and I^B, annotated “Pre-event” and “Post-event”.
-Encoding labels: “Shared representation extraction”, “CNN”, “Frozen DINO”, “Adapter”, “Semantic fusion”.
-Internal overview names: “HA”, “Change query interaction”. The middle tier has only the heading “HA” and the short scale annotation “i ∈ {1,2,3}”. Long names may wrap once; do not put explanatory paragraphs inside nodes.
-Intermediate paired outputs: X_i^A, X_i^B.
-Final outputs: D_1, D_2, D_3, D_4, D_5. End the graph at these feature slabs, with no external output arrow or decoder label. Do not draw a flood mask.
-Identifiers used below to specify connections are planning identifiers, not extra text to print.
+Use a wide landscape canvas, approximately 1.55:1.
 
-OVERVIEW CONNECTIONS
-1. I^A branches to CNN_A and DINO_A; I^B branches to CNN_B and DINO_B. Show the four compact encoder plates in two temporal lanes. Use ONE text-only annotation: “CNN weights shared across times; DINO weights shared across times”. No weight-sharing arrows and no CNN-to-DINO data edge.
-2. For each time separately, CNN produces P1-P5. DINO produces semantic features followed by Adapter, not a five-level CNN pyramid. Draw compact symmetrical temporal lanes. CNN P1/P2 follows a direct path to HA. Each CNN level P3-P5 and its corresponding adapted DINO semantic feature feed a short node “Semantic fusion”. One representative node per time with the note “P3-P5, per level” depicts independent per-level fusion. This abstracts the existing concatenation/convolution/attention operation; do not render a separate C circle or convolution/CBAM plate in this encoding entry. Never connect P1/P2 to Semantic fusion or merge the three scales into a common tensor.
-3. Use five clearly indexed paired routes. P1, P2 and P3 each pass through HA, with the SAME order of operations: paired statistical calibration followed by local feature alignment. Draw one compact repeated HA glyph with separate paired ports for the three levels and the note “P1-P3 independently”. The P3 input comes from Semantic fusion; P1/P2 comes from CNN. P3 must NOT bypass calibration.
-4. Fused P4 and P5 bypass the entire HA computation and retain their separate pre/post paths. There is no third special route for uncalibrated P3.
-5. The HA overview node receives both times and returns two harmonized outputs. Its post output is statistically calibrated, not raw input. Only its INTERNAL local-alignment step leaves the calibrated post feature unchanged while updating the calibrated pre feature. Do not draw a raw post-input bypass around the entire HA node. The unified middle tier specifies these operations and their direct connection.
-6. These routes produce X_i^A and X_i^B for i=1,...,5. If the five input pairs are enumerated, print exactly (X_1^A, X_1^B), (X_2^A, X_2^B), (X_3^A, X_3^B), (X_4^A, X_4^B), (X_5^A, X_5^B); never repeat A for both members of a pair. Each scale's pair feeds its OWN instance of Change query interaction and yields D_i. Use one compact repeated-operation glyph with five indexed pair-in/output ports and the annotation “Five independent instances”. Ports are separate scale routes, not a common concatenation junction. There is no communication between scales and no shared query bank across scales.
-7. Collect D_1-D_5 as five distinct terminal feature slabs. Paired pyramids X are internal states, not the final HCE output. Every displayed paired input must contain both a blue A slab and an orange B slab, separately labeled; a single blue slab must never be labeled as both times.
-8. Repeat the corresponding operation names as detail headings. Do not draw any correspondence lines. The details are magnifications, not additional sequential applications.
+Use one large rounded container occupying most of the canvas.
+Background: white or very pale ivory.
+Outline: thin navy.
+Do not divide the computation into multiple large independent panels.
 
-HA INTERNAL COMPUTATION: CALIBRATION FOLLOWED BY ALIGNMENT
-Show one representative level i in {1,2,3}. Use input symbols F_i^A and F_i^B: F is the CNN feature at P1/P2 and the semantically fused feature at P3. This is one continuous per-level HA computation with two temporal tracks; it is not three scales concatenated together.
-Each input has TWO branches: one to “Joint moments” and one to the data port of its own “Norm” node.
-Joint moments outputs μ_i^{AB}, σ_i^{AB}, which enter the statistics ports of BOTH Norm nodes. Moments are computed jointly over the two times and spatial positions at this level, not over different scales or a stored source domain.
-For each time: Norm → Affine → Y_i^A or Y_i^B.
-Annotate the affine operations “Shared learned μ_i^c, σ_i^c”, without an arrow connecting the affine plates.
-Replace the unexplained Recover boxes with TWO compact standard-operation plates in each temporal branch:
-Y_i^A → “3×3 Conv + BN + SiLU” → “1×1 Conv + BN” → ADD_A.input1; Y_i^A → ADD_A.input2.
-Y_i^B → “3×3 Conv + BN + SiLU” → “1×1 Conv + BN” → ADD_B.input1; Y_i^B → ADD_B.input2.
-Place these short chains on staggered rows if needed. Do not print a separate Recover node. Use the text-only note “Recovery weights shared across times”.
-ADD_A and ADD_B each have exactly TWO incoming edges. Their outputs are U_i^A and U_i^B.
-The recovery residual begins at Y AFTER affine, never at raw F. Recovery weights are shared between the two times at the illustrated level; different levels have their own processing.
-Use small local residual loops, with no duplicate bypasses. The calibrated outputs U_i^A and U_i^B continue DIRECTLY into the alignment operations to their right in the SAME HA region. Do not duplicate them as disconnected new input slabs. At the end of alignment label the outputs X_i^A and X_i^B, ready for query interaction in the overview. Do not draw cross-tier data connections.
+Use a draw.io-like scientific network-diagram style consistent with the model portion of Figure 2:
 
-HA INTERNAL COMPUTATION CONTINUED: ALIGNMENT
-U_i^A and U_i^B are the directly connected calibration outputs at ALL three levels P1-P3. Lay out projections and sampling above, the offset predictor below, and scoring/aggregation to the right. Use separate Q, K and V projection plates labeled with their symbols and “1×1 Conv”.
-U_i^B → Q projection → SCORE.query.
-U_i^A → K projection → SAMPLE_K.feature.
-U_i^A → V projection → SAMPLE_V.feature.
-U_i^B and U_i^A → subtraction U_i^B-U_i^A. The two ORIGINAL inputs and this difference → C → “Grouped 3×3 Conv + BN + SiLU” → “1×1 Conv”.
-Split the predictor output into two distinct paths: offset logits → “Tanh × scale” → Δp; the separate bias output is b. Do not apply Tanh to b.
-Δp enters a coordinate node labeled “p′ = p + r + Δp”. Here p is the image-grid location and r is the fixed local reference offset. The coordinate output branches into the coordinate ports of SAMPLE_K and SAMPLE_V. Both sampling plates are labeled “Bilinear sampling”, with adjacent K or V labels so their roles stay distinct.
-SAMPLE_K → K_s → SCORE.keys.
-SAMPLE_V → V_s → WEIGHTED.values.
-SCORE is a compact plate labeled “QK_sᵀ / √d”; it receives only Q and K_s. SCORE.output and b → a circled plus with exactly two inputs → “Softmax” → WEIGHTED.weights.
-WEIGHTED is labeled “Weighted sum”. Its weights and values ports receive Softmax output and V_s respectively. WEIGHTED → “1×1 Conv + BN” → ADD_ALIGN.input1.
-Original U_i^A → ADD_ALIGN.input2; ADD_ALIGN → X_i^A, the updated pre feature.
-U_i^B → X_i^B directly, unchanged by alignment but already calibrated. This path must not originate at any attention or projection node.
-Use a small grid illustration beside the coordinate and sampling nodes: reference dots, displaced dots, and short offset arrows explain where features are sampled. Label “Reference” and “Displaced”. It is a schematic of feature sampling, not an observed map or a specified number of samples. Keep it inside this detail without a separate inset or cross-area callout. It does not replace the coordinate-to-sampling arrows.
-Keep K_s and V_s blue because both originate from the pre feature. Q originates from post. Do not swap bias and offset destinations. The pre residual has one dedicated outer loop, and the post straight-through path has its own route. Do not retain black boxes named Local sampling, Local attention, Offset + bias, or Proj: their implemented operations are now displayed explicitly. This local projected Q is not the learned query bank in the bottom detail.
+- Times New Roman-like typography
+- italic mathematical variables
+- thin navy or near-black orthogonal arrows
+- restrained pastel operator boxes
+- shallow axonometric feature slabs
+- pre-event features in pale blue
+- post-event features in pale orange
+- calibration operators in pale neutral blue
+- alignment/attention operators in pale cyan or lavender
+- no gradients
+- no glossy effects
+- no heavy shadows
+- no realistic SAR imagery
+- no paragraph-style text inside boxes
 
-QUERY-INTERACTION DETAIL: TWO-ROW LAYOUT
-Use the full lower-tier width. The left 25% contains four-input construction, Pair proj, Z_i, explicit Flatten, and T_i. In the remaining area place QUERY UPDATE followed by TOKEN UPDATE from left to right on the UPPER row. Q_i^1 must have a short direct connection into the second MHA K/V port. Route original T_i separately to the first MHA K/V and second MHA Q, with a clearly anchored residual to the second MHA sum.
-Place T_i^1 after the first LNt at the upper right. Continue downward at the right into the lower row's FFN/residual and shared LNt. Arrange the remaining spatial-return operators compactly along that row, using left-pointing arrows where required by the fold. Explicit arrowheads determine reading direction; do not force a long detour to maintain left-to-right orientation everywhere. Position the final dense addition near the end of this return row and finish with Conv, CBAM and D_i. Keep the upper-right area occupied by token update, not blank.
-Original Z_i has its own bottom residual channel into the dense addition after Reshape and before Conv. This channel does not touch any other tensor path. Q_i^0, T_i, T_i^1 and Z_i each have their own residual origin. No common bus represents different tensors. Shared LNt is only a short text note, without any linking line between normalization nodes.
+Arrange the MAIN computation across the upper ~68–72% of the canvas.
 
-QUERY-INTERACTION DETAIL: INPUT CONSTRUCTION
-Show one scale i. Its inputs are harmonized X_i^A and X_i^B, not raw P or unaligned U.
-Both inputs go directly to C and also feed a subtraction node that computes X_i^B-X_i^A. The subtraction output goes directly to C and through absolute value to C, giving exactly FOUR feature inputs:
-X_i^A, X_i^B, X_i^B-X_i^A, |X_i^B-X_i^A|.
-C → “Pair proj” → dense slab Z_i. Pair proj is convolutional projection, not an MLP-only layer.
-Z_i → “Flatten” → original token strip T_i.
-Z_i also branches into a bottom dense residual that terminates only at the final pre-convolution addition described below.
+Use the remaining lower space for TWO compact explanatory details:
+1. shared recovery block detail
+2. deformable sampling / offset-prediction detail
 
-QUERY-INTERACTION DETAIL: TWO ATTENTION OPERATIONS
-Use the consecutive query-update and token-update operations on the upper row specified above. Both operations use distinct compact MHA plates with visible Q and K/V input ports.
-First attention:
-Learnable query strip Q_i^0 → MHA1.Q.
-Original tokens T_i → MHA1.K/V.
-MHA1.output → ADD_Q.input1; Q_i^0 → ADD_Q.input2.
-ADD_Q → LNq → updated queries Q_i^1.
-Second attention:
-ORIGINAL tokens T_i → MHA2.Q.
-Updated queries Q_i^1 → MHA2.K/V.
-MHA2.output → ADD_T.input1; ORIGINAL T_i → ADD_T.input2.
-ADD_T → LNt → updated tokens T_i^1.
-Print “MHA” on the attention plates and optionally the short annotations “Query update” and “Token update”. The planning identifiers MHA1/MHA2 do not need to be printed. Use separate one-direction arrows; no ambiguous two-headed exchange arrow.
-These learnable change queries are NOT the projected post-event reference used inside local alignment. Do not connect a local-alignment Q to Q_i^0.
+These are enlarged explanations of reused operations in the main computation, not additional sequential processing.
 
-QUERY-INTERACTION DETAIL: SPATIAL RETURN
-T_i^1 → FFN → ADD_F.input1; T_i^1 → ADD_F.input2. Both branches originate AFTER the first LNt. Neither may originate from original T_i or from the learned-query route.
-ADD_F → a second LNt → Reshape → ADD_Z.input1.
-The dense residual from original Z_i → ADD_Z.input2 along the dedicated bottom channel. Reshape supplies input1. ADD_Z has no third input and no connection from original T_i.
-ADD_Z → Conv → CBAM → D_i.
-The TWO LNt plates use the same normalization module; label “Shared LNt” once, without a data-flow edge between the plates. LNq is distinct.
-All four sums ADD_Q, ADD_T, ADD_F and ADD_Z have exactly two inputs. Their direct residual sources are respectively Q_i^0, T_i, T_i^1 and Z_i. Keep each residual visibly attached to its source. ADD_Z is after Reshape and BEFORE Conv and CBAM.
-The output D_i is a dense spatial change feature, not a mask query, class prediction, matched object or flood extent map.
+Reserve only a very narrow bottom strip for a compact legend.
 
-FORBIDDEN CONNECTIONS AND SIMPLIFICATIONS
-Do not merge different scales to simplify overview routing.
-All of P1-P3 must execute paired statistical calibration and then local alignment. P4/P5 must bypass HA. Do not apply calibration to P4/P5.
-Do not update the post feature during local alignment or swap temporal output colors.
-Do not omit raw-feature inputs to Norm or add raw P to calibrated outputs.
-Do not feed updated queries to the Q port of the second MHA: that Q port takes original T_i.
-Do not replace original T_i in its residual with updated tokens.
-Do not place the Z_i residual after output Conv or CBAM.
-Do not introduce cross-scale queries, loss heads, physical scattering correction, or a new mechanism.
-Do not split middle-tier HA into two independently framed modules or make paired pyramids the final HCE output.
+==================================================
+EXACT NOTATION
+==================================================
 
-LEGEND AND EDGE AUDIT
-Use one compact legend: “A/B: pre/post”, “C: concatenation”, “⊕: addition”, “MHA: multi-head attention”, “LN: layer normalization”, “i: scale”. Other operation meanings remain on their own short labels.
-Before rendering, trace the full encoder from each temporal input to all five D outputs. Verify P1-P3 HA routes and P4/P5 bypass routes, paired calibration ports, calibrated-post reference and alignment-only direct-output relation, independent query instances, the expanded local-alignment Q/K/V roles, separate offset and bias ports, direct post output and pre residual; then both MHA Q/K/V roles, the two calibration residuals, and the four query-interaction residuals. Confirm Pair proj visibly outputs Z_i, Z_i enters a printed Flatten node, and the FFN branch begins at T_i^1. Verify that there are no cross-area correspondence lines and that matching detail titles do not imply an extra application of a module. Check the grid is schematic, the recovery residual starts after Affine, and every sampling/attention port has the specified source. Keep the whole computation readable at journal page width. Deliver one complete HCE schematic image.
+Use proper mathematical typography.
 
-三、参考与状态说明
-“参考图片2.png”仅作SCI薄片、常用算子、紧凑分支和浅底层级参考。三层比例保持28%／38%／29%／图例5%。中层使用单一HA标题和共同背景，校准结果直接进入对齐，不再分成两个独立模块。英文主提示词呈现用户指定的P1–P3统一PSC目标设计；当前代码差异仅见中文使用说明，不印入图片。左侧Semantic fusion概括原融合运算，删除的是图示细节，不是实际运算。查询交互的Conv与CBAM保持，因为它们属于另一条输出处理链。本轮仅更新TXT，不生成图片、修改正文或代码，不执行实验。
+Inputs:
+F_i^A
+F_i^B
 
-四、连接验收表
-| 检查项 | 通过条件 |
-|---|---|
-| 命名 | HCE为整体名称，中层只有HA总标题；PSC与对齐是HA内部连续计算 |
-| 完整输出 | 输入为双时相SAR，最终输出止于D1–D5，X成对金字塔仅为内部状态 |
-| 编码 | 每时相CNN与DINO均有输入，左侧Semantic fusion简写逐尺度融合，无单独拼接圆圈或Conv＋CBAM框 |
-| 尺度 | 目标设计中P1/P2/P3均PSC后对齐，P4/P5绕过HA；五尺度独立 |
-| 对齐 | 灾后→Q，灾前→K/V，Δp→共同采样坐标，K/V分别双线性采样；Q与K_s计算得分，加b后Softmax，以V_s加权；输出投影后仅加原始灾前，灾后仅在对齐步骤直通，不能绕过PSC |
-| 校准 | 原始特征和共享统计同时进入Norm，恢复分支为3×3 Conv+BN+SiLU→1×1 Conv+BN，Affine后Y为残差起点 |
-| 查询输入 | 两状态、有向差、绝对差四路进入卷积Pair proj，Z展平为T |
-| 第一次MHA | Q=Q_i^0，K/V=T_i，残差Q_i^0，相加后LNq |
-| 第二次MHA | Q=原始T_i，K/V=Q_i^1，残差原始T_i，相加后LNt |
-| 空间返回 | FFN残差为T_i^1，第二LNt与第一LNt共享；Reshape后加Z再Conv/CBAM |
-| 图文层次 | 三层28%／38%／29%／图例5%；中层一个HA背景，内部约35%／65%分配，校准直接连接对齐，无跨层引线 |
-| 布线 | 查询更新与token更新上排相邻，T_i^1右侧向下进入FFN／空间返回；Z独立底部残差，四个加法仅两个输入 |
-| 示意与标签 | 采样网格点数不代表配置；每对输入分蓝A／橙B，P1/P2不进入语义融合，图末无外伸解码器箭头 |
-| 使用状态 | 中文说明记录当前仅P1/P2有PSC、用户将手动增加P3 PSC；不把目标图或已有结果视为已实现验证；生成后仍逐条查连线 |
+Calibration intermediates:
+Y_i^A
+Y_i^B
+U_i^A
+U_i^B
+
+Outputs:
+X_i^A
+X_i^B
+
+Pair-shared statistics:
+μ_i^{AB}
+σ_i^{AB}
+
+Canonical learned parameters:
+μ_i^c
+σ_i^c
+
+Alignment quantities:
+Q
+K
+V
+Δp
+b
+p′ = p + r + Δp
+K_s
+V_s
+α
+
+A = pre-event
+B = post-event
+
+Do not print raw LaTeX commands.
+
+==================================================
+MAIN COMPUTATION — LEFT: PAIR-SHARED CALIBRATION
+==================================================
+
+Place two input feature slabs at the far left:
+
+upper:
+F_i^A
+blue
+
+lower:
+F_i^B
+orange
+
+Each feature must branch in exactly TWO directions:
+1. to its own normalization data input;
+2. to one shared Joint moments operator.
+
+JOINT MOMENTS
+Place one compact operator centrally between the two temporal paths:
+
+Joint moments
+
+Both F_i^A and F_i^B enter it.
+
+Joint moments outputs:
+
+μ_i^{AB}
+σ_i^{AB}
+
+Route the SAME pair-shared statistics to BOTH normalization operators.
+
+Do not show independent temporal statistics.
+
+PRE-EVENT CALIBRATION PATH
+F_i^A
++ μ_i^{AB}, σ_i^{AB}
+→ Norm
+→ Canonical affine
+→ Y_i^A
+→ Recovery
+→ U_i^A
+
+POST-EVENT CALIBRATION PATH
+F_i^B
++ μ_i^{AB}, σ_i^{AB}
+→ Norm
+→ Canonical affine
+→ Y_i^B
+→ Recovery
+→ U_i^B
+
+Place one concise annotation between the two Canonical affine operators:
+
+shared learned μ_i^c, σ_i^c
+
+Do not connect the two affine blocks with a data-flow arrow.
+
+==================================================
+CALIBRATION VISUAL CUE
+==================================================
+
+Near Joint moments and Norm, add one small deep-learning-style feature-statistics schematic.
+
+Show:
+- one short blue multi-channel feature strip
+- one short orange multi-channel feature strip
+- both entering a shared μ / σ symbol
+- two normalized output strips centered with respect to the same reference statistics
+
+This is only a compact visual cue for pair-shared normalization.
+
+Do NOT draw histograms.
+Do NOT draw a separate calibration submodule box.
+Do NOT use long explanatory labels.
+
+==================================================
+MAIN COMPUTATION — RECOVERY
+==================================================
+
+In the main graph, show a compact identical operator labeled:
+
+Recovery
+
+after Y_i^A and Y_i^B.
+
+Recovery weights are shared across the two temporal paths.
+
+The detailed internal structure of Recovery must be expanded ONCE in the lower-left blank area:
+
+Y_i^t
+→ 3×3 Conv
+→ BN
+→ SiLU
+→ 1×1 Conv
+→ BN
+→ circled addition
+→ U_i^t
+
+The second input of the addition is a direct residual from Y_i^t.
+
+Use:
+t ∈ {A,B}
+
+Add only one short note:
+
+shared across A/B
+
+The residual MUST start from Y_i^t after Canonical affine.
+
+Do not draw raw F_i^t as a residual into Recovery.
+
+==================================================
+MAIN COMPUTATION — RIGHT: DEFORMABLE LOCAL ALIGNMENT
+==================================================
+
+U_i^A and U_i^B must continue directly from calibration into alignment.
+Do not redraw them as disconnected duplicate inputs.
+
+The post-event feature provides query guidance.
+The pre-event feature provides key and value features.
+
+Q PROJECTION
+U_i^B
+→ 1×1 Conv
+→ Q
+
+K PROJECTION
+U_i^A
+→ 1×1 Conv
+→ K
+
+V PROJECTION
+U_i^A
+→ 1×1 Conv
+→ V
+
+Use three small projection plates aligned vertically or diagonally.
+
+==================================================
+OFFSET AND ATTENTION-BIAS PREDICTION
+==================================================
+
+Compute:
+
+U_i^B − U_i^A
+
+Then concatenate exactly THREE tensors:
+
+U_i^A
+U_i^B
+U_i^B − U_i^A
+
+using one circled C.
+
+The concatenated feature enters:
+
+Grouped 3×3 Conv
+→ BN
+→ SiLU
+→ 1×1 Conv
+
+The final output splits into TWO independent branches:
+
+Branch 1:
+offset logits
+→ tanh × scale
+→ Δp
+
+Branch 2:
+→ b
+
+Do NOT apply tanh to b.
+
+==================================================
+REFERENCE POSITIONS AND DEFORMABLE SAMPLING
+==================================================
+
+Show a compact coordinate operator:
+
+p′ = p + r + Δp
+
+where:
+p = current feature-grid location
+r = fixed local reference offset
+Δp = learned displacement
+
+The same p′ must feed BOTH key and value sampling.
+
+K + p′
+→ Bilinear sampling
+→ K_s
+
+V + p′
+→ Bilinear sampling
+→ V_s
+
+Keep these as two separate sampling operators.
+
+==================================================
+DEFORMABLE SAMPLING VISUAL DETAIL
+==================================================
+
+Use the lower-right blank area to expand the sampling idea visually.
+
+Draw one small regular feature grid:
+- dark blue dots = reference sample locations
+- orange/red dots = displaced locations
+- short arrows = learned offsets Δp
+
+Add only these labels:
+
+Reference
+Displaced
+Δp
+
+This visual must clearly communicate local deformable sampling.
+
+Do not use a realistic image.
+Do not use a heatmap.
+Do not imply that the number of displayed points equals the configured number of sampling points.
+
+==================================================
+LOCAL ATTENTION AND AGGREGATION
+==================================================
+
+Q and K_s enter one score operator:
+
+Q K_s^T / √d
+
+Its output and b enter one circled addition.
+
+Exactly TWO inputs enter this addition.
+
+Then:
+
+addition
+→ Softmax
+→ α
+
+Use α as the attention weights.
+
+Then:
+
+α
++
+V_s
+→ Weighted sum
+
+Represent this as a small weighted-aggregation operator with two input ports:
+weights α
+values V_s
+
+Then:
+
+Weighted sum
+→ 1×1 Conv
+→ BN
+→ circled addition
+→ X_i^A
+
+The second input of this final addition is the ORIGINAL U_i^A.
+
+This is the pre-event alignment residual.
+
+==================================================
+POST-EVENT OUTPUT
+==================================================
+
+U_i^B must continue on a clean direct path to:
+
+X_i^B
+
+The post-event feature is NOT updated by the deformable attention.
+
+Therefore the final paired outputs are:
+
+X_i^A : locally aligned pre-event feature
+X_i^B : post-event reference feature
+
+Do not add any extra fusion after these outputs.
+
+==================================================
+FLOW ORGANIZATION
+==================================================
+
+The overall visual reading order must be obvious:
+
+F_i^A / F_i^B
+→ shared calibration
+→ U_i^A / U_i^B
+→ deformable local alignment
+→ X_i^A / X_i^B
+
+Calibration should occupy roughly the left 38–42% of the main graph.
+Alignment should occupy roughly the right 58–62%.
+
+Keep A and B temporal paths visually parallel where possible.
+
+Use junction dots only for true branches.
+Use circled C only for concatenation.
+Use circled plus only for element-wise addition.
+
+==================================================
+LEGEND
+==================================================
+
+Keep the legend minimal:
+
+blue slab: pre-event feature
+orange slab: post-event feature
+C: concatenation
+⊕: element-wise addition
+Q/K/V: query/key/value
+BN: batch normalization
+
+No explanation paragraphs.
+
+==================================================
+FORBIDDEN ELEMENTS
+==================================================
+
+Do not draw:
+- multi-scale pyramid routing
+- P1/P2/P3/P4/P5
+- CNN
+- DINO
+- semantic fusion
+- CQI
+- OSCD
+- prediction masks
+- flood extent
+- scale-selection logic
+- separate large “Calibration module” and “Alignment module” panels
+
+Do not hide:
+- Joint moments
+- shared normalization statistics
+- canonical affine
+- Recovery residual
+- Q/K/V source directions
+- offset predictor
+- Δp
+- b
+- bilinear sampling
+- softmax weighting
+- weighted V aggregation
+- final pre-event residual
+
+==================================================
+FINAL CONNECTION AUDIT
+==================================================
+
+Before rendering verify:
+
+1. F_i^A and F_i^B BOTH enter Joint moments.
+2. Each F_i^t also enters its own Norm.
+3. The same μ_i^{AB}, σ_i^{AB} enter BOTH Norms.
+4. Canonical affine outputs are Y_i^A and Y_i^B.
+5. Recovery residual begins at Y_i^t.
+6. Recovery structure is shown once in detail:
+   3×3 Conv → BN → SiLU → 1×1 Conv → BN + residual.
+7. U_i^B produces Q.
+8. U_i^A produces K and V.
+9. Offset predictor receives U_i^A, U_i^B and U_i^B−U_i^A.
+10. Δp enters sampling coordinates only.
+11. b enters attention-score addition only.
+12. K and V are sampled using the SAME displaced locations p′.
+13. Q interacts with sampled K_s.
+14. softmax weights aggregate V_s.
+15. aligned result is projected and added to original U_i^A.
+16. U_i^B directly becomes X_i^B.
+17. no unrelated network component appears.
+
+Deliver one complete, fully expanded HA module diagram with no figure title.

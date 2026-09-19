@@ -1,9 +1,8 @@
 % Source: HA-CQI/outputs/scene_metrics_{Zhengzhou,Zhuozhou,Guangxi}.tsv.
+% Comparison rows use baselines/open-cd/outputs_0917; the HarmoSSM row is retained from the existing TSV.
 % Zhengzhou HarmoSSM: current saved Zhengzhou_change_binary_final_0508.tif (epoch80 directory); not asserted to be an unedited model output.
-% Zhengzhou comparison rows FC-Siam-Diff, BIT, ChangeFormer, CGNet, SNUNet, TTP, and ChangeDINO use Zhengzhou_paper as the reference; see the corresponding TSV label_path.
 % Guangxi HarmoSSM: previously verified epoch30 full-scene binary result; current source directory is not retained.
 % Rankings use unrounded metrics among the nine displayed methods.
-% Values are preserved from the former combined table; reference sources differ across some rows.
 \begingroup
 \begin{table}[H]
 \centering
@@ -18,15 +17,15 @@
 \toprule
 Method & P (\%) & R (\%) & F1 (\%) & IoU (\%) & OA (\%) \\
 \midrule
-FC-Siam-Diff & 67.56 & 35.03 & 46.14 & 29.99 & 98.55 \\
-HANet & 35.95 & \textbf{71.08} & 47.75 & 31.36 & 95.69 \\
-SNUNet & 69.71 & 22.84 & 34.41 & 20.78 & 98.46 \\
-BIT & 61.94 & 67.78 & \underline{64.73} & \underline{47.85} & \underline{98.69} \\
-ChangeFormer & \underline{73.89} & 18.21 & 29.22 & 17.11 & 98.44 \\
-CGNet & 47.76 & 61.24 & 53.67 & 36.68 & 98.13 \\
-TTP & 65.12 & 33.79 & 44.49 & 28.61 & 98.51 \\
-ChangeDINO & 60.61 & 40.89 & 48.83 & 32.30 & 98.48 \\
-HarmoSSM & \textbf{85.50} & \underline{68.68} & \textbf{76.17} & \textbf{61.51} & \textbf{98.81} \\
+FC-Siam-Diff & \textbf{96.67} & 11.97 & 21.30 & 11.92 & 97.55 \\
+HANet & 90.41 & 15.92 & 27.07 & 15.65 & 97.62 \\
+SNUNet & 84.97 & 13.27 & 22.96 & 12.97 & 97.53 \\
+BIT & 77.29 & 53.97 & 63.56 & 46.58 & \underline{98.28} \\
+ChangeFormer & \underline{91.31} & 21.20 & 34.41 & 20.78 & 97.76 \\
+CGNet & 70.07 & 29.22 & 41.24 & 25.98 & 97.69 \\
+TTP & 88.16 & 30.52 & 45.34 & 29.31 & 97.96 \\
+ChangeDINO & 73.87 & \underline{58.58} & \underline{65.34} & \underline{48.53} & 98.28 \\
+HarmoSSM & 85.50 & \textbf{68.68} & \textbf{76.17} & \textbf{61.51} & \textbf{98.81} \\
 \bottomrule
 \end{tabular*}
 \end{table}

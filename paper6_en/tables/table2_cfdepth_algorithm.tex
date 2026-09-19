@@ -1,0 +1,26 @@
+\begin{table}[htbp]
+\centering
+\ifdefined\cnexperimenttableformat\cnexperimenttableformat\fi
+\captionsetup{name=Table}
+\caption{CFDepth procedure.}
+\label{tab:cfdepth_algorithm}
+\small
+\setlength{\tabcolsep}{4pt}
+\renewcommand{\arraystretch}{1.10}
+\begin{tabularx}{\linewidth}{@{}>{\raggedleft\arraybackslash}p{0.035\linewidth}X@{}}
+\toprule
+\multicolumn{2}{@{}l}{\textbf{Input:} \(\hat{\mathbf M}\): flood map; \(Z\): DEM;} \\
+\multicolumn{2}{@{}l}{\hspace{2em}\(d_{\min}\): minimum positive depth; \(D_{\max}\): maximum propagation distance.} \\
+\multicolumn{2}{@{}l}{\textbf{Output:} flood-depth estimate \(\hat d\).} \\
+\midrule
+1: & Align \(\hat{\mathbf M}\) and \(Z\) to a common grid and define flood support \(\Omega_f\). \\
+2: & Label the eight-connected components of \(\Omega_f\). \\
+3: & Extract the outer boundary and retain candidates that satisfy the slope and local median-deviation criteria; extract the inner wet boundary by erosion. \\
+4: & Pair the wet- and dry-side boundary medians and construct the water-surface anchor \(S_b=\max[(Z_{\mathrm{wet}}+Z_{\mathrm{dry}})/2,\,Z+d_{\min}]\). \\
+5: & For each component, find the nearest reachable anchor along an eight-neighbor path with distance at most \(D_{\max}\). \\
+6: & Set \(S^{(0)}=\max[S_b(b(p)),Z+d_{\min}]\) for pixels with a reachable anchor; otherwise use the terrain-floor fallback \(Z+d_{\min}\). \\
+7: & Refine the water surface with the \(3\times3\) neighbor mean, relaxation coefficient \(\eta\), fixed anchors, and the terrain floor. \\
+8: & Compute \(\hat d=\max[S^{(K)}-Z,0]\) for \(p\in\Omega_f\), and set the remaining pixels to NoData. \\
+\bottomrule
+\end{tabularx}
+\end{table}

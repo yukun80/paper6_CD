@@ -1,9 +1,8 @@
 % Source: HA-CQI/outputs/scene_metrics_{Zhengzhou,Zhuozhou,Guangxi}.tsv.
+% Comparison rows use baselines/open-cd/outputs_0917; the HarmoSSM row is retained from the existing TSV.
 % Zhengzhou HarmoSSM: current saved Zhengzhou_change_binary_final_0508.tif (epoch80 directory); not asserted to be an unedited model output.
-% Zhengzhou comparison rows FC-Siam-Diff, BIT, ChangeFormer, CGNet, SNUNet, TTP, and ChangeDINO use Zhengzhou_paper as the reference; see the corresponding TSV label_path.
 % Guangxi HarmoSSM: previously verified epoch30 full-scene binary result; current source directory is not retained.
 % Rankings use unrounded metrics among the nine displayed methods.
-% Values are preserved from the former combined table; reference sources differ across some rows.
 \begingroup
 \begin{table}[H]
 \centering
@@ -18,14 +17,14 @@
 \toprule
 Method & P (\%) & R (\%) & F1 (\%) & IoU (\%) & OA (\%) \\
 \midrule
-FC-Siam-Diff & 97.25 & 55.87 & 70.96 & 55.00 & 96.11 \\
-HANet & \textbf{98.95} & 39.57 & 56.53 & 39.40 & 94.82 \\
-SNUNet & 97.60 & 63.06 & 76.61 & 62.09 & 96.72 \\
-BIT & 93.15 & 51.03 & 65.94 & 49.18 & 95.51 \\
-ChangeFormer & \underline{98.66} & 54.19 & 69.96 & 53.79 & 96.04 \\
-CGNet & 95.47 & 65.32 & 77.57 & 63.35 & 96.79 \\
-TTP & 96.59 & \underline{68.51} & \underline{80.16} & \underline{66.89} & \underline{97.12} \\
-ChangeDINO & 94.32 & 38.20 & 54.37 & 37.34 & 94.55 \\
+FC-Siam-Diff & \textbf{98.72} & 36.34 & 53.13 & 36.17 & 94.54 \\
+HANet & 97.34 & 50.46 & 66.47 & 49.78 & 95.67 \\
+SNUNet & \underline{97.44} & 41.24 & 57.95 & 40.80 & 94.91 \\
+BIT & 96.06 & 63.34 & 76.34 & 61.74 & 96.66 \\
+ChangeFormer & 97.38 & 56.03 & 71.14 & 55.20 & 96.13 \\
+CGNet & 90.68 & \underline{73.81} & \underline{81.38} & \underline{68.60} & \underline{97.13} \\
+TTP & 96.03 & 66.17 & 78.35 & 64.41 & 96.89 \\
+ChangeDINO & 87.71 & 71.58 & 78.83 & 65.05 & 96.73 \\
 HarmoSSM & 95.08 & \textbf{81.10} & \textbf{87.53} & \textbf{77.83} & \textbf{98.03} \\
 \bottomrule
 \end{tabular*}
