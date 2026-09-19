@@ -51,12 +51,20 @@ def retry_read(fn, sleep=time.sleep):
 
 
 def grid_equal(a: dict, b: dict) -> bool:
+    """Compare the pixel lattice while allowing an integer crop-window shift."""
     if a["crs"] != b["crs"]:
         return False
-    scale = max(abs(a["transform"][0]), abs(a["transform"][4]))
-    return all(
-        abs(x - y) <= scale * 1e-6 for x, y in zip(a["transform"], b["transform"])
-    )
+    at, bt = a["transform"], b["transform"]
+    scale = max(max(abs(x) for x in at[:4]), max(abs(x) for x in bt[:4]), 1.0)
+    if any(abs(at[i] - bt[i]) > scale * 1e-9 for i in (0, 1, 3, 4)):
+        return False
+    det = at[0] * at[4] - at[1] * at[3]
+    if abs(det) <= 1e-15:
+        return False
+    dx, dy = at[2] - bt[2], at[5] - bt[5]
+    col = (at[4] * dx - at[1] * dy) / det
+    row = (-at[3] * dx + at[0] * dy) / det
+    return abs(col - round(col)) <= 1e-6 and abs(row - round(row)) <= 1e-6
 
 
 def validate_contract(

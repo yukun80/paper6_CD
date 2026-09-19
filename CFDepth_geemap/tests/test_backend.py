@@ -90,3 +90,17 @@ class StatusTests(unittest.TestCase):
         ):
             with self.assertRaises(ValueError):
                 parse_status_histogram(invalid)
+
+
+class GridContractTests(unittest.TestCase):
+    def test_integer_window_shift_is_same_grid(self):
+        from cfdepth.backend import grid_equal
+
+        original = {"crs": "EPSG:4326", "transform": [1, 0, 110, 0, -1, 30]}
+        clipped = {"crs": "EPSG:4326", "transform": [1, 0, 113, 0, -1, 27]}
+        fractional = {"crs": "EPSG:4326", "transform": [1, 0, 113.5, 0, -1, 27]}
+        rotated = {"crs": "EPSG:3857", "transform": [10, 2, 100, 1, -10, 200]}
+        rotated_shift = {"crs": "EPSG:3857", "transform": [10, 2, 126, 1, -10, 172]}
+        self.assertTrue(grid_equal(original, clipped))
+        self.assertFalse(grid_equal(original, fractional))
+        self.assertTrue(grid_equal(rotated, rotated_shift))
