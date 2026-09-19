@@ -1,4 +1,115 @@
-# CFDepth v3.2.1：GEE 分阶段水面求解
+# CFDepth v3.2.1：一次Run自动调度GEE水面求解
+
+## 自动运行（默认）
+
+将完整 `CFDepth_0919.txt` 复制到Code Editor，保留Imports里的洪水影像，
+只在 `getFloodInput()` 中选择影像变量。运行配置独立于数值参数：
+
+```javascript
+var RUN_OPTIONS = {
+  mode:'auto', pollSeconds:30, resume:true,
+  cleanupPreviousStates:true
+};
+```
+
+点击编辑器上方Run一次，脚本会自动提交、等待并推进components → prepare → iterate → final，
+无需再点击Tasks里的Run，也无需修改stage/step。内部仍每阶段10次扫描并保存资产，
+防止多次迭代形成过长的计算图；不是把全部求解塞进一个导出任务。
+两个最终Drive任务按水深、梯度顺序启动，均COMPLETED后才打印
+`COMPLETE: both depth and gradient export tasks COMPLETED.`。
+输出名称、DEM网格、NoData=-9999和梯度m/m单位保持原规则。
+
+**续接当前small验收**：保留所有原数值参数，设置：
+
+```javascript
+assetRoot: 'projects/yukun80/assets',
+runId: 'cfdepth_v321_small',
+fixture: 'small',
+```
+
+已有完整历史序列会先核验，再从最新状态续接；例如已有state_00001和state_00002，
+核验并保存清理授权后删除state_00001，下一轮仍为iterate 3。
+自动模式忽略手填stage/step，按记录的实际序号续接。旧v3.2.1资产网格属性兼容仍生效。
+新实验使用独立runId；若已有同名历史Drive任务却没有调度收据，脚本会停止，
+需核对历史输出后选择独立runId和exportName，不猜测旧文件状态或重复导出。
+
+**页面与中断**：保持页面运行，同一runId只开一个调度页面。浏览器关闭、刷新、休眠
+可能暂停调度；已提交的云端任务继续执行。重新Run可续接，旧页面租约未过期时
+会等待最多约5分钟（默认轮询配置），避免两页同时提交。租约用于检测冲突，
+不应依赖它支持多个页面并发调度同一运行。
+
+脚本自动在原临时目录创建一个空ImageCollection资产 `<runId>_automation_record`，仅将小型JSON记录
+保存在集合属性中；不向其中写影像，也不移动原阶段资产。记录完整运行身份、
+页面租约、当前任务ID/提交意图、最新已核验状态及两个最终导出收据。只更新这份调度记录，
+不改写既有components/prepared/state属性或令牌；不要手动删除此记录来强制重跑。
+resume=false会拒绝已有阶段资产、相关任务或调度记录。
+
+**调度记录接口修复**：旧Folder携带属性的创建方式在用户Code Editor中报
+`Extraneous field(s) present: [properties]`。本地适配器此前错误地接受了该请求，
+不能将已有模拟测试视为云端创建成功。现在先无属性创建空ImageCollection并核对类型，
+再写入属性和回读JSON；完整一致之前不提交任务、不清理state。
+报错分别带有“创建记录资产”“写入记录”“回读记录”前缀，保留原始接口错误。
+
+旧 `<runId>_automation` Folder只读保留，不覆盖、不删除。有效旧JSON通过身份及阶段核验后迁移，
+空Folder不算成功记录，仍须核验完整历史序列。新记录保存固定的旧JSON迁移快照，
+以允许新记录继续推进，同时拒绝旧记录被另一个页面修改；新旧记录无迁移依据却冲突时停止。
+创建完成但写入失败的空集合可在重新Run时续接初始化，损坏JSON不会被当作空记录覆盖。
+遗留Folder存在时资产数会比下面的四项多一项，这是保留历史而非重复计算。
+
+本次继续small无需改运行名或重建阶段：保持`cfdepth_v321_small`、`fixture:'small'`及原参数。
+Run后应显示日志路径`projects/yukun80/assets/cfdepth_v321_small_automation_record`。
+程序先验证新记录的创建、属性写入与回读，再自动推进；该真实接口及全流程仍待用户云端验收。
+
+### 旧迭代资产清理
+
+自动模式默认开启 `cleanupPreviousStates:true`。稳定时只保留：
+
+```text
+<runId>_components
+<runId>_prepared
+<runId>_state_最新实际序号
+<runId>_automation_record
+```
+
+新状态的任务必须COMPLETED，且资产可读取、波段/网格/参数/来源/快照通过核验，
+才更新调度记录中的 `latestState`（step、完整路径、实际资产修订令牌）。
+清理范围保存在 `cleanup`：`through`为授权删除的最高序号，`doneThrough`为已完成的最高序号，
+`pending`为逐项路径与令牌。记录写入并回读一致后，才通过官方
+[deleteAsset](https://developers.google.com/earth-engine/apidocs/ee-data-deleteasset)逐个删除旧state。
+每次删除前重新核对旧state、最新state和静态依赖；不递归删除，不按前缀批量清空。
+新一轮计算及核验期间保留上一轮，清理完成后才推进下一轮或最终导出。
+最终仍保留最新state（含baseS及完整迭代状态），用于验收、续接和检查既有导出收据。
+
+调度记录格式升级为 `cfdepth-auto-2`，数值版本及运行名保持v3.2.1不变。
+已有v1记录或尚无记录的运行，须先通过完整历史序列核验才可迁移；手动删断的历史不会被猜测修复。
+续接允许已记录的清理缺口，最新state缺失、未经授权的缺口、令牌冲突或旧资产重新出现均停止。
+删除响应丢失时重新查询；只有明确不存在才视为完成，权限/网络错误不能当成成功。
+网络错误仍按30/60/120秒重试，失败后暂停；重新Run从待删清单续接，不重算已完成的新状态。
+
+设为 `false` 后不再安排新的删除；此前已写入授权的待删清单会先核对并完成收尾，
+已经删除的旧state无需恢复。`mode:'manual'` 不执行任何自动清理。
+实施本轮代码时未访问云端资产服务或执行删除；用户运行更新后的auto入口时才启用此行为。
+清理节省资产存储，不减少求解迭代或承诺云端计算提速。
+
+### 调度失败与验收
+
+网络查询按30、60、120秒最多重试三次；任务FAILED/CANCELLED立即停止。
+提交结果不确定时只查询保存的任务ID，不重新提交。COMPLETED后资产暂不可见会等待
+最多10次轮询，仍不可见则停止。未知任务历史或歧义也停止，需要先检查Tasks原始错误。
+调度上限由原求解规则推导：默认主目标及4次中点尝试合计最多1000个iterate阶段；
+不放宽任何收敛条件。失败分量仍为NoData，成功导出不等于所有分量收敛。
+
+回到手动排错方式时设置 `RUN_OPTIONS.mode='manual'`，再按下文stage/step表操作；
+不要与自动调度同时运行。本轮代码交付不启动任何用户云端任务。
+
+任务适配对照官方 [startProcessing](https://developers.google.com/earth-engine/apidocs/ee-data-startprocessing)、
+[JavaScript导出参数实现](https://github.com/google/earthengine-api/blob/master/javascript/src/batch.js)
+和 [定时回调](https://developers.google.com/earth-engine/apidocs/ui-util-settimeout)，
+不使用Code Editor私有Task字段或模拟网页点击。真实Code Editor提交及完整自动流程仍须云端验收。
+
+验收顺序：当前small自动续接 → 新runId的small从零运行 → assets只读核验及下载TIFF检查
+→ large → 真实场景。small仍要求415个有效水深像元、水深0.5m、有效梯度0。
+本地任务模拟覆盖故障和恢复，不能替代真实任务提交、Drive写入或性能验证。
 
 入口 `CFDepth_0919.txt` 可整份复制到 Earth Engine Code Editor，顶部仍只需在
 `ee.Image(image4)` 中更换导入变量。生产只使用现有洪水范围和FABDEM。
@@ -116,24 +227,27 @@ var PROBE_ASSETS = {
 };
 ```
 
-assets只读取components、prepared、state_00001和所选状态，不创建任务、不重新展开迭代。
+assets读取components、prepared及所选最新状态，不再要求state_00001存在，不创建任务或删除资产。
+若存在v2调度记录，`PROBE_ASSETS.step`须等于其中latestState的实际序号；探针还会核对
+最新状态令牌、允许的清理缺口、待删项及最终导出收据。已有完整序列的v1记录继续兼容。
 核对保存/恢复波段、网格、区域、来源、版本、参数、快照令牌及状态值。
 若还有status1/2，明确说明最终产品尚未验收；继续通过主入口求解。
 求解结束后重跑assets会检查415个深度像元、0.5m水深及常水面零梯度，
 随后主入口final仍独立执行残差/约束/预算门槛并生成两个导出任务。
 assets组可读合同通过不等于此前每次任务均经过验证；任务历史也须留存。
 
-## 验收记录（2026-09-19）
+## 验收记录（2026-09-20）
 
 | 证据 | 状态 |
 |---|---|
 | 用户提供的v3.1真实GEE日志 | 19 PASS、2 FAIL（混合归约）、1 SKIP；此前坐标/分量/prepare/实际扫描已通过 |
 | v3.2 quick真实GEE日志 | 4 PASS、1 FAIL（分组a权重差异）、0 SKIP |
 | v3.2.1边界修复前quick真实GEE日志 | 4 PASS、1 FAIL（peak 37 vs 27）、0 SKIP |
-| 本轮本地86组测试 | 通过；配置16、投影7、分量15、数值13、共享路径9、几何/调度5、优化8、混合探针断言5、阶段网格8 |
+| 本轮本地136组测试 | 通过；原126组及调度记录接口10组；资产操作为本地模拟 |
+| 自动调度记录真实GEE启动 | 旧Folder创建报Extraneous properties；本轮ImageCollection创建/更新/回读及small自动续接待云端验收 |
 | v3.2.1语法、生成文件同步、SciPy对照 | 通过；独立目标差1.78e-15，最大水面差8.44e-9m |
 | v3.2.1分组真实GEE验收 | 用户报告非assets组均通过；本轮更新后的assets组仍待实际保存/恢复验收 |
-| v3.2.1小/大场景资产保存、恢复、最终产品 | 用户small components已保存，实际DEM网格正确但数组属性缺失；本轮兼容恢复待云端验证，大场景及最终产品未验收 |
+| v3.2.1小/大场景资产保存、恢复、最终产品 | 用户已完成small prepare、iterate 1/2且assets组通过；仍在求解。自动调度、真实删除/续接、最终产品、大场景待云端验收 |
 | 同输入逐阶段性能与美国生产场景 | 待实测；仍要求259026支持像元、5个有效编号及集合一致 |
 
 新增测试复现旧混合归约异常，检查部分掩膜/非对齐边界下字段映射与加权语义；
@@ -197,6 +311,8 @@ exportFolder: 'FloodDepth'    // 最终两个产品的 Google Drive 文件夹，
 脚本在 FABDEM 原网格执行 max 聚合以保留原淹没支持；只有原输入完全可观测且非淹没的
 背景才允许作为干侧样本。输入有效性缺口不视为干岸。
 当前生产网格限定为无旋转、北向上的 EPSG:4326 FABDEM，其他网格明确报错。
+
+以下表格仅用于 `RUN_OPTIONS.mode='manual'`；自动模式自行推进。
 
 | 阶段 | 配置 | 本阶段新建的临时资产 |
 |---|---|---|
@@ -267,8 +383,8 @@ step: 1,
 计算表达式没有自动内容哈希；更改这类 `getFloodInput()` 必须更新 `inputRevision` 并使用新runId。
 FABDEM 在 components 阶段固化，此后读快照，不混用后来的 DEM 集合版本。
 
-临时资产不是最终候选深度或 QA 产品；不会自动清理。确认产品验收后可自行清理
-对应运行前缀。组件矢量化和分组栅格统计仍可能受 GEE 资源限制：如果云端报错，
+临时资产不是最终候选深度或 QA 产品；自动模式按上文策略清理已核验旧state，
+components、prepared、最新state和automation_record保留，旧automation Folder不删除。组件矢量化和分组栅格统计仍可能受 GEE 资源限制：如果云端报错，
 保留最后成功阶段，不能把任务失败解释为已收敛或静默降低分辨率。
 
 ## 算法与参数
@@ -439,13 +555,18 @@ node CFDepth/tests/test_numerics.js
 node CFDepth/tests/test_optimization.js
 node CFDepth/tests/test_mixed_probe.js
 node CFDepth/tests/test_stage_grid.js
+node CFDepth/tests/test_automation.js
+node CFDepth/tests/test_retention.js
+node CFDepth/tests/test_journal.js
 node CFDepth/tests/benchmark_templates.js
 /home/yukun80/miniconda3/envs/hacqi/bin/python CFDepth/tests/check_scipy_reference.py
 ```
 
 测试直接读取入口中的单像元精确最小化、边界权重、梯度和状态转换函数。
 独立二分导数根验证1500组约束；小网格显式边列表与SciPy独立优化复核全局目标和解。
-本地测试不模拟 GEE 的真实掩膜、reduceToVectors 或资产服务，不能替代下列验收。
+本地数组与资产适配器仅近似接口语义，不是真实GEE掩膜、reduceToVectors或资产服务，不能替代下列验收。
+新增保留全部状态/滚动清理对照，核对实际数值扫描的水面、baseS、状态字段、水深与梯度掩膜一致；
+任务模拟另核对阶段顺序及最终导出参数一致。真实small仍须验证删除、页面中断续接与最终TIFF一致性。
 
 统一入口的geometry组覆盖经纬度、历史米制仿射参数、旋转输入、无效掩膜、非法标签和全掩膜。
 topology组覆盖孔洞、对角连通、独立斑块和418像元小场景，使用独立八连通BFS核对。

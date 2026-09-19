@@ -85,6 +85,25 @@ test('in-memory production sweep after exact state repack matches continuous swe
   const continuous=a.solver.sweep(first,a.g.C(0),a.support),restarted=rebuilt.sweep(restored.select('S'),a.g.C(0),a.support);
   assert.deepEqual(restarted.bands,continuous.bands);
 });
+test('rolling state storage preserves numerical sweeps, base solution, depth and gradient masks',()=>{
+  function run(rolling){
+    const a=setup(),g=a.g,base=g.C(99.5).updateMask(a.support).rename('baseS');
+    let S=base.add(ctx.fourColors(g.xy()).eq(0).multiply(.2)).rename('S'),states={};
+    for(let step=1;step<=4;step++){
+      if(step>1)S=states[step-1].select('S');
+      S=a.solver.sweep(S,g.C(0),a.support);
+      states[step]=ctx.packStage(a.ee.Image.cat([S,base,...Array.from(ctx.STATE_FIELDS,name=>g.C(name==='sweeps'?step:0).rename(name))]),'state');
+      if(rolling&&step>1)delete states[step-1];
+    }
+    const last=states[4],depth=last.select('S').subtract(a.D.select('dem'));
+    const valid=a.support.and(depth.gt(cfg.minDepth));
+    return {count:Object.keys(states).length,state:last.bands,depth:depth.updateMask(valid).bands,
+      gradient:a.solver.gradientImages(last.select('S'),valid).gradient.bands};
+  }
+  const all=run(false),rolling=run(true);
+  assert.equal(all.count,4);assert.equal(rolling.count,1);
+  for(const key of ['state','depth','gradient'])assert.deepEqual(rolling[key],all[key]);
+});
 test('acceptance runner collects failures and skips only dependent groups',()=>{
   const cases=fs.readFileSync(path.join(__dirname,'probes/acceptance_cases.js'),'utf8');
   const runner={print(){},PROBE_GROUP:'quick'};

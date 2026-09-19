@@ -9,7 +9,7 @@ var PROBE_ASSETS = {assetRoot: '', runId: 'cfdepth_v321_small', step: 2};
 // BEGIN SHARED PRODUCTION CODE
 /* CFDepth v3.2.1 — GEE Code Editor, imported getFloodInput() (0/1, invalid pixels masked).
  * Read README.md. Stages: components -> prepare -> iterate -> final.
- * Start asset tasks manually; wait for COMPLETED before the next stage.
+ * Auto mode submits and waits for stage tasks. Keep this Code Editor page open.
  * Final products ONLY: CFDepth and CFDepth_WSE_Gradient (m/m, not degrees).
  * Numerical convergence does not establish water-depth accuracy.
  */
@@ -39,6 +39,8 @@ var CONFIG = {
   noData: -9999, tileScale: 4, maxPixels: 1e13
 };
 var VERSION = 'cfdepth-soft-interval-v3.2.1';
+// 调度配置独立于数值参数签名；manual保留原stage/step用法。
+var RUN_OPTIONS = {mode:'auto', pollSeconds:30, resume:true, cleanupPreviousStates:true};
 var EARTH_RADIUS = 6378137;
 var STATE_FIELDS = ['status','attempt','sweeps','stable','prev_primary',
   'prev_total','base_primary','base_mid'];
@@ -226,11 +228,12 @@ function checkAssetPath(path,isImage) {
   return path;
 }
 
-// Code Editor 返回 Image/Folder；同时兼容 REST 的 IMAGE/FOLDER。
+// 兼容Code Editor与REST的影像、文件夹及影像集合类型枚举。
 function requireAssetType(info,path,expected) {
   var actual=info?info.type:undefined;
   var normalized=actual==='Image'||actual==='IMAGE'?'IMAGE':
-    actual==='Folder'||actual==='FOLDER'?'FOLDER':null;
+    actual==='Folder'||actual==='FOLDER'?'FOLDER':
+    actual==='ImageCollection'||actual==='IMAGE_COLLECTION'?'IMAGE_COLLECTION':null;
   if (normalized!==expected)
     throw Error('Asset type mismatch: path='+path+', actual='+JSON.stringify(actual===undefined?null:actual)+', expected='+expected);
 }
@@ -398,6 +401,113 @@ function restoreStageProperties(props,bands,cfg,kind,context,expectedStep,compon
     if(props.region_json!==components.region_json)throw Error(context+': stage region differs from components');
   }
   return restored;
+}
+// 保留策略只记录客户端资产事实，不参与数值签名或求解。
+function autoStageLimit(cfg) {return (1+cfg.muRatios.length)*cfg.maxSweeps/cfg.sweepsPerStage;}
+function emptyStateCleanup() {return {through:0,doneThrough:0,pending:[]};}
+function autoAssetMissing(error) {
+  var message=String(error);
+  return /not found|does not exist/i.test(message)&&!/permission|access|forbidden|unauthoriz/i.test(message);
+}
+function stateRetentionToken(path,info) {
+  var revision=info&&(info.updateTime||info.version);
+  if(!((typeof revision==='string'&&revision.length)||(typeof revision==='number'&&isFinite(revision)&&revision>0)))
+    throw Error('State revision unavailable; refusing retention operation: '+path);
+  return JSON.stringify([path,revision,info.sizeBytes||(info.properties||{})['system:asset_size']||null]);
+}
+function validateRetentionRecord(record,root,cfg) {
+  if(!record||record.schema==='cfdepth-auto-1')return;
+  if(record.schema!=='cfdepth-auto-2')throw Error('Unknown automation journal schema');
+  var latest=record.latestState,cleanup=record.cleanup,paths=stageAssetPaths(root,cfg);
+  function check(entry){
+    if(!entry||typeof entry.step!=='number'||!isFinite(entry.step)||entry.step<1||entry.step%1||entry.step>autoStageLimit(cfg)||
+        entry.path!==paths.state(entry.step)||typeof entry.token!=='string'||!entry.token)
+      throw Error('Invalid retained state path/step/token');
+  }
+  if(latest!==null)check(latest);
+  if(!cleanup||!Array.isArray(cleanup.pending)||typeof cleanup.through!=='number'||
+      typeof cleanup.doneThrough!=='number'||cleanup.doneThrough<0||cleanup.through<cleanup.doneThrough||
+      cleanup.through%1||cleanup.doneThrough%1||!isFinite(cleanup.through)||
+      cleanup.through>(latest?latest.step-1:0)||cleanup.pending.length!==cleanup.through-cleanup.doneThrough)
+    throw Error('Invalid state cleanup authorization');
+  cleanup.pending.forEach(function(entry,i){check(entry);if(entry.step!==cleanup.doneThrough+i+1)throw Error('Non-contiguous cleanup authorization');});
+}
+function autoInventory(assetIds,root,cfg,record) {
+  validateRetentionRecord(record,root,cfg);
+  function canonical(path){return path.replace(/^projects\/earthengine-legacy\/assets\//,'');}
+  var prefix=canonical(root)+'/'+cfg.runId,found={components:false,prepared:false,steps:[]};
+  assetIds.forEach(function(path){var id=canonical(path);
+    if(id===prefix+'_components')found.components=true;
+    else if(id===prefix+'_prepared')found.prepared=true;
+    else if(id.indexOf(prefix+'_state_')===0){
+      var tail=id.slice((prefix+'_state_').length);
+      if(!/^\d{5}$/.test(tail)||Number(tail)<1||Number(tail)>autoStageLimit(cfg))throw Error('Invalid saved state sequence: '+id);
+      found.steps.push(Number(tail));
+    }
+  });
+  found.steps.sort(function(a,b){return a-b;});
+  if((found.prepared&&!found.components)||(found.steps.length&&!found.prepared))throw Error('Stage asset gap before prepared');
+  var modern=record&&record.schema==='cfdepth-auto-2',cleanup=modern?record.cleanup:emptyStateCleanup();
+  var latest=modern&&record.latestState,seen={};
+  found.steps.forEach(function(s){
+    if(seen[s]||s<=cleanup.doneThrough)throw Error('Duplicate or reappeared deleted state: '+s);
+    seen[s]=true;
+  });
+  var highest=found.steps.length?found.steps[found.steps.length-1]:0;
+  if(modern){
+    if(latest&&!seen[latest.step])throw Error('Latest retained state is missing: '+latest.path);
+    var next=record.current&&record.current.stage==='iterate'?record.current.step:0;
+    if(next&&next!==(latest?latest.step:0)+1)throw Error('Current iterate does not follow retained checkpoint');
+    if(highest>Math.max(latest?latest.step:0,next))throw Error('Unrecorded future state');
+  }
+  for(var step=cleanup.through+1;step<=highest;step++)if(!seen[step])throw Error('Stage asset gap at step '+step);
+  found.latestStep=highest;
+  return found;
+}
+// 空ImageCollection仅保存调度JSON；旧Folder只读保留。创建与属性写入分开核验。
+function createAutomationStore(data,root,cfg,identity) {
+  var path=root+'/'+cfg.runId+'_automation_record',legacyPath=root+'/'+cfg.runId+'_automation';
+  function guarded(label,fn){try{return fn();}catch(e){throw Error(label+' ['+path+']: '+String(e));}}
+  function optional(id){try{return data.getAsset(id);}catch(e){if(autoAssetMissing(e))return null;throw e;}}
+  function parse(info,id,type){
+    if(!info)return null;
+    requireAssetType(info,id,type);
+    var props=info.properties||{};
+    if(props.automation_json===undefined)return null;
+    if(typeof props.automation_json!=='string')throw Error('Invalid automation JSON property: '+id);
+    var record=JSON.parse(props.automation_json);
+    if(!record||['cfdepth-auto-1','cfdepth-auto-2'].indexOf(record.schema)<0||!record.exports||
+        typeof record.identity!=='string'||(identity!==undefined&&record.identity!==identity))
+      throw Error('Automation journal identity/schema mismatch: '+id);
+    validateRetentionRecord(record,root,cfg);return record;
+  }
+  function inspect(){return guarded('回读记录',function(){
+    var info=optional(path),oldInfo=optional(legacyPath);
+    var current=parse(info,path,'IMAGE_COLLECTION'),legacy=parse(oldInfo,legacyPath,'FOLDER');
+    var oldJSON=legacy?JSON.stringify(legacy):'',marker=info?(info.properties||{}).legacy_automation_json:undefined;
+    // 标记固定迁移时的旧记录，允许新记录正常推进，但旧记录再变化必须停止。
+    if(marker!==undefined&&(typeof marker!=='string'||marker!==oldJSON))throw Error('Legacy automation record changed/conflicts');
+    if(current&&legacy&&marker===undefined&&JSON.stringify(current)!==oldJSON)
+      throw Error('New and legacy automation records conflict');
+    if(!current&&marker!==undefined)throw Error('Incomplete automation record with migration marker');
+    return {info:info,current:current,legacy:legacy,oldJSON:oldJSON};
+  });}
+  function write(record){
+    var snapshot=inspect(),encoded=JSON.stringify(record);
+    if(record.identity!==identity)throw Error('写入记录: automation identity mismatch');
+    validateRetentionRecord(record,root,cfg);
+    if(!snapshot.info)guarded('创建记录资产',function(){
+      data.createAsset({type:'ImageCollection'},path,false);
+      requireAssetType(data.getAsset(path),path,'IMAGE_COLLECTION');
+    });
+    guarded('写入记录',function(){
+      data.setAssetProperties(path,{automation_json:encoded,legacy_automation_json:snapshot.oldJSON});
+    });
+    var confirmed=inspect();
+    if(!confirmed.current||JSON.stringify(confirmed.current)!==encoded)
+      throw Error('回读记录 ['+path+']: Journal readback mismatch');
+  }
+  return {path:path,read:function(){var s=inspect();return s.current||s.legacy;},write:write};
 }
 function validateGrouping(names,methods,context) {
   if (!names.length||names.length!==methods.length) throw Error(context+': grouped reducer arity mismatch');
@@ -1314,7 +1424,7 @@ runCheck('saved_stage_contracts',[],function(){
   var paths=stageAssetPaths(cfg.assetRoot,cfg),metadata={};
   function token(path){if(!metadata[path])metadata[path]=ee.data.getAsset(path);var m=metadata[path];return JSON.stringify([path,m.updateTime||m.startTime||'',m.sizeBytes||'']);}
   var loaded=[];
-  [[paths.components,'components',undefined],[paths.prepared,'prepared',0],[paths.state(1),'state',1],[paths.state(cfg.step),'state',cfg.step]].forEach(function(item){
+  [[paths.components,'components',undefined],[paths.prepared,'prepared',0],[paths.state(cfg.step),'state',cfg.step]].forEach(function(item){
     var image=ee.Image(item[0]),info=image.getInfo(),props=info.properties;
     var components=loaded.length?loaded[0].props:undefined;
     if(components)components.component_token=token(paths.components);
@@ -1324,7 +1434,7 @@ runCheck('saved_stage_contracts',[],function(){
     loaded.push({image:image,props:props});
   });
   var props=loaded[0].props,gr=validatedGrid({crs:props.grid_crs,transform:props.grid_transform},'assets',true),region=ee.Geometry(JSON.parse(props.region_json));
-  var solver=createGEESolver(loaded[0].image,gr,region,cfg,ee,loaded[1].image),state=loaded[3].image;
+  var solver=createGEESolver(loaded[0].image,gr,region,cfg,ee,loaded[1].image),state=loaded[2].image;
   var invalidState=state.neq(state).or(state.abs().gte(1e11)).reduce(ee.Reducer.max())
     .or(state.mask().reduce(ee.Reducer.min()).eq(0)).unmask(1).updateMask(loaded[0].image.select('support'));
   var observed=ee.Dictionary({rows:solver.diagnostics(state.select('S'),solver.muFor(state),state).toList(5),
@@ -1342,6 +1452,40 @@ runCheck('saved_stage_contracts',[],function(){
     nearValue(maxValue(result.depth.subtract(.5).abs(),g),0,1e-7,'Saved fixture depth');
     nearValue(maxValue(result.gradient.abs(),g),0,1e-10,'Saved fixture flat gradient');
     print('Final products from saved state passed; no tasks created.');
+  }
+  // 自动调度记录可选；验收入口只读取，绝不启动任务或更新记录。
+  var journal=createAutomationStore(ee.data,cfg.assetRoot,cfg).read();
+  if(journal){
+    assertProbe(['cfdepth-auto-1','cfdepth-auto-2'].indexOf(journal.schema)>=0,'Unknown automation journal');
+    var identity=JSON.parse(journal.identity);
+    assertProbe(identity.version===VERSION&&identity.signature===configSignature(cfg)&&identity.runId===cfg.runId&&
+      identity.source==='synthetic-small-'+VERSION&&identity.root===cfg.assetRoot,'Automation journal source/config mismatch');
+    validateRetentionRecord(journal,cfg.assetRoot,cfg);
+    if(journal.schema==='cfdepth-auto-2'){
+      assertProbe(journal.latestState&&journal.latestState.step===cfg.step,'Set PROBE_ASSETS.step to journal.latestState.step');
+      assertProbe(journal.latestState.token===stateRetentionToken(paths.state(cfg.step),ee.data.getAsset(paths.state(cfg.step))),
+        'Latest retained state token mismatch');
+    }
+    var assetIds=[],page;
+    do{
+      var listing=ee.data.listAssets(cfg.assetRoot,{pageSize:1000,pageToken:page});
+      (listing.assets||[]).forEach(function(a){assetIds.push(a.id||a.name);});page=listing.nextPageToken;
+    }while(page);
+    autoInventory(assetIds,cfg.assetRoot,cfg,journal);
+    if(journal.schema==='cfdepth-auto-2')journal.cleanup.pending.forEach(function(entry){
+      var info;try{info=ee.data.getAsset(entry.path);}catch(error){if(autoAssetMissing(error))return;throw error;}
+      assertProbe(entry.token===stateRetentionToken(entry.path,info),'Pending old state token mismatch');
+      var raster=ee.Image(entry.path).getInfo();
+      restoreStageProperties(raster.properties,raster.bands,cfg,'state','pending cleanup probe',entry.step,
+        loaded[0].props,token(paths.prepared));
+    });
+    print('Automation journal (read only):',journal);
+    if(journal.complete){
+      assertProbe(!journal.current&&journal.exports.depth&&journal.exports.gradient,'Missing completed export receipts');
+      var tasks=ee.data.getTaskStatus([journal.exports.depth.id,journal.exports.gradient.id]);
+      assertProbe(tasks.length===2&&tasks.every(function(t){return t.state==='COMPLETED';}),'Final export task history not confirmed');
+      print('Both automatic export tasks COMPLETED; downloaded GeoTIFFs still require product inspection.');
+    }
   }
 });
 print('CFDepth v3.2.1 selected-group summary (no asset tasks):',acceptanceResults);

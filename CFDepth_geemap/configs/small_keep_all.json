@@ -1,0 +1,13 @@
+{
+  "project": "yukun80",
+  "run_id": "cfdepth_py321_small_keepall_01",
+  "asset_root": "projects/yukun80/assets",
+  "flood_asset": null,
+  "fixture": "small",
+  "run_root": "CFDepth_geemap/runs",
+  "output_root": "CFDepth_geemap/outputs",
+  "poll_seconds": 10,
+  "cleanup_previous_states": false,
+  "download_threads": 2,
+  "parameters": {}
+}

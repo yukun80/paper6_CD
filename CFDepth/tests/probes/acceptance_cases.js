@@ -333,7 +333,7 @@ runCheck('saved_stage_contracts',[],function(){
   var paths=stageAssetPaths(cfg.assetRoot,cfg),metadata={};
   function token(path){if(!metadata[path])metadata[path]=ee.data.getAsset(path);var m=metadata[path];return JSON.stringify([path,m.updateTime||m.startTime||'',m.sizeBytes||'']);}
   var loaded=[];
-  [[paths.components,'components',undefined],[paths.prepared,'prepared',0],[paths.state(1),'state',1],[paths.state(cfg.step),'state',cfg.step]].forEach(function(item){
+  [[paths.components,'components',undefined],[paths.prepared,'prepared',0],[paths.state(cfg.step),'state',cfg.step]].forEach(function(item){
     var image=ee.Image(item[0]),info=image.getInfo(),props=info.properties;
     var components=loaded.length?loaded[0].props:undefined;
     if(components)components.component_token=token(paths.components);
@@ -343,7 +343,7 @@ runCheck('saved_stage_contracts',[],function(){
     loaded.push({image:image,props:props});
   });
   var props=loaded[0].props,gr=validatedGrid({crs:props.grid_crs,transform:props.grid_transform},'assets',true),region=ee.Geometry(JSON.parse(props.region_json));
-  var solver=createGEESolver(loaded[0].image,gr,region,cfg,ee,loaded[1].image),state=loaded[3].image;
+  var solver=createGEESolver(loaded[0].image,gr,region,cfg,ee,loaded[1].image),state=loaded[2].image;
   var invalidState=state.neq(state).or(state.abs().gte(1e11)).reduce(ee.Reducer.max())
     .or(state.mask().reduce(ee.Reducer.min()).eq(0)).unmask(1).updateMask(loaded[0].image.select('support'));
   var observed=ee.Dictionary({rows:solver.diagnostics(state.select('S'),solver.muFor(state),state).toList(5),
@@ -361,6 +361,40 @@ runCheck('saved_stage_contracts',[],function(){
     nearValue(maxValue(result.depth.subtract(.5).abs(),g),0,1e-7,'Saved fixture depth');
     nearValue(maxValue(result.gradient.abs(),g),0,1e-10,'Saved fixture flat gradient');
     print('Final products from saved state passed; no tasks created.');
+  }
+  // 自动调度记录可选；验收入口只读取，绝不启动任务或更新记录。
+  var journal=createAutomationStore(ee.data,cfg.assetRoot,cfg).read();
+  if(journal){
+    assertProbe(['cfdepth-auto-1','cfdepth-auto-2'].indexOf(journal.schema)>=0,'Unknown automation journal');
+    var identity=JSON.parse(journal.identity);
+    assertProbe(identity.version===VERSION&&identity.signature===configSignature(cfg)&&identity.runId===cfg.runId&&
+      identity.source==='synthetic-small-'+VERSION&&identity.root===cfg.assetRoot,'Automation journal source/config mismatch');
+    validateRetentionRecord(journal,cfg.assetRoot,cfg);
+    if(journal.schema==='cfdepth-auto-2'){
+      assertProbe(journal.latestState&&journal.latestState.step===cfg.step,'Set PROBE_ASSETS.step to journal.latestState.step');
+      assertProbe(journal.latestState.token===stateRetentionToken(paths.state(cfg.step),ee.data.getAsset(paths.state(cfg.step))),
+        'Latest retained state token mismatch');
+    }
+    var assetIds=[],page;
+    do{
+      var listing=ee.data.listAssets(cfg.assetRoot,{pageSize:1000,pageToken:page});
+      (listing.assets||[]).forEach(function(a){assetIds.push(a.id||a.name);});page=listing.nextPageToken;
+    }while(page);
+    autoInventory(assetIds,cfg.assetRoot,cfg,journal);
+    if(journal.schema==='cfdepth-auto-2')journal.cleanup.pending.forEach(function(entry){
+      var info;try{info=ee.data.getAsset(entry.path);}catch(error){if(autoAssetMissing(error))return;throw error;}
+      assertProbe(entry.token===stateRetentionToken(entry.path,info),'Pending old state token mismatch');
+      var raster=ee.Image(entry.path).getInfo();
+      restoreStageProperties(raster.properties,raster.bands,cfg,'state','pending cleanup probe',entry.step,
+        loaded[0].props,token(paths.prepared));
+    });
+    print('Automation journal (read only):',journal);
+    if(journal.complete){
+      assertProbe(!journal.current&&journal.exports.depth&&journal.exports.gradient,'Missing completed export receipts');
+      var tasks=ee.data.getTaskStatus([journal.exports.depth.id,journal.exports.gradient.id]);
+      assertProbe(tasks.length===2&&tasks.every(function(t){return t.state==='COMPLETED';}),'Final export task history not confirmed');
+      print('Both automatic export tasks COMPLETED; downloaded GeoTIFFs still require product inspection.');
+    }
   }
 });
 print('CFDepth v3.2.1 selected-group summary (no asset tasks):',acceptanceResults);

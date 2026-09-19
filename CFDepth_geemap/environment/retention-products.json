@@ -1,0 +1,1 @@
+{"passed":true,"result":{"CFDepth.tif":{"different_float32_values":0,"grid_and_masks_equal":true,"max_absolute_difference":0.0,"original_small_tolerance":1e-07},"CFDepth_WSE_gradient.tif":{"different_float32_values":145,"grid_and_masks_equal":true,"max_absolute_difference":7.019814667127576e-16,"original_small_tolerance":1e-10}}}
