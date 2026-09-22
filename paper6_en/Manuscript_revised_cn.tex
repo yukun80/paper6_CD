@@ -94,7 +94,7 @@
 \hypersetup{
   hidelinks,
   pdftitle = {HarmoSSM 双时相 SAR 洪水变化检测及新增淹没范围内的水深估算},
-  pdfauthor = {Yukun Fan, Zhongqi Shi, Hong Zhang, Yuzhou Liu, Mingyang Song, Yazhe Xie, Yixian Tang}
+  pdfauthor = {}
 }
 
 \makeatletter
@@ -104,6 +104,8 @@
 \setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
 
 \newcommand{\paperlang}[2]{#2}
+% 本轮修改的临时蓝色标注宏：定稿时删除本宏并解开所有 \revblue{...} 即可还原。
+\newcommand{\revblue}[1]{\textcolor{blue}{#1}}
 \journal{Remote Sensing of Environment}
 
 \begin{document}
@@ -115,55 +117,10 @@
 
 \title{DDFlood: From Bi-Temporal SAR Flood Change Detection to DEM-Constrained Depth Estimation}
 
-\author[inst1,inst2,inst3]{Yukun Fan}
-\author[inst4,inst5]{Zhongqi Shi}
-\author[inst2,inst1,inst3]{Hong Zhang\corref{cor1}}
-\ead{zhanghong@radi.ac.cn}
-\author[inst4,inst5]{Yuzhou Liu}
-\author[inst1,inst2,inst3]{Mingyang Song}
-\author[inst1,inst2,inst3]{Yazhe Xie}
-\author[inst1,inst2,inst3]{Yixian Tang}
-
-\cortext[cor1]{Corresponding author}
-
-\affiliation[inst1]{
-  organization={Key Laboratory of Digital Earth Science, Aerospace Information Research Institute, Chinese Academy of Sciences},
-  city={Beijing},
-  postcode={100094},
-  country={China}
-}
-
-\affiliation[inst2]{
-  organization={International Research Center of Big Data for Sustainable Development Goals},
-  city={Beijing},
-  postcode={100094},
-  country={China}
-}
-
-\affiliation[inst3]{
-  organization={University of Chinese Academy of Sciences},
-  city={Beijing},
-  postcode={100049},
-  country={China}
-}
-
-\affiliation[inst4]{
-  organization={Shenzhen Technology Institute of Urban Public Safety},
-  city={Shenzhen},
-  postcode={518000},
-  country={China}
-}
-
-\affiliation[inst5]{
-  organization={Urban Safety Development Institute of Science and Technology (Shenzhen)},
-  city={Shenzhen},
-  state={Guangdong},
-  postcode={518023},
-  country={China}
-}
+\author{}
 
 \begin{abstract}
-快速洪灾评估需要同时掌握新增淹没范围和水深信息。合成孔径雷达（SAR）能够在恶劣天气下观测地表，但复杂地表背景会改变洪水引起的变化响应，单一差分特征难以稳定描述双时相变化。现有变化检测方法和边界约束估深方法分别在范围识别和水深估计方面取得进展，但检测结果与估深范围之间缺少稳定的空间衔接，两类信息往往独立形成。为此，本文提出DDFlood，一个连接变化检测和水深估计的两阶段洪水制图框架，将HarmoSSM输出的新增洪水范围直接作为CFDepth的估深支撑域，使范围检测和水深估计共享同一空间范围。HarmoSSM通过成对协调（HA）和变化查询交互（CQI）联合灾前灾后状态、有向差和绝对差组织变化证据，并由全尺度状态空间变化解码器（OSCD）结合区域上下文与浅层细节重建洪水范围。CFDepth在该支撑域内以外侧和内侧边界为候选，通过坡度和局部高程一致性建立地形参照，构建固定水面锚点，并利用区域内传播和连续性细化输出一阶水深。郑州、涿州和广西的检测结果表明，HarmoSSM取得的IoU分别为61.51\%、77.83\%和81.79\%，F1分别为76.17\%、87.53\%和89.98\%，各项重叠指标均高于对比方法。消融实验表明，HA、CQI和OSCD的组合在三地均取得最高IoU和F1。Brazos水深比较表明，CFDepth的正水深覆盖为94.570\%，FwDET为46.650\%，共同有效像元的MAE分别为0.828 m和1.099 m，RMSE分别为1.100 m和1.359 m。结果表明，DDFlood能够在统一空间范围内同时提供洪水范围与受淹程度信息，为快速洪灾评估提供水平分布和垂向水深依据。
+快速洪灾评估需要同时掌握新增淹没范围和水深信息。合成孔径雷达（SAR）能够在恶劣天气下观测地表，但复杂地表背景会改变洪水引起的变化响应，单一差分特征难以稳定描述双时相变化。现有变化检测方法和边界约束估深方法分别在范围识别和水深估计方面取得进展，但检测结果与估深范围之间缺少稳定的空间衔接，两类信息往往独立形成。为此，本文提出DDFlood，一个连接变化检测和水深估计的两阶段洪水制图框架，将HarmoSSM输出的新增洪水范围直接作为CFDepth的估深支撑域，使范围检测和水深估计共享同一空间范围。HarmoSSM通过成对协调（HA）和变化查询交互（CQI）联合灾前灾后状态、有向差和绝对差组织变化证据，并由全尺度状态空间变化解码器（OSCD）结合区域上下文与浅层细节重建洪水范围。CFDepth在该支撑域内以外侧和内侧边界为候选，通过坡度和局部高程一致性建立地形参照，构建固定水面锚点，并利用区域内传播和连续性细化输出一阶水深。郑州、涿州和广西的检测结果表明，HarmoSSM取得的IoU分别为61.51\%、77.83\%和81.79\%，F1分别为76.17\%、87.53\%和89.98\%，各项重叠指标均高于对比方法。消融实验表明，HA、CQI和OSCD的组合在三地均取得最高IoU和F1。Brazos水深比较表明，CFDepth的正水深覆盖为\revblue{94.57\%}，FwDET为\revblue{46.65\%}，共同有效像元的MAE分别为\revblue{0.5900 m和0.8680 m}，RMSE分别为\revblue{0.7256 m和1.0555 m，中值水面高程梯度分别为3.73‰和28.87‰}。结果表明，DDFlood能够在统一空间范围内同时提供洪水范围与受淹程度信息，为快速洪灾评估提供水平分布和垂向水深依据。
 \end{abstract}
 
 \begin{keyword}
@@ -233,7 +190,7 @@ SAR 洪水变化检测 \sep 双时相遥感 \sep 复杂景观 \sep 多尺度表�
 
 本文构建从洪水范围检测到水深估算的两阶段制图框架DDFlood，包括HarmoSSM变化检测和CFDepth水深估算两个阶段（图~\ref{fig:framework}）。配准的灾前、灾后SAR影像记为\(\mathbf I^A\)和\(\mathbf I^B\)，HarmoSSM据此输出新增洪水掩膜\(\hat{\mathbf M}\)。地形高程\(Z\)由DEM提供，CFDepth以\(\hat{\mathbf M}\)和\(Z\)为输入，在检测范围内估计水深\(\hat d\)。HarmoSSM描述洪水的水平分布，CFDepth进一步描述检测区域内的受淹程度。
 
-信息流依次经过变化编码、空间重建和地形约束估深。HarmoSSM首先通过协调变化编码器（Harmonized Change Encoder，HCE）提取共享CNN--FPN特征，并融合冻结DINOv3语义特征；HA协调双时相特征，CQI联合前后状态及差异信息，形成五级变化特征\(D_1\)--\(D_5\)。OSCD以\(D_3\)--\(D_5\)建立区域上下文，再结合\(D_2\)、\(D_1\)恢复局部位置，输出像元级洪水范围\(\hat{\mathbf M}\)。CFDepth随后依次执行范围与地形对齐、边界筛选与锚点构建、水面初始化和连续性细化，并由水面高程减去地形高程得到水深。检测器和估深过程由掩膜衔接，CFDepth使用检测结果定义估深范围。
+信息流依次经过变化编码、空间重建和地形约束估深。HarmoSSM首先通过协调变化编码器（Harmonized Change Encoder，HCE）提取共享CNN--FPN特征，并融合冻结DINOv3语义特征；HA协调双时相特征，CQI联合前后状态及差异信息，形成五级变化特征\(D_1\)--\(D_5\)。OSCD以\(D_3\)--\(D_5\)建立区域上下文，再结合\(D_2\)、\(D_1\)恢复局部位置，输出像元级洪水范围\(\hat{\mathbf M}\)。\revblue{分类头同时输出每个像元的前景概率\(p_f\)，该概率由softmax直接得到，不需要额外计算；洪水掩膜\(\hat{\mathbf M}\)由\(p_f\)与判决阈值比较得到。\(p_f\)表示检测器认为该像元属于新增淹没的确定程度，在支撑区内部和边界位置形成逐像元的置信信息，使检测阶段除洪水范围外还给出检测结果的可靠性描述。}CFDepth随后依次执行范围与地形对齐、边界筛选与锚点构建、水面初始化和连续性细化，并由水面高程减去地形高程得到水深。检测器和估深过程由掩膜衔接，CFDepth使用检测结果定义估深范围。
 
 \begin{figure}[H]
   \centering
@@ -386,7 +343,7 @@ CQI接收HA输出的\(\mathbf X_i^A\)和\(\mathbf X_i^B\)，在同一尺度内�
   \operatorname{Up}(\mathbf{R}_{2}),\rho_{1}^{d}(\mathbf{D}_{1})
   \right].
 \end{equation}
-其中\(\rho_i^d\)为细节投影，\(\mathcal R_i\)为对应层级的卷积重建映射。分类头将\(\mathbf R_1\)映射为二分类结果，经双线性插值恢复至输入尺寸，再由softmax和选定阈值生成洪水掩膜\(\hat{\mathbf M}\)。
+其中\(\rho_i^d\)为细节投影，\(\mathcal R_i\)为对应层级的卷积重建映射。分类头将\(\mathbf R_1\)映射为二分类结果，经双线性插值恢复至输入尺寸，再由softmax和选定阈值生成洪水掩膜\(\hat{\mathbf M}\)。\revblue{除二值掩膜外，同一softmax输出给出每个像元的前景概率\(p_f\)，无需额外计算。整景推理时，\(p_f\)在重叠区按有效像元加权累积并用于整景拼接，再依据跨切片的概率波动与阈值投票比例剔除不稳定斑块，使拼接后的二值结果在不同切片之间保持一致。}
 
 \subsection{Change-Defined Flood Depth Estimation}\label{sec:cfdepth}
 
@@ -541,7 +498,7 @@ CFDepth将检测掩膜以最大值聚合映射至DEM网格，并与有效地形�
  \Omega_r=\{p:\ d_r(p)>0.01\,\mathrm{m},\ d_r(p)\text{ finite}\},\qquad
  R_j=100\frac{|V_j|}{|\Omega_r|},
 \end{equation}
-其中\(d_r\)为参考水深，\(V_j=\{p\in\Omega_r:d_j(p)>0.01\,\mathrm m,\ d_j(p)\text{ finite}\}\)。CFDepth与FwDET的MAE、RMSE、Bias、Pearson相关系数平方\(r^2\)及Nash--Sutcliffe效率系数（NSE）在\(V_{\mathrm{CFDepth}}\cap V_{\mathrm{FwDET}}\)内计算；Bias以预测减参考为正方向，NSE以参考均值预测为基准。NoData不替换为零，覆盖比例和误差使用各自的统计域。
+其中\(d_r\)为参考水深，\(V_j=\{p\in\Omega_r:d_j(p)>0.01\,\mathrm m,\ d_j(p)\text{ finite}\}\)。\revblue{CFDepth与FwDET的MAE和RMSE在\(V_{\mathrm{CFDepth}}\cap V_{\mathrm{FwDET}}\)内计算。}NoData不替换为零，覆盖比例和误差使用各自的统计域。
 
 \FloatBarrier
 \arrayrulecolor{black}
@@ -636,18 +593,20 @@ CFDepth将检测掩膜以最大值聚合映射至DEM网格，并与有效地形�
 \subsection{Conditional Depth Evaluation in Brazos}
 \suppressfloats[t]
 
-Brazos评价用于考察给定支撑条件下水深重建与参考产品之间的对应关系。图~\ref{fig:depth_brazos}(a)中，CFDepth和FwDET均呈现空间变化的水深分布，FwDET在区域内部存在较大未解析部分；图~\ref{fig:depth_brazos}(c)显示两种方法在不同位置同时出现高估和低估。按照第~\ref{sec:experiment_metrics}节的协议，输出覆盖在参考域内统计，水深误差在两种方法共同有效的位置计算，分别评价水深输出的完整性和共同有效位置的误差。
+\revblue{Brazos评价用于考察给定支撑条件下水深重建与参考产品之间的对应关系。图~\ref{fig:depth_brazos}给出CFDepth与FwDET在Brazos区的对比结果：图~\ref{fig:depth_brazos}(a)为水深空间分布和有效水深比例，图~\ref{fig:depth_brazos}(b)为水面高程（water surface elevation, WSE）梯度的累积分布，图~\ref{fig:depth_brazos}(c)为水深误差分布和参考水深分布。按照第~\ref{sec:experiment_metrics}节的协议，输出覆盖在参考域内统计，水深误差在两种方法共同有效的像元上计算，分别衡量水深输出的完整性和共同有效位置的误差。参考域包含14,985个参考水深大于0.01~m的像元，两种方法共同有效的像元为2,678个。}
 
 \begin{figure*}[htbp]
   \centering
   \includegraphics[width=\textwidth,height=.50\textheight,keepaspectratio]{figure/Figure11.jpg}
-  \caption{Brazos区域水深空间误差与定量比较：（a）空间水深图；（b）估计值与参考值散点密度；（c）水深误差图；（d）WSE梯度累积分布；（e）覆盖率与精度指标。}
+  \caption{\revblue{Brazos区域水深空间分布与定量比较：（a）水深空间分布与有效水深比例；（b）水面高程梯度累积分布；（c）水深误差分布与参考水深分布。}}
   \label{fig:depth_brazos}
 \end{figure*}
 
-CFDepth在该基准上同时取得较高的输出覆盖和较低的共同域误差。图~\ref{fig:depth_brazos}(b)、(e)中，CFDepth的有效水深比例为94.570\%，FwDET为46.650\%，相差47.920个百分点；MAE分别为0.828和1.099~m，RMSE分别为1.100和1.359~m，对应绝对差值为0.271和0.259~m。以预测减参考定义的Bias分别为$-0.139$和$-0.895$~m，两者均存在总体低估，CFDepth的平均偏差幅度较小。图中Bias柱状值0.139和0.895~m表示偏差幅值，符号以散点面板所列统计为准。覆盖比例和共同域误差共同说明，CFDepth能够提供更完整的正水深输出，并在可比位置降低平均误差。
+\revblue{CFDepth在该基准上的主要优势是输出覆盖更完整。图~\ref{fig:depth_brazos}(a)中，CFDepth的有效水深比例为94.57\%，FwDET为46.65\%，两者相差47.92个百分点，CFDepth约为FwDET的2.03倍。这一差异来自两种方法组织边界约束的方式：FwDET直接由边界水位向区域内部赋值，边界不可用或质量较低的位置保留为未解析区域；CFDepth先按坡度上限和局部高程一致性筛选边界样本，再以锚点在支撑区内传播，并用地形下界\(Z+d_{\min}\)保证水面不低于地面，因此支撑区内有更多位置获得正水深。该结果表明，在给定检测支撑的条件下，CFDepth能够为大部分受淹位置提供水深值。}
 
-图~\ref{fig:depth_brazos}(b)中的散点分布和统计指标进一步反映两种产品的空间对应关系。CFDepth和FwDET的Pearson相关系数平方分别为0.072和0.052，NSE分别为$-1.014$和$-2.032$。在当前共同有效域内，点对点水深仍存在较大空间变化，CFDepth的总体误差和输出覆盖仍优于FwDET。结合图~\ref{fig:depth_brazos}(d)中较小的WSE梯度，Brazos结果说明CFDepth能够在给定支撑和地形条件下生成覆盖更完整、平均误差更低且空间连续性较好的水深产品。
+\revblue{共同有效像元上的误差统计进一步支持这一结果。图~\ref{fig:depth_brazos}(c)中，在2,678个共同有效像元上，CFDepth的MAE为0.5900~m，FwDET为0.8680~m，RMSE分别为0.7256~m和1.0555~m，相应降低0.2780~m（32.0\%）和0.3299~m（31.3\%）。误差均值为0.5684~m和0.8577~m，标准差为0.4511~m和0.6152~m，CFDepth的误差分布更集中。以参考水深作为尺度参照，其均值为1.1126~m，中位数为0.9423~m，标准差为0.7646~m，CFDepth的MAE小于参考水深的标准差。误差下降与锚点约束有关：水面锚点由内外边界配对的地形中位数和地形下界共同确定，同一淹没连通区共享同一水面参照，减少了远离边界位置对局部边界水位的依赖，从而抑制大偏差。}
+
+\revblue{水面连续性显示CFDepth的水深场更平稳。图~\ref{fig:depth_brazos}(b)中，CFDepth的中值WSE梯度为3.73‰，FwDET为28.87‰，后者约为前者的7.7倍；CFDepth的累积分布曲线在较小梯度处更快上升，说明相邻像元之间的水面高程变化更小。这与CFDepth在固定锚点和地形下界约束下按邻域均值细化的过程一致。综合覆盖、误差和梯度三项结果可以看出，CFDepth在Brazos参考域内提供了覆盖更完整、误差更低且水面更连续的水深产品。该结果说明，将HarmoSSM检测出的新增淹没范围直接作为CFDepth的支撑域是可行的：范围检测确定水深计算的空间边界，地形约束的估深方法在该边界内重建水面，两者共同给出洪水范围与受淹程度信息，为快速洪灾评估提供水平分布和垂向水深的统一依据。}
 
 \FloatBarrier
 
@@ -661,9 +620,9 @@ CFDepth在该基准上同时取得较高的输出覆盖和较低的共同域误�
 
 \subsection{Boundary-Constrained Depth Estimation}
 
-CFDepth在检测范围内提供了覆盖完整且空间连续的水深结果。图~\ref{fig:depth_overview}(b)中，郑州、涿州和广西的CFDepth有效水深比例分别为93.89\%、91.70\%和94.11\%，均高于FwDET；图~\ref{fig:depth_overview}(c)中，CFDepth的WSE梯度更集中在较小值，说明固定锚点和邻域细化减小了水面跳变。Brazos条件比较进一步显示，CFDepth的正水深覆盖为94.570\%，FwDET为46.650\%；共同有效像元上的MAE为0.828~m和1.099~m，RMSE为1.100~m和1.359~m，Bias为$-0.139$~m和$-0.895$~m。边界筛选、锚点约束和地形下界共同提高了输出覆盖，并降低了总体水深误差。
+CFDepth在检测范围内提供了覆盖完整且空间连续的水深结果。图~\ref{fig:depth_overview}(b)中，郑州、涿州和广西的CFDepth有效水深比例分别为93.89\%、91.70\%和94.11\%，均高于FwDET；图~\ref{fig:depth_overview}(c)中，CFDepth的WSE梯度更集中在较小值，说明固定锚点和邻域细化减小了水面跳变。\revblue{Brazos条件比较进一步显示，CFDepth的正水深覆盖为94.57\%，FwDET为46.65\%；共同有效像元上的MAE为0.5900~m和0.8680~m，RMSE为0.7256~m和1.0555~m。}边界筛选、锚点约束和地形下界共同提高了输出覆盖，并降低了总体水深误差。
 
-CFDepth与FwDET的差异主要来自约束组织方式。FwDET以边界水位为基础快速赋值，在缺少边界或边界质量较低时容易形成较大的未解析区域\citep{cohen2019floodwater}。CFDepth先筛选坡度和局部高程一致的边界样本，再以固定锚点初始化水面，并在支撑区内进行连续性细化。该流程与FLEXTH、RS-FloodXDepth等边界约束估深方法共享利用地形和边界高程的基本思路\citep{betterle2024water,tian2026floodxdepth}，重点在于对新增淹没范围内的边界样本进行稳定化处理。Brazos中较低的\(r^2\)和负NSE表明点对点水深仍存在空间变化，而覆盖和总体误差结果说明CFDepth适合提供范围完整的一阶水深信息。
+CFDepth与FwDET的差异主要来自约束组织方式。FwDET以边界水位为基础快速赋值，在缺少边界或边界质量较低时容易形成较大的未解析区域\citep{cohen2019floodwater}。CFDepth先筛选坡度和局部高程一致的边界样本，再以固定锚点初始化水面，并在支撑区内进行连续性细化。该流程与FLEXTH、RS-FloodXDepth等边界约束估深方法共享利用地形和边界高程的基本思路\citep{betterle2024water,tian2026floodxdepth}，重点在于对新增淹没范围内的边界样本进行稳定化处理。\revblue{在共同有效像元上，CFDepth的中值WSE梯度为3.73‰，FwDET为28.87‰，后者约为前者的7.7倍，说明锚点约束和连续性细化在降低平均误差的同时保持了更平稳的水面，CFDepth适合提供范围完整的一阶水深信息。}
 
 \subsection{Applicability and Future Work}
 

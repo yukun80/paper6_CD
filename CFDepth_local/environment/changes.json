@@ -1,0 +1,26 @@
+{
+  "cfdepth-local": {
+    "before": null,
+    "after": "1.0.0"
+  },
+  "colorama": {
+    "before": null,
+    "after": "0.4.6"
+  },
+  "iniconfig": {
+    "before": null,
+    "after": "2.3.0"
+  },
+  "pluggy": {
+    "before": null,
+    "after": "1.6.0"
+  },
+  "Pygments": {
+    "before": null,
+    "after": "2.21.0"
+  },
+  "pytest": {
+    "before": null,
+    "after": "9.1.1"
+  }
+}
