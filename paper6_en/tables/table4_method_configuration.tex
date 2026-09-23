@@ -2,7 +2,7 @@
 \centering
 \ifdefined\cnexperimenttableformat\cnexperimenttableformat\fi
 \captionsetup{name=Table}
-\caption{Key implementation settings for HarmoSSM and CFDepth.}
+\caption{Key implementation settings for HarmoSSM and CCDepth.}
 \label{tab:method_config}
 \small
 \setlength{\tabcolsep}{4pt}
@@ -18,10 +18,13 @@ Training & Batch size 12; 80 epochs; bfloat16; random seed 1 \\
 Optimization & AdamW; initial learning rate $10^{-4}$; weight decay $5\times10^{-4}$; cosine decay \\
 Model selection & Validation flood IoU; threshold search 0.05--0.95, step 0.01; fixed model and threshold for scene testing \\
 \midrule
-\multicolumn{2}{@{}l}{\textit{CFDepth}} \\
-Boundary screening & Maximum slope $5^\circ$; local-median radius 3 pixels; deviation multiplier 3; minimum tolerance 0.25 m \\
-Initialization & Pairing radius 2 pixels; eight-connected propagation up to 10 km; terrain lower bound $Z+0.01$ m \\
-Refinement & $3\times3$ neighborhood; relaxation 0.85; 50 iterations; fixed anchors and terrain lower bound \\
+\multicolumn{2}{@{}l}{\textit{CCDepth}} \\
+Support domain & Detected extent intersected with valid DEM; $\mathcal H_f=\operatorname{Erode}_{3\times3}(\Omega_f)$; $\mathcal B_f=\Omega_f\setminus\mathcal H_f$ \\
+Boundary samples & Pair radius 2 pixels; peer radius 3 pixels; maximum slope $5^\circ$; MAD scale 1.4826; $\sigma_0=0.25$ m; minimum 3 samples per side; high weight 0.5; minimum 3 anchors; minimum span 2 pixels \\
+Objective & Continuity weight $\lambda_C h_{\mathrm{ref}}^2/d_{pq}^2$; $\lambda_B=10$; $\lambda_T=1$; $\mu$ ratios $10^{-3}$--$10^{-6}$; terrain lower bound $Z+0.01$ m in $\mathcal H_f$ \\
+Initialization & Weighted boundary-interval midpoint; eligible components only; otherwise status 0 \\
+Solver & Four-color sweeps; six-candidate coordinate updates; 10 sweeps per check; at most 2000 sweeps per primary/secondary stage; two consecutive stable checks \\
+Convergence & Default fixed-point residual $0.001$ m and relative objective change $10^{-6}$; Pakistan validation run uses $0.5$ m and $0.001$ \\
 \bottomrule
 \end{tabularx}
 \end{table*}

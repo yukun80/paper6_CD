@@ -1,26 +1,44 @@
-\begin{table}[htbp]
-\centering
-\ifdefined\cnexperimenttableformat\cnexperimenttableformat\fi
-\captionsetup{name=Table}
-\caption{CFDepth procedure.}
-\label{tab:cfdepth_algorithm}
-\small
-\setlength{\tabcolsep}{4pt}
-\renewcommand{\arraystretch}{1.10}
-\begin{tabularx}{\linewidth}{@{}>{\raggedleft\arraybackslash}p{0.035\linewidth}X@{}}
-\toprule
-\multicolumn{2}{@{}l}{\textbf{Input:} \(\hat{\mathbf M}\): flood map; \(Z\): DEM;} \\
-\multicolumn{2}{@{}l}{\hspace{2em}\(d_{\min}\): minimum positive depth; \(D_{\max}\): maximum propagation distance.} \\
-\multicolumn{2}{@{}l}{\textbf{Output:} flood-depth estimate \(\hat d\).} \\
-\midrule
-1: & Align \(\hat{\mathbf M}\) and \(Z\) to a common grid and define flood support \(\Omega_f\). \\
-2: & Label the eight-connected components of \(\Omega_f\). \\
-3: & Extract the outer boundary and retain candidates that satisfy the slope and local median-deviation criteria; extract the inner boundary by erosion. \\
-4: & Pair the outer- and inner-side boundary medians and construct the water-surface anchor \(S_b=\max[(Z_{\mathrm{in}}+Z_{\mathrm{out}})/2,\,Z+d_{\min}]\). \\
-5: & For each component, find the nearest reachable anchor along an eight-neighbor path with distance at most \(D_{\max}\). \\
-6: & Set \(S^{(0)}=\max[S_b(b(p)),Z+d_{\min}]\) for pixels with a reachable anchor; otherwise use the terrain-floor fallback \(Z+d_{\min}\). \\
-7: & Refine the water surface with the \(3\times3\) neighbor mean, relaxation coefficient \(\eta\), fixed anchors, and the terrain floor. \\
-8: & Compute \(\hat d=\max[S^{(K)}-Z,0]\) for \(p\in\Omega_f\), and set the remaining pixels to NoData. \\
-\bottomrule
-\end{tabularx}
-\end{table}
+\begin{algorithm}[htbp]
+\footnotesize
+\caption{CCDepth: Change-Constrained Flood Depth Estimation}
+\label{alg:ccdepth}
+\begin{algorithmic}[1]
+\Require \(\hat{\mathbf M}\): detected newly inundated extent; \(Z\): DEM
+\Require \(\Omega_Z\): valid terrain domain; \(\Theta\): frozen CCDepth parameters
+\Ensure \(\hat d\): flood-depth map; \(\mathrm{status}\): component state map
+\Procedure{CCDepth}{Mhat, Z, OmegaZ, Theta}
+  \State map \(\hat{\mathbf M}\) to the DEM grid; define \(\Omega_f,\mathcal H_f,\mathcal B_f,\Omega_d\)
+  \State \(\mathcal C\leftarrow\operatorname{Label8}(\Omega_f)\)
+  \ForAll{components \(c\in\mathcal C\)}
+    \State \((\beta,L,U,m,\mathrm{eligible})\leftarrow\operatorname{BuildBoundaryModel}(c,\Omega_f,\Omega_d,\Theta)\)
+    \If{not \(\mathrm{eligible}\)}
+      \State \(\mathrm{status}(c)\leftarrow0\); \textbf{continue}
+    \EndIf
+    \State \(s_0\leftarrow\sum_{p\in c}\beta_pm_p/\sum_{p\in c}\beta_p\)
+    \State \(S\leftarrow\operatorname{Initialize}(s_0,Z,\mathcal H_f,\mathcal B_f)\)
+    \State build edge weights \(w_{pq}\), edge set \(\mathcal E\), and normalizer \(Q\)
+    \State \((S,\mathrm{conv}_0,J_0,\_)\leftarrow\operatorname{SolveObjective}(S,0,\mathcal E,Q,\Theta)\)
+    \If{not \(\mathrm{conv}_0\)}
+      \State \(\mathrm{status}(c)\leftarrow5\); \textbf{continue}
+    \EndIf
+    \State \(S_{\mathrm{base}}\leftarrow S\); \(\mathrm{accepted}\leftarrow\mathrm{false}\)
+    \ForAll{\(\mu\in\mu_{\mathrm{ratios}}\)}
+      \State \((S_{\mathrm{cand}},\mathrm{conv}_\mu,J_0^{\mathrm{cand}},\_)\leftarrow\operatorname{SolveObjective}(S_{\mathrm{base}},\mu,\mathcal E,Q,\Theta)\)
+      \If{\(\mathrm{conv}_\mu\) and \(J_0^{\mathrm{cand}}-J_0\le\max(\rho_rJ_0,\rho_a)\)}
+        \State \(\mathrm{status}(c)\leftarrow3\); \(S\leftarrow S_{\mathrm{cand}}\); \(\mathrm{accepted}\leftarrow\mathrm{true}\); \textbf{break}
+      \EndIf
+    \EndFor
+    \If{not \(\mathrm{accepted}\)}
+      \State \(S\leftarrow S_{\mathrm{base}}\); \(\mathrm{status}(c)\leftarrow4\)
+    \EndIf
+    \State audit component \(c\)
+    \If{\(\mathrm{status}(c)\in\{3,4\}\) and audit passes}
+      \State \(\hat d_p\leftarrow\max(S_p-Z_p,0)\) for \(p\in c\)
+    \Else
+      \State \(\hat d_p\leftarrow\mathrm{NoData}\) for \(p\in c\)
+    \EndIf
+  \EndFor
+  \State \Return \(\hat d,\mathrm{status}\)
+\EndProcedure
+\end{algorithmic}
+\end{algorithm}

@@ -174,17 +174,24 @@ The main contributions of this study are as follows:
 
 Three study areas are selected: central Zhengzhou in Henan Province, Zhuozhou in Hebei Province, and an area near Binyang County and Hengzhou in Guangxi. Their locations and land cover are shown in Fig.~\ref{fig:dataset}. The three settings comprise concentrated built-up land, interspersed cropland and settlements, and cropland and settlements distributed among tree-covered areas, respectively. They provide observations for examining flood-change detection under different surface conditions and cases for terrain-constrained depth estimation within the detected regions.
 
-The Zhengzhou study area covers the city centre and corresponds to the July 2021 flood. Built-up land is concentrated in Fig.~\ref{fig:dataset}(b), with channels and other water bodies crossing or adjoining developed areas and cropland and vegetation along the periphery. Flood photographs show standing water around roads, buildings, and vehicles, illustrating the complexity of locally inundated spaces among urban features. This setting is used to examine the identification of scattered inundation and complex boundaries in a built environment.
+The Zhengzhou study area covers the city centre and corresponds to the July 2021 flood. Built-up land is concentrated in Fig.~\ref{fig:dataset}(b), with channels and other water bodies crossing or adjoining developed areas and cropland and vegetation along the periphery. Flood photographs (S1--S4 in Fig.~\ref{fig:flood_photos}) show standing water around roads, buildings, and vehicles, illustrating the complexity of locally inundated spaces among urban features. This setting is used to examine the identification of scattered inundation and complex boundaries in a built environment.
 
-The Zhuozhou study area corresponds to the flood of late July to early August 2023, for which the Haihe basin study by \citet{lan2025haihe} provides regional context. Cropland and settlements are interspersed with water bodies in Fig.~\ref{fig:dataset}(c), and the photographs show inundation around roads, transport infrastructure, and buildings. Compared with central Zhengzhou, this area provides a setting where agricultural and built environments adjoin, allowing examination of the spatial continuity and local boundaries of inundated regions across different surfaces.
+The Zhuozhou study area corresponds to the flood of late July to early August 2023, for which the Haihe basin study by \citet{lan2025haihe} provides regional context. Cropland and settlements are interspersed with water bodies in Fig.~\ref{fig:dataset}(c), and the flood photographs (S5--S8 in Fig.~\ref{fig:flood_photos}) show inundation around roads, transport infrastructure, and buildings. Compared with central Zhengzhou, this area provides a setting where agricultural and built environments adjoin, allowing examination of the spatial continuity and local boundaries of inundated regions across different surfaces.
 
-The Guangxi study area lies near Binyang County and Hengzhou and is delineated by the common valid coverage of the selected bi-temporal LT-1 imagery. The administrative names indicate its location rather than its boundary. Persistent heavy rainfall affected Nanning during 4--6 July 2026 under the influence of Typhoon Maysak. On the morning of 6 July, overtopping and breaches were reported at the Liulan and Yunbiao reservoirs in Hengzhou, while the Liuwang reservoir in Binyang County overtopped, with flooding in some downstream areas. Figure~\ref{fig:dataset}(d) shows cropland, settlements, and river waters distributed among tree-covered areas, while the photographs illustrate inundation around settlements and roads. This setting complements the other two areas in both land-cover pattern and SAR observation conditions for examining flood-change detection and its connection to terrain-constrained depth estimation.
+The Guangxi study area lies near Binyang County and Hengzhou and is delineated by the common valid coverage of the selected bi-temporal LT-1 imagery. The administrative names indicate its location rather than its boundary. Persistent heavy rainfall affected Nanning during 4--6 July 2026 under the influence of Typhoon Maysak. On the morning of 6 July, overtopping and breaches were reported at the Liulan and Yunbiao reservoirs in Hengzhou, while the Liuwang reservoir in Binyang County overtopped, with flooding in some downstream areas. Figure~\ref{fig:dataset}(d) shows cropland, settlements, and river waters distributed among tree-covered areas, while the flood photographs (S9--S12 in Fig.~\ref{fig:flood_photos}) illustrate inundation around settlements and roads. This setting complements the other two areas in both land-cover pattern and SAR observation conditions for examining flood-change detection and its connection to terrain-constrained depth estimation.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\textwidth,height=.65\textheight,keepaspectratio]{figure/Figure1.jpg}
-  \caption{Locations, land cover, and flood settings of the three study areas. Panel (a) shows their locations in China, and (b)--(d) show land cover in central Zhengzhou, Zhuozhou, and Guangxi, respectively. P1--P4, P5--P8, and P9--P12 illustrate local flood conditions in the three areas.}
+  \caption{Locations and land cover of the three study areas. Panel (a) shows their locations in China, and (b)--(d) show land cover in central Zhengzhou, Zhuozhou, and Guangxi, respectively.}
   \label{fig:dataset}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\textwidth,height=.35\textheight,keepaspectratio]{figure/Figure2.jpg}
+  \caption{Representative flood photographs from the three study areas. The left, middle, and right groups correspond to Zhengzhou (S1--S4), Zhuozhou (S5--S8), and Guangxi (S9--S12), respectively; each label gives the observed object and depth interval.}
+  \label{fig:flood_photos}
 \end{figure}
 
 \subsection{Remote Sensing Observations and Terrain Data}\label{sec:depth_data}
@@ -207,7 +214,7 @@ In the depth estimation stage, CFDepth first intersects the detected extent with
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure2.jpg}
+  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure3.jpg}
   \caption{Overall workflow of HarmoSSM and CFDepth.}
   \label{fig:framework}
 \end{figure}
@@ -220,7 +227,7 @@ Shared spatial representations retain location cues, while semantic assistance s
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure3.jpg}
+  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure4.jpg}
   \caption{Complete Harmonized Change Encoder. Shared CNN--FPN and frozen DINO features form the bi-temporal pyramid; paired calibration, local alignment, and change query interaction produce multiscale change features.}
   \label{fig:encoder_ha}\label{fig:cqi}
 \end{figure}
@@ -335,7 +342,7 @@ Here, \(\rho_i^d\) is a detail projection, \(\mathcal R_i\) is the convolutional
 
 \begin{figure}[H]
   \centering
-  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure4.jpg}
+  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure5.jpg}
   \caption{Omni-Scale State-Space Change Decoder. Deep change features are fused and processed with multiscale state-space context before progressive recovery with shallow detail.}
   \label{fig:oscd}
 \end{figure}
@@ -514,13 +521,13 @@ The supplied results place HarmoSSM highest in IoU and F1 in both scenes, while 
 
 \subsection{Qualitative comparison in complex scenes}
 
-\setcounter{figure}{5}
+\setcounter{figure}{6}
 
 Figure~\ref{fig:qual_zhengzhou} shows the pre-event and post-event SAR images, reference labels, and flood-change predictions from HarmoSSM and the eight comparison methods in Zhengzhou. The lower local enlargements allow the inundated-area distribution and boundary positions to be compared across methods.
 
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\textwidth,height=.40\textheight,keepaspectratio]{figure/Figure6.jpg}
+  \includegraphics[width=\textwidth,height=.40\textheight,keepaspectratio]{figure/Figure7.jpg}
   \caption{Flood-change detection results and local enlargements in Zhengzhou.}
   \label{fig:qual_zhengzhou}
 \end{figure*}
@@ -529,7 +536,7 @@ Figure~\ref{fig:qual_zhuozhou} shows the bi-temporal SAR images, reference label
 
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\textwidth,height=.40\textheight,keepaspectratio]{figure/Figure7.jpg}
+  \includegraphics[width=\textwidth,height=.40\textheight,keepaspectratio]{figure/Figure8.jpg}
   \caption{Flood-change detection results and local enlargements in Zhuozhou.}
   \label{fig:qual_zhuozhou}
 \end{figure*}
@@ -538,7 +545,7 @@ Figure~\ref{fig:qual_guangxi} shows the bi-temporal SAR images, reference labels
 
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\textwidth,height=.40\textheight,keepaspectratio]{figure/Figure8.jpg}
+  \includegraphics[width=\textwidth,height=.40\textheight,keepaspectratio]{figure/Figure9.jpg}
   \caption{Flood-change detection results in Guangxi.}
   \label{fig:qual_guangxi}
 \end{figure*}
@@ -550,9 +557,9 @@ Depth results are evaluated through spatial distribution, valid output coverage,
 The valid-depth ratios in Figure~\ref{fig:depth_overview} are 37.83\% for FwDET and 93.89\% for CFDepth in Zhengzhou, 61.26\% and 91.70\% in Zhuozhou, and 40.79\% and 94.11\% in Guangxi, respectively. These ratios describe the spatial extent with positive depth, while the WSE-gradient and cross-source panels provide complementary views of surface continuity and product distributions; they are not used to infer independent contributions from the detection modules.
 
 \begin{figure*}[!t]
-  \setcounter{figure}{9}
+\setcounter{figure}{10}
   \centering
-  \includegraphics[width=\textwidth,height=.66\textheight,keepaspectratio]{figure/Figure10.jpg}
+  \includegraphics[width=\textwidth,height=.66\textheight,keepaspectratio]{figure/Figure11.jpg}
   \caption{Flood-depth estimates and summary statistics for the three study areas: (a) CFDepth and FwDET spatial distributions; (b) valid-depth ratios; (c) WSE-gradient distributions; (d) cross-source flood-depth comparison.}
   \label{fig:depth_overview}
 \end{figure*}
@@ -565,7 +572,7 @@ Lower aggregate error does not imply complete representation of reference depth 
 
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\textwidth,height=.50\textheight,keepaspectratio]{figure/Figure11.jpg}
+  \includegraphics[width=\textwidth,height=.50\textheight,keepaspectratio]{figure/Figure12.jpg}
   \caption{Spatial errors and quantitative comparison of flood-depth estimates in the Brazos region: (a) spatial depth maps; (b) estimate--reference density scatter; (c) depth-error maps; (d) WSE-gradient cumulative distributions; (e) coverage and accuracy metrics.}
   \label{fig:depth_brazos}
 \end{figure*}
