@@ -1,0 +1,16 @@
+{
+  "algorithm": {
+    "residualTolerance": 0.5,
+    "objectiveTolerance": 0.001
+  },
+  "runtime": {
+    "mask": "../../datasets/Zhuozhou/Zhuozhou_seg_30m.tif",
+    "dem": "../../datasets/Zhuozhou/Zhuozhou_DEM.tif",
+    "output_dir": "../runs/CCDepth/Zhuozhou/seg_relaxed_lean_v1",
+    "solver_backend": "numba_parallel",
+    "threads": 4,
+    "tile_size": 512,
+    "checkpoint_seconds": 300,
+    "alignment_mode": "rowcol_direct_v1"
+  }
+}

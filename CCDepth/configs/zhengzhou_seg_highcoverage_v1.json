@@ -1,0 +1,11 @@
+{
+  "algorithm": {"residualTolerance": 0.5, "objectiveTolerance": 0.001},
+  "runtime": {
+    "mask": "../../datasets/zhengzhou/change_binary_Zhengzhou_30m.tif",
+    "dem": "../../datasets/zhengzhou/Zhengzhou_DEM.tif",
+    "output_dir": "../runs/CCDepth/Zhengzhou/seg_highcoverage_v1",
+    "solver_backend": "numba_parallel", "threads": 4, "tile_size": 512,
+    "checkpoint_seconds": 300, "alignment_mode": "rowcol_direct_v1",
+    "coverage_mode": "weak_boundary_v1"
+  }
+}
