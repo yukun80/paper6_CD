@@ -12,19 +12,21 @@
 Component & Setting \\
 \midrule
 \multicolumn{2}{@{}l}{\textit{HarmoSSM}} \\
-Encoder & Shared EfficientNet-B2 with FPN; frozen DINOv3 ViT-S/16, layers 5, 8, 11 fused at P3--P5 \\
-Input & $256\times256$ tiles; $512\times512$ semantic input \\
-Training & Batch size 12; 80 epochs; bfloat16; random seed 1 \\
-Optimization & AdamW; initial learning rate $10^{-4}$; weight decay $5\times10^{-4}$; cosine decay \\
-Model selection & Validation flood IoU; threshold search 0.05--0.95, step 0.01; fixed model and threshold for scene testing \\
+Encoder & Shared EfficientNet-B2 with FPN. Frozen DINOv3 ViT-S/16, layers 5, 8, 11 fused at P3 to P5. \\
+Input & $256\times256$ tiles. $512\times512$ semantic input. \\
+Training & Batch size 12. 80 epochs. \\
+Optimization & AdamW. Initial learning rate $10^{-4}$. Weight decay $5\times10^{-4}$. Cosine decay. \\
+Model selection & Validation flood IoU selects the checkpoint and threshold. Scene tests use fixed settings. \\
 \midrule
 \multicolumn{2}{@{}l}{\textit{CCDepth}} \\
-Support domain & Detected extent intersected with valid DEM; $\mathcal H_f=\operatorname{Erode}_{3\times3}(\Omega_f)$; $\mathcal B_f=\Omega_f\setminus\mathcal H_f$ \\
-Boundary samples & Pair radius 2 pixels; peer radius 3 pixels; maximum slope $5^\circ$; MAD scale 1.4826; $\sigma_0=0.25$ m; minimum 3 samples per side; high weight 0.5; minimum 3 anchors; minimum span 2 pixels \\
-Objective & Continuity weight $\lambda_C h_{\mathrm{ref}}^2/d_{pq}^2$; $\lambda_B=10$; $\lambda_T=1$; $\mu$ ratios $10^{-3}$--$10^{-6}$; terrain lower bound $Z+0.01$ m in $\mathcal H_f$ \\
-Initialization & Weighted boundary-interval midpoint; eligible components only; otherwise status 0 \\
-Solver & Four-color sweeps; six-candidate coordinate updates; 10 sweeps per check; at most 2000 sweeps per primary/secondary stage; two consecutive stable checks \\
-Convergence & Default fixed-point residual $0.001$ m and relative objective change $10^{-6}$; Pakistan validation run uses $0.5$ m and $0.001$ \\
+Input and grid & New flood mask and FABDEM on the same grid. Support domain is the intersection of the mask with valid DEM. \\
+Boundary statistics & Pair radius 2 pixels. Peer radius 3 pixels. Slope scale $5^\circ$. Dispersion scale 1 m. MAD scale 1.4826. $\sigma_0=0.25$ m. Minimum 3 samples per side. \\
+Anchor eligibility & High-weight threshold 0.5. Minimum 3 anchors. Minimum span 2 pixels. \\
+Objective & $\lambda_C=1$. $\lambda_B=10$. $\lambda_T=1$. $\mu=\lambda_B[10^{-3},10^{-4},10^{-5},10^{-6}]$. Hard terrain lower bound $Z+0.01$ m in the interior. Soft lower bound in the boundary band. \\
+Initialization & Weighted boundary-interval midpoint. Unsupported components receive status 0. \\
+Solver & Four-color sweeps. Six-candidate coordinate updates. 10 sweeps per check. At most 2000 sweeps per stage. Two consecutive stable checks. \\
+Convergence & Defaults: fixed-point residual 0.001 m and relative objective change $10^{-6}$. Runs reported here: fixed-point residual 0.5 m and relative objective change 0.001. \\
+Output & Solved depth $\max(S-Z,0)$ on the success domain. Published depth retains $S-Z>0.01$ m. Other locations are NoData. \\
 \bottomrule
 \end{tabularx}
 \end{table*}

@@ -51,7 +51,7 @@ class OmniScaleStateSpaceChangeDecoder(nn.Module):
         )
         self.context_fusion = ConvNormAct(3 * self.channels, self.channels)
 
-        # MMSCoPE 的多尺度区域聚合：保持三条路径的有效感受野差异。
+        # 三条路径使用不同降采样率，保持有效感受野差异。
         self.region_stride2 = ConvNormAct(
             self.channels,
             2 * self.channels,

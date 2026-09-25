@@ -324,7 +324,7 @@ class FourDirectionSelectiveScan2D(nn.Module):
 
 
 class StateSpaceContextBlock(nn.Module):
-    """SegMAN 风格的 CPE + SS2D + local FFN 上下文块。"""
+    """CPE 与四方向选择性扫描及局部前馈组成的上下文块。"""
 
     def __init__(self, channels: int, d_state: int = 1, ffn_ratio: int = 4):
         super().__init__()
