@@ -14,19 +14,14 @@ Component & Setting \\
 \multicolumn{2}{@{}l}{\textit{HarmoSSM}} \\
 Encoder & Shared EfficientNet-B2 with FPN. Frozen DINOv3 ViT-S/16, layers 5, 8, 11 fused at P3 to P5. \\
 Input & $256\times256$ tiles. $512\times512$ semantic input. \\
-Training & Batch size 12. 80 epochs. \\
-Optimization & AdamW. Initial learning rate $10^{-4}$. Weight decay $5\times10^{-4}$. Cosine decay. \\
-Model selection & Validation flood IoU selects the checkpoint and threshold. Scene tests use fixed settings. \\
+Optimization & AdamW. Initial learning rate $10^{-4}$. Weight decay $5\times10^{-4}$. Batch size 12. Cosine decay. \\
+Model selection & Validation flood IoU selects the checkpoint and threshold. \\
 \midrule
 \multicolumn{2}{@{}l}{\textit{CCDepth}} \\
-Input and grid & New flood mask and FABDEM on the same grid. Support domain is the intersection of the mask with valid DEM. \\
+Input and grid & The flood mask defines the solver grid. Terrain elevations are read from the DEM at the corresponding row and column positions. Support domain is the intersection of the mask with valid DEM. \\
 Boundary statistics & Pair radius 2 pixels. Peer radius 3 pixels. Slope scale $5^\circ$. Dispersion scale 1 m. MAD scale 1.4826. $\sigma_0=0.25$ m. Minimum 3 samples per side. \\
-Anchor eligibility & High-weight threshold 0.5. Minimum 3 anchors. Minimum span 2 pixels. \\
 Objective & $\lambda_C=1$. $\lambda_B=10$. $\lambda_T=1$. $\mu=\lambda_B[10^{-3},10^{-4},10^{-5},10^{-6}]$. Hard terrain lower bound $Z+0.01$ m in the interior. Soft lower bound in the boundary band. \\
-Initialization & Weighted boundary-interval midpoint. Unsupported components receive status 0. \\
-Solver & Four-color sweeps. Six-candidate coordinate updates. 10 sweeps per check. At most 2000 sweeps per stage. Two consecutive stable checks. \\
-Convergence & Defaults: fixed-point residual 0.001 m and relative objective change $10^{-6}$. Runs reported here: fixed-point residual 0.5 m and relative objective change 0.001. \\
-Output & Solved depth $\max(S-Z,0)$ on the success domain. Published depth retains $S-Z>0.01$ m. Other locations are NoData. \\
+Convergence & Fixed-point residual 0.5 m. Relative objective change $10^{-3}$. \\
 \bottomrule
 \end{tabularx}
 \end{table*}
