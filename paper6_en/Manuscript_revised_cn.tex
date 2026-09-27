@@ -79,13 +79,13 @@
 }
 
 \setcounter{topnumber}{2}
-\setcounter{bottomnumber}{0}
-\setcounter{totalnumber}{4}
+\setcounter{bottomnumber}{1}
+\setcounter{totalnumber}{3}
 \setcounter{dbltopnumber}{2}
-\renewcommand{\topfraction}{0.95}
+\renewcommand{\topfraction}{0.85}
 \renewcommand{\dbltopfraction}{0.95}
-\renewcommand{\bottomfraction}{0}
-\renewcommand{\textfraction}{0.05}
+\renewcommand{\bottomfraction}{0.40}
+\renewcommand{\textfraction}{0.15}
 \renewcommand{\floatpagefraction}{0.80}
 \renewcommand{\dblfloatpagefraction}{0.80}
 
@@ -101,6 +101,15 @@
 \makeatother
 \setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
 
+% 仅在中文稿中为区域比较表和模块消融表开放浮动，共享表格保持原样。
+\newcommand{\cnfloatingtableinput}[1]{%
+  \begingroup
+  \let\cnoriginaltable\table
+  \renewcommand{\table}[1][]{\cnoriginaltable[!htb]}%
+  \input{#1}%
+  \endgroup
+}
+
 \newcommand{\paperlang}[2]{#2}
 \journal{Remote Sensing of Environment}
 
@@ -115,9 +124,10 @@
 
 \author{}
 
+\abstracttitle{\textcolor{blue}{Abstract}}
 \begin{abstract}
 
-快速洪灾评估需要同时掌握新增淹没范围和水深信息。合成孔径雷达（SAR）能够在恶劣天气下观测地表，但复杂地表背景使洪水变化响应强弱不一，单一差分特征难以稳定描述双时相变化。现有变化检测方法和边界约束估深方法分别推进了范围识别与水深估计，但检测结果与估深支撑之间缺少统一的空间衔接。为此，本文提出Detection-to-Depth Flood Mapping（DDFlood）两阶段洪水制图框架，将HarmoSSM输出的新增淹没范围直接作为变化约束水深估计（Change-Constrained Flood Depth Estimation，CCDepth）的求解支撑。HarmoSSM通过协调对齐和变化查询交互联合灾前灾后状态、有向差和绝对差，并由全尺度状态空间解码器（Omni-Scale State-Space Decoder，OSSD）结合区域上下文和浅层细节重建洪水范围。CCDepth以内边界和外边界地形统计建立水位区间，以地形下界和连续性约束项约束水面，并在同一水面高程场中计算水深。郑州、涿州和广西的检测结果表明，HarmoSSM取得的IoU分别为72.46\%、77.83\%和81.79\%，F1分别为84.03\%、87.53\%和89.98\%，各项重叠指标均高于对比方法。消融实验表明，HA、CQI和OSSD的组合在三地均取得最高IoU和F1。巴基斯坦水深验证表明，CCDepth的正水深覆盖率为92.36\%，FwDET为55.96\%。在2,442个评价样本上，CCDepth的MAE为0.4910 m，FwDET为0.8742 m，RMSE分别为0.6917 m和1.0677 m，中值水面高程梯度分别为3.73‰和28.87‰。结果表明，DDFlood能够在同一检测支撑下提供洪水范围与受淹程度信息，为快速洪灾评估提供水平分布和垂向水深依据。
+快速洪灾评估需要同时获取新增淹没范围和水深信息。合成孔径雷达（SAR）变化检测能够识别灾前灾后的淹没变化。结合数字高程模型（DEM）的边界高程约束方法依据洪水范围和地形即可估算水深，适用于快速灾情评估。然而，复杂地表下洪水变化响应强弱不一，淹没形态多样，检测边界高程也存在局部差异，因此单一边界水位难以把检测结果转化为稳定的估深条件。为此，本文提出两阶段洪水制图框架 DDFlood，以 HarmoSSM 输出的新增淹没范围作为变化约束水深估计方法 CCDepth 的空间支撑，衔接范围识别与水面求解。框架包含两项设计。（i）HarmoSSM 通过协调对齐（HA）和变化查询交互（CQI）联合双时相状态与差异信息，并由全尺度状态空间解码器（OSSD）结合区域上下文与局部细节重建淹没范围。（ii）CCDepth 以边界内外两侧的地形统计构造水位区间，在地形下界和连续性约束下重建水面并计算水深。研究以郑州分散积水、涿州连片淹没和广西破碎受淹片区检验框架，并以巴基斯坦洪水的 ICESat-2 沿轨参考水深验证估深结果。结果表明：（i）HarmoSSM 在三个研究区的交并比（IoU）分别为 72.46\%、77.83\% 和 81.79\%，均高于八种对比方法，能够识别不同淹没形态下的弱变化；（ii）CCDepth 的平均绝对误差和均方根误差分别为 0.4910~m 和 0.6917~m，较 FwDET 降低 43.8\% 和 35.2\%，正水深覆盖率由 55.96\% 提高至 92.36\%，同时实现了较低的估深误差和较高的覆盖率；（iii）以检测范围替换人工参考范围后，三个研究区的同级水深保持比例为 0.66 至 0.82，说明检测范围能够支撑主要水深等级结构的表达。DDFlood 通过统一的空间支撑将新增淹没识别转化为地形约束水深估计，为快速洪灾评估提供水平分布和垂向水深信息。
 
 \end{abstract}
 
@@ -128,7 +138,7 @@ SAR洪水变化检测 \sep 双时相遥感 \sep 弱变化识别 \sep 变化约�
 \end{frontmatter}
 \linenumbers
 
-\section{引言}
+\section{\texorpdfstring{\textcolor{blue}{引言}}{引言}}
 
 洪水是全球发生频率最高、影响范围最广的自然灾害之一，每年造成数千人死亡及数百亿美元的经济损失，严重威胁居民生命安全与社会经济活动\citep{credUndrr2020disasters}。卫星观测进一步表明，已观测受淹区域内的人口暴露比例呈上升趋势\citep{tellman2021exposure}，及时获取灾情空间分布信息已成为洪灾响应和灾后评估的关键需求。合成孔径雷达（SAR）凭借主动微波成像能力，能够在云雨和夜间条件下获取地表信息，已成为洪水监测的重要数据来源\citep{wagner2026gfm}。因此，从SAR观测中可靠提取新增淹没范围和水深信息，是支撑快速洪灾评估的基础。
 
@@ -147,7 +157,7 @@ SAR洪水变化检测 \sep 双时相遥感 \sep 弱变化识别 \sep 变化约�
 \begin{enumerate}
   \item \textbf{面向洪水变化检测的联合状态与差异信息协调编码与全尺度重建。}设计协调变化编码器（HCE），通过协调对齐（HA）建立可比较的双时相特征。变化查询交互（CQI）在同一校准后的特征空间中联合灾前状态、灾后状态、有向差和绝对差。在此基础上，设计全尺度状态空间解码器（Omni-Scale State-Space Decoder，OSSD），在深层变化特征中聚合区域上下文，在浅层特征中恢复局部细节。该解码在郑州分散斑块与狭长受淹带、涿州连片淹没和广西零散片段三类形态下均取得最高重叠精度。
   \item \textbf{变化支撑域约束的水深估算。}CCDepth以边界内外两侧地形统计构造水位区间，以地形下界限定水面不低于地面，以相邻像元水面高程差的加权平方和约束同一连通分量内水面的连续性。边界水位参照以区间形式给出，局部异常高程经中位数与中位绝对偏差统计后落于区间边界之内，不会以单值形式传播至整个分量。最终输出逐像元水深。
-  \item \textbf{DDFlood两阶段制图框架。}所提出的DDFlood将检测阶段和估深阶段组织在同一空间域内。检测阶段确定水深求解域，估深阶段在给定求解域内重建水面，检测范围的差异通过求解域和边界样本影响水深结果。在郑州、涿州和广西三个检测事件中，HarmoSSM的重叠指标均为最高。在巴基斯坦验证事件中，CCDepth的平均绝对误差与均方根误差均低于FwDET，正水深覆盖率高于FwDET。检测误差传递分析中三个研究区的同级水深保持比例为66\%至82\%，主要水深等级结构得到保持。
+  \item \textbf{DDFlood两阶段制图框架。}将HarmoSSM的新增淹没检测与CCDepth的地形约束估深组织为共享空间支撑的连续制图流程，使检测范围与DEM共同确定水深求解域及边界高程参照。通过人工参考范围与检测范围的对照，在固定DEM、求解参数和水深分级阈值的条件下，分析范围变化对水深等级及结果可用性的影响，建立新增淹没识别与受淹程度表达之间可追踪的空间联系，为快速洪灾评估同时提供水平分布和垂向水深信息。
 \end{enumerate}
 
 \section{Study Areas and Data}
@@ -213,7 +223,7 @@ SAR洪水变化检测 \sep 双时相遥感 \sep 弱变化识别 \sep 变化约�
 \end{equation}
 其中\(\Phi_{\mathrm H}\)表示HarmoSSM变化检测映射，\(\Phi_{\mathrm C}\)表示CCDepth水深估计映射，\(\Omega_f\)限定有效估深范围，\(\hat d\)为估计水深。HarmoSSM输出新增淹没掩膜\(\hat{\mathbf M}\)和前景概率\(p_f\)。掩膜与判决阈值确定\(\Omega_f\)，CCDepth在\(\Omega_f\)范围内求解水面，输出水深图\(\hat d\)与分量状态图\(\mathrm{status}\)，未通过求解条件的像元记为NoData。检测范围定义水深计算位置，地形与边界区间定义水面求解条件，两项结果在图~\ref{fig:framework}中形成统一制图流程。
 
-\begin{figure}[H]
+\begin{figure}[!htb]
   \centering
   \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure3.jpg}
   \caption{DDFlood两阶段洪水制图框架。第一阶段由HarmoSSM提取双时相SAR中的新增淹没范围。第二阶段由CCDepth结合检测范围与DEM，完成支撑域构建、边界约束提取、水面重建及水深估算。}
@@ -521,7 +531,6 @@ HarmoSSM通过Focal损失和Tversky损失优化，并使用五个辅助头补充
 
 \endgroup
 
-\clearpage
 \section{Experiments and Results}
 
 \begingroup
@@ -575,48 +584,55 @@ HarmoSSM的主要实现设置见表~\ref{tab:method_config}，训练目标及主
 
 表~\ref{tab:comparison_zhengzhou}至\ref{tab:comparison_guangxi}给出HarmoSSM与八种比较方法在郑州、涿州和广西的整景检测精度，图~\ref{fig:qual_zhengzhou}至\ref{fig:qual_guangxi}给出对应的整景与局部结果。表中各指标按精度比较，每列最优与次优结果分别加粗与加下划线，显示值统一保留两位小数。HarmoSSM在三个研究区均取得最高F1和IoU。三区各方法的OA均高于94\%，郑州IoU最低的方法其OA仍高于97\%，说明受淹像元在参考域中占比较低时，OA对洪水识别差异的区分能力有限。因此后续比较以IoU和F1为主，并结合P与R解释误差构成。
 
+\cnfloatingtableinput{tables/table5_comparison_zhengzhou.tex}
+
 HarmoSSM的领先在三个研究区保持一致，比较方法的排序则随场景变化。IoU和F1排名第二的方法在郑州与广西为ChangeDINO，在涿州为CGNet。CGNet在涿州进入前列而在郑州明显靠后，ChangeDINO在涿州退至第三，说明比较方法的相对表现随地表与淹没形态变化。HarmoSSM相对各区第二名的IoU优势在郑州超过20个百分点，在涿州与广西保持在9个百分点以上。在城市建成区、城乡交错地表和农林镶嵌地表三类场景中，HarmoSSM均保持最高重叠精度，其中与比较方法的差距在郑州最大。
 
-比较方法的主要误差为遗漏，HarmoSSM的重叠精度优势主要体现为召回率提高。郑州多数比较方法的R不足35\%，其中若干方法的P高于90\%，涿州多种比较方法的P高于97\%而R不足60\%，广西FC-Siam-Diff同样呈高P低R。HarmoSSM在三个研究区均取得最高R，也是唯一在三区R均高于80\%的方法。HarmoSSM的P在各区均低于P最高的比较方法，涿州与广西的差距在5个百分点以内，郑州的差距接近15个百分点。因此涿州和广西以较小的精确率差距换取明显更高的召回率，重叠精度提升主要对应遗漏像元减少，郑州结果中则同时存在较明显的额外预测。
-
-\input{tables/table5_comparison_zhengzhou.tex}
+\cnfloatingtableinput{tables/table6_comparison_zhuozhou.tex}
 
 \setcounter{figure}{6}
 
-\begin{figure}[H]
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=\linewidth,height=.40\textheight,keepaspectratio]{figure/Figure7.jpg}
+  \captionsetup{font={small,stretch=1}}
+  \includegraphics[width=\linewidth]{figure/Figure7.jpg}
   \caption{郑州洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}
   \label{fig:qual_zhengzhou}
 \end{figure}
 
-\input{tables/table6_comparison_zhuozhou.tex}
+比较方法的主要误差为遗漏，HarmoSSM的重叠精度优势主要体现为召回率提高。郑州多数比较方法的R不足35\%，其中若干方法的P高于90\%，涿州多种比较方法的P高于97\%而R不足60\%，广西FC-Siam-Diff同样呈高P低R。HarmoSSM在三个研究区均取得最高R，也是唯一在三区R均高于80\%的方法。HarmoSSM的P在各区均低于P最高的比较方法，涿州与广西的差距在5个百分点以内，郑州的差距接近15个百分点。因此涿州和广西以较小的精确率差距换取明显更高的召回率，重叠精度提升主要对应遗漏像元减少，郑州结果中则同时存在较明显的额外预测。
 
-\begin{figure}[H]
+\cnfloatingtableinput{tables/table7_comparison_guangxi.tex}
+
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=\linewidth,height=.40\textheight,keepaspectratio]{figure/Figure8.jpg}
+  \captionsetup{font={small,stretch=1}}
+  \includegraphics[width=\linewidth]{figure/Figure8.jpg}
   \caption{涿州洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}
   \label{fig:qual_zhuozhou}
 \end{figure}
 
-\input{tables/table7_comparison_guangxi.tex}
+整景与局部放大结果共同显示，三个研究区的误差位置与淹没形态相对应（图~\ref{fig:qual_zhengzhou}至\ref{fig:qual_guangxi}）。郑州的参考淹没以狭长线状积水和分散小斑块为主。整景结果中，比较方法沿河道和东部斑块群保留较多未被预测覆盖的参考区域，ChangeDINO在研究区内部产生较多零散预测，HarmoSSM覆盖了河道线状积水的主体和东部主要斑块群，未被覆盖的参考区域较少。ROI-2与ROI-3中斜向积水带和成组斑块出现连续遗漏，HarmoSSM覆盖了线状积水主体与主要斑块群，剩余FN位于下方部分斑块，FP主要出现在斑块上缘与左下角。
 
-\begin{figure}[H]
+涿州的参考淹没以大面积连片农田为主。整景结果中，多种比较方法在中北部连片区域内保留大片未被预测覆盖的参考区域，其中HANet与SNUNet的未覆盖范围最大，HarmoSSM覆盖了连片区域的大部分范围。ROI-2中被道路分隔的农田出现大范围FN，HarmoSSM保留了道路形成的线状非淹没间隔，剩余FN位于区域边缘。
+
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=\linewidth,height=.40\textheight,keepaspectratio]{figure/Figure9.jpg}
+  \captionsetup{font={small,stretch=1}}
+  \includegraphics[width=\linewidth]{figure/Figure9.jpg}
   \caption{广西洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}
   \label{fig:qual_guangxi}
 \end{figure}
 
-整景与局部放大结果共同显示，三个研究区的误差位置与淹没形态相对应（图~\ref{fig:qual_zhengzhou}至\ref{fig:qual_guangxi}）。郑州的参考淹没以狭长线状积水和分散小斑块为主。整景结果中，比较方法沿河道和东部斑块群保留较多未被预测覆盖的参考区域，ChangeDINO在研究区内部产生较多零散预测，HarmoSSM覆盖了河道线状积水的主体和东部主要斑块群，未被覆盖的参考区域较少。ROI-2与ROI-3中斜向积水带和成组斑块出现连续遗漏，HarmoSSM覆盖了线状积水主体与主要斑块群，剩余FN位于下方部分斑块，FP主要出现在斑块上缘与左下角。涿州的参考淹没以大面积连片农田为主。整景结果中，多种比较方法在中北部连片区域内保留大片未被预测覆盖的参考区域，其中HANet与SNUNet的未覆盖范围最大，HarmoSSM覆盖了连片区域的大部分范围。ROI-2中被道路分隔的农田出现大范围FN，HarmoSSM保留了道路形成的线状非淹没间隔，剩余FN位于区域边缘。广西的参考淹没由不规则片区与南部细小片段组成。整景结果中，各方法对北部和中部主要片区的覆盖差异较小，差异集中在片区边缘和南部细小片段，HarmoSSM在南部识别出较多细小片段。ROI-1的树枝状区域在右下部分出现成片FN，ROI-2的破碎片区在右侧出现较多FN与边缘FP，ROI-3的细窄曲线片段几乎被多数比较方法全部遗漏，HarmoSSM识别出多数片段主体。广西的双时相影像取自同一年，两期成像相隔约两个月，季节推进与农业灌溉和耕作活动会造成植被覆盖与土壤湿度背景的变化，使洪水引起的变化信号强弱不一，HarmoSSM在该条件下仍取得最高的重叠精度和召回率，说明其在不同季节背景与农业活动干扰下保持稳定的检测能力。三个研究区的遗漏分别集中于狭长分散斑块、连片区域内部和细窄曲线片段，HarmoSSM的剩余FN主要位于斑块与地块边缘，FP在郑州最明显，与表~\ref{tab:comparison_zhengzhou}至\ref{tab:comparison_guangxi}中比较方法R偏低、HarmoSSM的R最高而郑州P相对靠后的结果一致。
+广西的参考淹没由不规则片区与南部细小片段组成。整景结果中，各方法对北部和中部主要片区的覆盖差异较小，差异集中在片区边缘和南部细小片段，HarmoSSM在南部识别出较多细小片段。ROI-1的树枝状区域在右下部分出现成片FN，ROI-2的破碎片区在右侧出现较多FN与边缘FP，ROI-3的细窄曲线片段几乎被多数比较方法全部遗漏，HarmoSSM识别出多数片段主体。广西的双时相影像取自同一年，两期成像相隔约两个月，季节推进与农业灌溉和耕作活动会造成植被覆盖与土壤湿度背景的变化，使洪水引起的变化信号强弱不一，HarmoSSM在该条件下仍取得最高的重叠精度和召回率，说明其在不同季节背景与农业活动干扰下保持稳定的检测能力。
 
-\FloatBarrier
+三个研究区的遗漏分别集中于狭长分散斑块、连片区域内部和细窄曲线片段，HarmoSSM的剩余FN主要位于斑块与地块边缘，FP在郑州最明显，与表~\ref{tab:comparison_zhengzhou}至\ref{tab:comparison_guangxi}中比较方法R偏低、HarmoSSM的R最高而郑州P相对靠后的结果一致。
 
 \subsection{HarmoSSM Ablation Analysis}\label{sec:ablation}
 
 为检验HA、CQI和OSSD对检测性能的作用，本节以不含三项设计的统一Baseline为起点，构造单模块、两两组合和完整配置，并在郑州、涿州和广西采用相同的训练设置、阈值选择规则和评价指标进行对照。表~\ref{tab:ablation_modules}给出A至H八种配置的IoU和F1，其中A为统一Baseline，B、C和D分别在A中加入HA、CQI和OSSD，E、F和G分别为HA与CQI、HA与OSSD以及CQI与OSSD的两两组合，H包含三项模块。
 
-\input{tables/table8_ablation_hacqi.tex}
+\cnfloatingtableinput{tables/table8_ablation_hacqi.tex}
 
 统一Baseline与完整模型共享编码器主干、辅助监督和训练设置，仅在HA、CQI和OSSD对应位置采用基础结构。编码器沿用共享EfficientNet-B2与FPN，并保留冻结DINOv3 ViT-S/16第5、8和11层在P3至P5的语义融合，输出双时相特征\(P_i^A\)和\(P_i^B\)（\(i=1,\dots,5\)）。去除HA后，两时相特征不经过统计校准和可变形对齐，直接作为\(X_i^A\)和\(X_i^B\)进入变化建模。去除CQI后，第\(i\)级变化特征由绝对差经卷积投影得到，即\(D_i=\Psi_i(|X_i^B-X_i^A|)\)，其中\(\Psi_i\)由1×1卷积、批归一化和3×3深度可分离卷积组成。去除OSSD后，解码器采用自顶向下的逐级重建结构，\(\mathbf D_5\)依次与\(\mathbf D_4\)至\(\mathbf D_1\)融合，每级融合由双线性上采样、通道拼接和3×3卷积完成，末端使用与完整模型相同的分类头。五个辅助头、Focal与Tversky组合损失、支撑保持项和粗尺度一致性项在各配置中保持一致。训练数据、优化器、学习率调度、训练轮数、检查点与阈值选择规则以及整景拼接方式均与第~\ref{sec:experiment_implementation}节相同。
 
@@ -632,7 +648,6 @@ HarmoSSM的领先在三个研究区保持一致，比较方法的排序则随场
 \end{figure*}
 
 \subsection{CCDepth Performance Evaluation}
-\suppressfloats[t]
 
 \setcounter{figure}{10}
 
@@ -666,7 +681,6 @@ HarmoSSM的领先在三个研究区保持一致，比较方法的排序则随场
 \FloatBarrier
 
 \subsection{DDFlood Framework Performance Analysis}
-\suppressfloats[t]
 
 为评价DDFlood从新增淹没识别到水深估计的整体表现，在郑州、涿州和广西比较CCDepth与FwDET的区域水深产品及其对范围输入变化的响应。图~\ref{fig:depth_overview}展示水深分布、有效覆盖、水面高程梯度和连通域水深区间与参考记录的对照，图~\ref{fig:two_stage_consistency}展示人工参考标签范围与HarmoSSM检测范围输入下的水深等级转移。Label和seg分别表示两类范围输入对应的水深结果。每种方法在两类输入下保持DEM与求解参数一致，并采用相同的水深分级阈值。转移矩阵以各方法Label条件下的有效水深等级为行，以seg条件下的水深等级及缺失类别为列，按行归一化。对角线表示同级保持，Missed反映参考域内的范围遗漏，No data反映检测范围内的水深缺失。
 
@@ -692,27 +706,31 @@ CCDepth在不同淹没形态下均提供了较完整且较平滑的区域水深�
 
 \FloatBarrier
 
-\section{讨论}
+\section{\texorpdfstring{\textcolor{blue}{Discussion}}{Discussion}}
 
-\subsection{快速灾情评估下的框架设计}
+\subsection{\texorpdfstring{\textcolor{blue}{快速灾情评估下的框架设计}}{快速灾情评估下的框架设计}}
 
-快速灾情评估需要将范围检测结果转化为具有明确数据来源和求解依据的水深产品。DDFlood通过两阶段分工，将HarmoSSM的变化表征学习与CCDepth的地形约束求解衔接起来，使估深阶段的数据需求集中于新增淹没范围与DEM。在给定算法参数下，边界水位区间、地形下界和连续性约束均由输入范围与地形资料构建，水深估计因而具备明确的空间支撑和高程参照。这种组织方式适合水深训练样本有限的场景，并支持检测模型与估深算法分别更新。4.5节在固定估深方法和参数的条件下比较两类范围输入，进一步展示了范围变化对水深等级和结果可用性的影响。因此，两阶段设计的价值在于将观测驱动的范围识别转化为条件明确的水面求解，同时为追踪范围输入与水深输出之间的关系提供分析依据。
+DDFlood以HarmoSSM输出的新增淹没掩膜确定支撑域\(\Omega_f\)，由CCDepth在\(\Omega_f\)内结合DEM求解水面并计算水深。在这一级联设计中，估深阶段依据检测范围和DEM完成确定性求解，边界水位区间、地形下界和连续性能量均由二者直接确定。巴基斯坦验证中，CCDepth在缺少实测水深训练样本的条件下，MAE为0.4910~m，RMSE为0.6917~m，较FwDET分别降低43.8\%和35.2\%，正水深覆盖率由55.96\%提高至92.36\%。约束项消融中，去除地形下界使覆盖率降至86.12\%，去除连续性约束使误差标准差达到最大，说明求解结果可追溯至具体约束。两个阶段还可以独立更新。检测阶段更换编码器或训练样本后，只需重新输入掩膜。估深阶段调整参数时，检测结果保持不变。4.5节固定DEM、求解参数和分级阈值，仅替换输入范围，得到三个研究区的同级水深保持比例为0.66至0.82。其中郑州最高水深等级的保持比例为0.82，FwDET为0.19。这是由于CCDepth对给定范围输出唯一解，水深等级的变化可以直接归因于范围差异。因此，级联设计使框架能够在缺少实测水深的区域完成估深，也使检测误差和估深误差得以分别评估。
 
-现有运行记录表明，CCDepth能够以与检测阶段相匹配的时间尺度补充水深信息，并在四个研究区保持较FwDET更短的运行耗时。郑州、涿州和广西的HarmoSSM推理循环耗时分别为19秒、14秒和86秒，CCDepth完整配置的运行耗时分别为17.9秒、7.8秒和33.5秒，三个场景的估深记录均低于相应检测推理循环耗时。这意味着在这些场景中，由范围识别扩展至受淹程度表达所需的估深处理保持在秒级，为快速制图增加水深信息提供了计算可行性。FwDET在三地的运行耗时分别为62.14秒、62.16秒和108.47秒，巴基斯坦的CCDepth与FwDET分别为25分01.3秒和95.45分钟，较短耗时的表现同时出现在中国研究区与巴基斯坦验证区。CCDepth按八连通分量组织求解，以邻域水面和局部约束完成坐标更新，并依据收敛与可行性检查决定迭代进程，使计算任务能够围绕分量组织。结合阶段计时结果，这一计算结构为后续按分量规模和收敛过程分析处理开销提供了依据，也说明范围与水深的联合表达可以通过分别组织的检测和估深任务实现。
+级联设计的代价是检测误差经支撑域单向传递到估深阶段，漏检和误报会同时改变\(\Omega_f\)、边界样本和连通分量的范围。检测精度与传递稳定性之间呈非单调关系。广西、涿州和郑州的IoU分别为81.79\%、77.83\%和72.46\%，同级保持比例分别为0.74至0.78、0.66至0.71和0.77至0.82。这与各区的连通分量结构有关。涿州以连片淹没为主，分量少而面积大，边缘的范围误差会改变整个分量的边界样本和水位区间，并经连续性项传播到分量内部。涿州最浅水深等级中有0.14的比例因范围遗漏而缺失，与这一机制相符。郑州以分散斑块和窄带为主，范围误差局限在单个小分量内，主要水深等级结构因此得以保持。可见，连通分量结构和边界样本分布对水深等级保持的影响，可能超过范围重叠度本身。联合优化能够借助估深损失调整检测边界，但需要成对的水深标签和可微的估深过程。级联设计依据检测范围和DEM即可完成可解释的确定性估深，更适合实测水深稀缺的应急场景。
 
-上述分析表明，DDFlood将明确的估深数据条件与已记录场景下的处理效率结合起来，可支持区域灾情概览和重点受淹区域筛查。后续可围绕切片数量、连通分量规模和收敛过程优化任务调度，并结合更精细地形与独立水位观测完善水深产品的应用。
+处理时效决定框架在应急响应中的可用性。图~\ref{fig:framework_efficiency}(a)给出广西研究区各检测方法的IoU与FLOPs和参数量，图~\ref{fig:framework_efficiency}(b)给出CCDepth与FwDET在四个区域的估深耗时。HarmoSSM在GPU上以\(256\times256\)影像块推理，并经重叠区融合拼接为整景结果。CCDepth按八连通分量执行四色扫描，主目标和次目标各自最多执行2000次扫描。从图~\ref{fig:framework_efficiency}(a)可以看出，HarmoSSM的FLOPs约为175~G，与CGNet和TTP处于同一量级，IoU分别比二者高11.60和11.57个百分点。参数量最大的TTP，IoU为70.22\%。4.3节中，HA、CQI和OSSD两两组合的IoU增量均高于对应两个单模块增量之和。结合这两方面结果可知，HarmoSSM的精度提升主要来自面向双时相弱变化的特征对齐、变化交互和全尺度解码。从图~\ref{fig:framework_efficiency}(b)可以看出，CCDepth在郑州、涿州和广西的耗时分别为17.9~s、7.8~s和33.5~s，FwDET分别为62.14~s、62.16~s和108.47~s。在巴基斯坦验证区，二者分别为25~min~01.3~s和95.45~min。FwDET在郑州和涿州的耗时接近，CCDepth在两地的耗时相差一倍以上。这是由于CCDepth仅在\(\Omega_f\)的连通分量内迭代，支持不足的分量在建立边界模型后即标记为NoData，计算量随支撑域规模变化。HarmoSSM在三地的单景推理时间分别为19~s、14~s和86~s，端到端处理时间约为37~s、22~s和2~min。时效要求更高时，可以减少最大扫描次数、放宽收敛阈值或增大DEM采样间距，代价是水深精度或空间细节有所降低。综上，DDFlood以统一的支撑域衔接检测与估深，能在秒级至分钟级的处理时间内同时提供新增淹没范围和水深信息。
 
-\subsection{局限与未来展望}
+\begin{figure*}[htbp]
+  \centering
+  \includegraphics[width=\textwidth,keepaspectratio]{figure/Figure14.jpg}
+  \caption{DDFlood的检测精度、模型复杂度与估深处理效率。（a）九种检测方法在广西研究区的IoU与FLOPs关系，气泡面积表示参数量，复杂度采用已有模型统计与参考配置记录。（b）CCDepth与FwDET在郑州、涿州、广西和巴基斯坦的估深运行耗时，横轴采用以秒为单位的对数尺度，点旁标注给出相应耗时。}
+  \label{fig:framework_efficiency}
+\end{figure*}
+\FloatBarrier
 
-CCDepth的水面求解基于地形下界与空间连续性约束，假设同一连通分量内的水面平滑变化且几何连通对应水力连通。在复杂城市区域，建筑、道路与地下管网可能使几何连通与水力连通不一致，导致局部水深估计偏差，在水力障碍或强流速的局部位置，水面平滑假设也可能不成立。CCDepth的求解依赖DEM分辨率与边界样本质量，FABDEM约30~m的采样间距决定了当前结果适合区域受淹程度表达与重点位置筛查，不适合逐点水深解释，在狭长受淹结构和局部微地形区域，地形网格的平滑效应会使水深估计偏向区域平均。巴基斯坦湿期与干期ICESat-2轨道约有50~m横轨间隔，轨间地形差异与边界高程估计共同影响沿轨参考水深的空间代表性\citep{betterle2024water,travert2026uncertainty}。
+\subsection{\texorpdfstring{\textcolor{blue}{局限与未来展望}}{局限与未来展望}}
 
-未来工作可从三个方向展开。一是扩展数据条件与评价范围，增加不同传感器与不同极化组合的训练样本，补充站点级划分实验，并在更多区域开展独立水深验证。二是引入更精细的物理约束，结合更高分辨率地形资料、水力连通分析与流向信息，改进复杂城市和地形起伏区域的水深估算。三是探索检测与估深的联合优化路径，通过可微的水面求解或反馈机制使估深损失能够反向调整检测边界，降低级联设计的误差传递。
+CCDepth假设同一连通分量内水面平滑变化，且几何连通对应水力连通。在复杂城市区域，建筑、道路和地下管网可能使几何连通与水力连通出现偏差。在水力障碍附近或流速较大的区域，水面平滑假设也可能失效。在郑州城市建成区，HarmoSSM的精确率比精确率最高的对比方法低近15个百分点，这部分额外预测会作为支撑域进入估深阶段。CCDepth的结果还受DEM分辨率和边界样本质量的制约。FABDEM约30~m的采样间距约为检测掩膜像素间距的三倍，因此当前结果适用于表达区域受淹程度和筛查重点位置。在狭长受淹结构和微地形区域，水深估计会趋向区域平均。巴基斯坦验证中，CCDepth与FwDET的误差均值分别为0.2937~m和0.8641~m，两种方法的估计整体偏浅，CCDepth的偏差较小，涿州S5至S7点位的结果与这一趋势一致。ICESat-2湿期轨道与干期轨道在横轨方向相隔约50~m，因此当前验证结果表征的是沿轨尺度上的统计精度。后续工作可以从三个方面展开。一是增加不同传感器和极化组合的训练样本，补充站点级划分实验，并在城市积水等更多场景中开展独立水深验证。二是结合更高分辨率的地形资料、水力连通分析和流向信息，改进复杂城市和地形起伏区域的水深估算。三是借助可微的水面求解探索检测与估深的联合优化，使估深损失反向调整检测边界，减小连片淹没区边缘漏检引起的水位偏移。这些方向将进一步加强新增淹没识别与水深估算之间的空间衔接，为快速洪灾评估提供更可靠的水平分布和垂向水深依据。
 
-\section{结论}
+\section{\texorpdfstring{\textcolor{blue}{结论}}{结论}}
 
-快速洪灾评估需要同时获取新增淹没范围和水深信息，本文提出两阶段洪水制图框架DDFlood，将双时相SAR新增淹没识别与DEM约束水深估算衔接。检测阶段的HarmoSSM通过协调对齐建立可比较的双时相表征，通过变化查询交互联合灾前灾后状态、有向差和绝对差，并通过全尺度状态空间解码在深层聚合区域上下文、在浅层恢复局部细节。估深阶段的CCDepth将检测范围转化为求解支撑，将边界高程组织为局部水位区间，并在地形下界和空间连续性约束下重建水面，使检测结果同时决定估深位置、边界条件和内部水面约束。在郑州、涿州和广西实验中，HarmoSSM的IoU分别为72.46\%、77.83\%和81.79\%，F1分别为84.03\%、87.53\%和89.98\%，在八个对比方法中取得最高重叠指标，消融实验表明HA、CQI和OSSD的组合在三地均取得最高IoU和F1。巴基斯坦独立参考比较中，CCDepth正水深覆盖率为92.36\%，FwDET为55.96\%。在2,442个评价样本上，CCDepth的MAE和RMSE分别为0.4910~m和0.6917~m，较FwDET降低43.8\%和35.2\%。检测误差传递分析中，郑州、涿州和广西的同级水深保持比例约为77\%至82\%、66\%至71\%和74\%至78\%，表明检测范围能够支撑主要水深等级结构。
-
-上述结果表明，DDFlood将范围识别与受淹程度表达组织在同一空间支撑下，回应了检测支撑与估深条件之间缺少统一空间衔接的研究不足，可为快速洪灾评估同时提供洪水水平分布和垂向水深依据。后续将结合更高分辨率地形资料、独立水位观测和范围扰动试验，完善局部水深解释与误差传播评估，并进一步检验框架在不同传感器、不同区域和不同洪水形态下的适用性。
+快速洪灾评估需要在同一空间支撑下获取新增淹没范围和水深信息。复杂地表下洪水变化响应强弱不一，淹没形态多样，检测结果难以直接转化为稳定的估深条件。针对这一问题，本文提出两阶段洪水制图框架 DDFlood。框架以 HarmoSSM 输出的新增淹没掩膜确定支撑域，由 CCDepth 在支撑域内结合 DEM 求解水面并计算水深。基于郑州、涿州和广西三个检测研究区以及巴基斯坦验证区的实验，得出以下结论。（1）HarmoSSM 通过 HA 和 CQI 联合双时相状态与差异信息，并由 OSSD 结合区域上下文与局部细节重建淹没范围。其在三个研究区的 IoU 分别为 72.46\%、77.83\% 和 81.79\%，均高于八种对比方法。完整配置较基线的 IoU 提升 11.99 至 26.84 个百分点，其中以分散积水为主的郑州提升最大，说明三个模块协同提高了对弱变化和多尺度淹没形态的识别能力。（2）CCDepth 以边界内外两侧的地形统计构造水位区间，在地形下界和连续性约束下重建水面。巴基斯坦验证中，CCDepth 的平均绝对误差和均方根误差较 FwDET 分别降低 43.8\% 和 35.2\%，正水深覆盖率由 55.96\% 提高至 92.36\%，中值水面高程梯度由 28.87‰ 降至 3.73‰，在估深精度、覆盖程度和水面连续性三方面均优于 FwDET。（3）以检测范围替换人工参考范围后，三个研究区的同级水深保持比例为 0.66 至 0.82，检测误差对水深等级的影响与连通分量结构密切相关。CCDepth 在各区域的估深耗时均短于 FwDET，端到端处理时间为秒级至分钟级。DDFlood 通过统一的空间支撑衔接新增淹没识别与地形约束水深估计，可为快速洪灾评估中的区域灾情概览和重点受淹区域筛查提供水平分布和垂向水深信息。受 DEM 分辨率和城市水力连通条件的制约，当前结果适用于表达区域受淹程度。后续将结合更高分辨率的地形资料、水力连通分析以及检测与估深的联合优化，提升复杂城市区域的估深精度。
 
 \section*{致谢}
 
@@ -721,6 +739,9 @@ CCDepth的水面求解基于地形下界与空间连续性约束，假设同一�
 \end{sloppypar}
 
 \bibliographystyle{elsarticle-harv}
+\begingroup
+\singlespacing
 \bibliography{reference}
+\endgroup
 
 \end{document}
