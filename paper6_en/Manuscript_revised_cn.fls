@@ -477,12 +477,12 @@ INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex9.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msam10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msbm10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr9.tfm
-INPUT ./figure/Figure12.jpg
-INPUT ./figure/Figure12.jpg
-INPUT ./figure/Figure12.jpg
 INPUT ./figure/Figure13.jpg
 INPUT ./figure/Figure13.jpg
 INPUT ./figure/Figure13.jpg
+INPUT ./figure/Figure12.jpg
+INPUT ./figure/Figure12.jpg
+INPUT ./figure/Figure12.jpg
 INPUT ./figure/Figure14.jpg
 INPUT ./figure/Figure14.jpg
 INPUT ./figure/Figure14.jpg
