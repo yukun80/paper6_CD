@@ -62,8 +62,8 @@
 
 \hypersetup{
   hidelinks,
-  pdftitle = {HarmoSSM for Bi-Temporal SAR Flood Change Detection with Change-Defined Depth Estimation},
-  pdfauthor = {Yukun Fan, Zhongqi Shi, Hong Zhang, Yuzhou Liu, Mingyang Song, Yazhe Xie, Yixian Tang}
+  pdftitle = {Where Is the Flood, and How Deep? DDFlood for SAR-Based Flood Mapping},
+  pdfauthor = {}
 }
 
 \makeatletter
@@ -82,61 +82,18 @@
 
 \begin{frontmatter}
 
-\title{DDFlood: From Bi-Temporal SAR Flood Change Detection to DEM-Constrained Depth Estimation}
+\title{Where Is the Flood, and How Deep? DDFlood for SAR-Based Flood Mapping}
 
-\author[inst1,inst2,inst3]{Yukun Fan}
-\author[inst4,inst5]{Zhongqi Shi}
-\author[inst2,inst1,inst3]{Hong Zhang\corref{cor1}}
-\ead{zhanghong@radi.ac.cn}
-\author[inst4,inst5]{Yuzhou Liu}
-\author[inst1,inst2,inst3]{Mingyang Song}
-\author[inst1,inst2,inst3]{Yazhe Xie}
-\author[inst1,inst2,inst3]{Yixian Tang}
-
-\cortext[cor1]{Corresponding author}
-
-\affiliation[inst1]{
-  organization={Key Laboratory of Digital Earth Science, Aerospace Information Research Institute, Chinese Academy of Sciences},
-  city={Beijing},
-  postcode={100094},
-  country={China}
-}
-
-\affiliation[inst2]{
-  organization={International Research Center of Big Data for Sustainable Development Goals},
-  city={Beijing},
-  postcode={100094},
-  country={China}
-}
-
-\affiliation[inst3]{
-  organization={University of Chinese Academy of Sciences},
-  city={Beijing},
-  postcode={100049},
-  country={China}
-}
-
-\affiliation[inst4]{
-  organization={Shenzhen Technology Institute of Urban Public Safety},
-  city={Shenzhen},
-  postcode={518000},
-  country={China}
-}
-
-\affiliation[inst5]{
-  organization={Urban Safety Development Institute of Science and Technology (Shenzhen)},
-  city={Shenzhen},
-  state={Guangdong},
-  postcode={518023},
-  country={China}
-}
+\author{}
 
 \begin{abstract}
-Rapid flood assessment requires information on both inundation extent and water depth. Synthetic aperture radar (SAR) supports observation during adverse weather, but complex surface conditions complicate temporal feature comparison, while extensive inundation may coexist with small or weak-contrast patches, narrow corridors, and fragmented margins. Moreover, change-defined inundation excludes pre-existing water, so not all its boundaries provide dry-shoreline elevation constraints. We develop a two-stage flood mapping approach comprising HarmoSSM change detection and Change-defined Flood Depth Estimation (CFDepth). HarmoSSM combines paired states and differences through harmonized change encoding, then uses omni-scale state-space decoding to reconstruct newly flooded extents from regional context and shallow detail. CFDepth combines this extent, screened boundary elevations, and a digital elevation model (DEM) to estimate first-order depth within the supplied flood support. Reference panels from Zhengzhou and Zhuozhou, covering built-up land, cropland, and river-adjacent terrain, illustrate localized and narrow inundation alongside broad flooded areas and fragmented margins. In a separate comparison of existing Brazos depth products, positive-depth coverage over the positive-depth reference domain is 94.57\% for the product labeled CFDepth and 46.65\% for the Floodwater Depth Estimation Tool (FwDET). Mean absolute errors on common-valid pixels are 0.828 and 1.099 m, respectively, although both products have low spatial correlation and negative Nash--Sutcliffe efficiency. The approach combines flood-change mapping with depth estimation conditional on the supplied extent and terrain, providing complementary information on inundation distribution and severity.
+
+Rapid flood assessment requires information on both the spatial distribution and depth of inundation. Synthetic aperture radar (SAR) change detection identifies changes in inundation between pre-event and post-event observations, while boundary-elevation-constrained methods combined with a digital elevation model (DEM) estimate water depth from flood extent and terrain. Connecting these methods requires a common spatial support. Flood-induced backscatter changes vary in strength, inundation takes diverse spatial forms, and elevations along detected boundaries vary locally, making it difficult for a single boundary water level to translate detection results into stable conditions for depth estimation. We therefore propose DDFlood, a two-stage flood mapping framework that uses the newly inundated extent produced by HarmoSSM as the spatial support for Change-Constrained Flood Depth Estimation (CCDepth). HarmoSSM combines bi-temporal state and difference information through Harmonized Alignment (HA) and Change Query Interaction (CQI), and reconstructs inundation extent by combining regional context and local detail through an Omni-Scale State-Space Decoder (OSSD). CCDepth constructs water-level intervals from terrain statistics on both sides of the boundary, reconstructs the water surface under terrain lower-bound and continuity constraints, and calculates water depth. Bi-temporal GF3 and LT-1B SAR imagery is used to evaluate detection performance for three events characterized by scattered inundation in Zhengzhou, contiguous inundation in Zhuozhou, and fragmented flooded areas in Guangxi. ICESat-2 along-track reference depths from the 2022 Pakistan floods are used to validate depth estimates. HarmoSSM achieves intersection over union (IoU) values of 72.46\%, 77.83\%, and 81.79\% in Zhengzhou, Zhuozhou, and Guangxi, respectively, exceeding all eight comparison methods, with recall above 80\% in all three areas. In the Pakistan validation area, CCDepth achieves a mean absolute error of 0.4910~m and a root mean square error of 0.6917~m, reductions of 43.8\% and 35.2\% relative to FwDET v2.0, respectively. Positive-depth coverage is 92.36\% for CCDepth and 55.96\% for FwDET, with median water-surface elevation gradients of 3.73‰ and 28.87‰, respectively. When the detected extent replaces the manually delineated reference extent, the proportions retaining the same depth class range from 0.66 to 0.82 across CCDepth's depth classes in the three study areas. CCDepth requires less depth-estimation time than FwDET in all four evaluation areas. DDFlood connects newly inundated extent identification with terrain-constrained depth estimation to provide flood extent and depth information for rapid flood assessment.
+
 \end{abstract}
 
 \begin{keyword}
-SAR flood change detection \sep Bi-temporal remote sensing \sep Complex landscapes \sep Multiscale representation \sep DEM-constrained flood depth
+SAR flood change detection \sep Bi-temporal remote sensing \sep Newly inundated area mapping \sep Change-constrained flood depth estimation \sep DEM-constrained water depth
 \end{keyword}
 
 \end{frontmatter}
@@ -144,119 +101,153 @@ SAR flood change detection \sep Bi-temporal remote sensing \sep Complex landscap
 
 \section{Introduction}
 
-Floods are among the most frequent and widespread natural disasters worldwide, causing thousands of deaths and tens of billions of US dollars in economic losses each year and posing a severe threat to human life and socioeconomic activities \citep{credUndrr2020disasters}. Satellite observations further indicate an upward trend in the proportion of the population exposed within observed flood footprints \citep{tellman2021exposure}, underscoring the urgency of obtaining timely information on the spatial distribution of flood impacts. Timely flood observations over extensive areas can support emergency response, impact assessment, and post-disaster recovery. Through its active microwave imaging capability, synthetic aperture radar (SAR) can acquire surface information regardless of cloud cover and daylight conditions and has become a key data source for flood monitoring \citep{wagner2026gfm}. Reliably extracting spatial information on flood impacts from SAR observations therefore provides an important basis for flood response and assessment.
+Floods are among the most frequent and widespread natural disasters worldwide, causing thousands of deaths and tens of billions of US dollars in economic losses each year and seriously threatening human life and socioeconomic activities \citep{credUndrr2020disasters}. Satellite observations further indicate an increasing proportion of the population exposed within observed flood footprints \citep{tellman2021exposure}, making timely information on the spatial distribution of flood impacts a key requirement for flood response and post-disaster assessment. Through active microwave imaging, synthetic aperture radar (SAR) acquires surface information under cloudy and rainy conditions and at night, and has become an important source of flood-monitoring data \citep{wagner2026gfm}. Reliably deriving newly inundated extents and water-depth information from SAR observations therefore provides a basis for rapid flood assessment.
 
-Flood extent and water depth provide complementary flood information: the former identifies affected areas, while the latter describes the degree of submergence within them. Together, they provide key parameters for assessing risks to people and assets; for example, flood risk assessment for people and vehicles in Zhengzhou combines inundation conditions with hydraulic instability to determine hazard levels \citep{dong2022urbanrisk}. However, obtaining these two types of information from SAR involves different observational constraints. Specular reflection from smooth open water generally weakens the backscattered signal, providing a basis for distinguishing inundation from land \citep{amitrano2024sarFloodReview}. Moreover, backscatter itself does not directly indicate water depth; combining the mapped inundation extent with terrain elevations offers an effective approach to estimating water-surface elevation and inundation depth \citep{cian2018flood}. To address these information needs, combining SAR-based inundation delineation with terrain-assisted depth estimation can provide complementary information on the horizontal distribution of affected areas and the degree of submergence within them.
+Inundation extent and water depth provide complementary flood information. Extent identifies affected areas, whereas depth describes the degree of submergence within them. Together, they support risk assessment for people and assets; for example, assessments of risks to people and vehicles during the Zhengzhou floods combined inundation conditions with hydraulic instability \citep{dong2022urbanrisk}. Obtaining these two types of information from SAR involves different constraints. Specular reflection from smooth open water generally reduces backscatter, providing a basis for identifying inundation \citep{amitrano2024sarFloodReview}. Backscatter itself does not directly indicate water depth. Combining the identified extent with terrain elevations allows boundary terrain elevations to serve as water-level references and to be propagated into the interior. Water depth can then be inferred as the difference between the resulting water-surface elevation field and ground elevation, providing a basis for boundary-elevation-constrained depth estimation \citep{cian2018flood}. Connecting SAR-based identification of newly inundated extents with terrain-assisted depth estimation can thus provide information on both the horizontal distribution of flooding and the degree of submergence within it.
 
-Flood change detection must distinguish pre-existing water from flood-induced changes while accounting for the diversity of inundation responses across different surface backgrounds. Differences in pre-event backscatter levels and land-cover conditions lead to variations in flood-induced backscatter changes: among inundated areas exhibiting reduced backscatter, some show pronounced changes, whereas others produce only weak responses, complicating the extraction and discrimination of flood-change features \citep{giustarini2013urbanFloodCd,amitrano2024sarFloodReview}. To support flood discrimination in complex settings, DAM-Net combines change features with water-change semantics to enrich flood-change representations \citep{saleh2024dam}, while AWCA-Net integrates neighborhood context and difference-guided attention to enhance the discrimination of subtle and heterogeneous changes \citep{du2026high}. In addition, a global SAR flood-mapping study uses auxiliary land-cover data to remove permanent water, providing supplementary constraints for identifying event-related inundation \citep{misra2025globalFloods}. These studies enrich the evidence available for flood discrimination across complex surface backgrounds through feature fusion, context modeling, and auxiliary information constraints. However, even within inundated areas, the magnitude of backscatter changes can vary with the surface background; decisions that rely too heavily on pronounced changes may therefore omit inundated areas with weaker responses. A change-discrimination mechanism that accommodates these variations in inundation response across different surface backgrounds is therefore needed to improve the recognition of weak inundation changes alongside pronounced ones, enabling more complete identification of inundated areas.
+For SAR water extraction, thresholding is suited to areas with homogeneous land cover and high contrast, but building shadows, layover, and standing water in urban areas can exhibit similarly low backscatter \citep{yu2024urbanFloodThreshold}. Supervised classification is limited by sample representativeness. Deep learning extends water identification in complex settings through multiscale features and context modeling \citep{du2026high}, while observations from multiple SAR sources and auxiliary data supplement extent identification \citep{lee2026smagnet}. Water nevertheless has no uniform scattering signature in SAR imagery: open water exhibits low backscatter, whereas flooding beneath vegetation may increase backscatter through multiple scattering \citep{tsyganskaya2018vegetation}. Urban inundation is affected by building reflections and occlusion, and arid sandy surfaces may also exhibit similarly low backscatter \citep{garg2024aridFlood}. These scattering differences produce flood-induced backscatter changes of varying strength \citep{giustarini2013urbanFloodCd,amitrano2024sarFloodReview}. Feature fusion and context modeling improve the separability of weak changes \citep{saleh2024dam}, but these strategies still depend on changes being sufficiently distinct in feature space. Combining state and difference information in bi-temporal features calibrated with a common set of statistics remains an unresolved issue in change encoding.
 
-The spatial delineation of flooding must accommodate extensive contiguous inundation, narrow flooded strips, and scattered patches, requiring extent reconstruction to use both information about the affected region as a whole and local positioning cues near its boundaries. SAR flood-mapping studies have explored multiscale representation, selective feature fusion, and surface-context constraints to address this need. MS-Deeplab combines features at different levels for water extraction \citep{wu2022msdeeplab}, Siam-DWENet introduces a multiscale pyramid into inundation detection from paired images \citep{zhao2023siamdwenet}, and SISCNet extracts features from different neighborhoods for bi-temporal inundation discrimination \citep{tahermanesh2025siscnet}. For feature selection, attentive fusion weights spatial and channel information \citep{yadav2022attentive}, while adaptive-window methods organize multiscale features using local neighborhoods \citep{du2026high}; land cover, historical water occurrence, and hydrological information also supplement image-based interpretation \citep{zhu2025globalfloodsar}. In related change-detection research, BIT organizes regional information through bi-temporal semantic interaction \citep{chen2021remote}, while CGNet uses deep change priors to guide multiscale feature fusion \citep{han2023change}. These studies enrich the multiscale information, regional context, and local spatial cues available for flood-extent identification. However, narrow flooded strips and scattered inundation may be omitted if local positioning cues are insufficiently preserved during regional information aggregation. Conversely, decisions that rely too heavily on local responses may lack the regional context needed to maintain consistent predictions within contiguous inundation. A reconstruction mechanism that connects regional context aggregation with local-detail recovery is therefore needed to preserve the completeness of contiguous flood coverage while accurately delineating narrow, scattered, and fragmented flooded areas.
+Flood-extent identification must also accommodate extensive contiguous inundation, narrow flooded strips, and scattered standing water. Multiscale representation methods fuse features at different levels or introduce multiscale pyramids \citep{wu2022msdeeplab,zhao2023siamdwenet,tahermanesh2025siscnet}. In parallel, feature-selection methods organize multiscale features through attention weighting or adaptive windows \citep{yadav2022attentive,du2026high,zhu2025globalfloodsar}. Building on these approaches, regional-context methods guide feature fusion through bi-temporal semantic interaction or deep change priors \citep{chen2021remote,han2023change}. These methods improve the identification of extensive contiguous inundation and local detail, respectively, but regional information aggregation and local-detail preservation compete within a single feature space. Regional aggregation tends to smooth local variations, whereas local detail requires high-resolution edges and boundaries to be retained. Existing extent-reconstruction approaches struggle to accommodate both requirements.
 
-Identifying the spatial distribution of affected areas alone is insufficient to support disaster assessment, and water-depth information is also needed to characterize the degree of submergence. Methods based on flood observations and terrain commonly use ground elevations at wet--dry boundaries to constrain water-surface elevation and calculate depth as the difference between water-surface and ground elevations. Cian et al. estimated water levels from statistics of lidar terrain elevations along the edges of SAR-identified areas \citep{cian2018flood}, while FwDET v2.0 improved boundary identification and local water-level assignment to reduce inappropriate allocation of boundary elevations across permanent water bodies \citep{cohen2019floodwater}. For water-surface inference, FLEXTH combines boundary elevations with terrain conditions to estimate water levels \citep{betterle2024water}, and RS-FloodXDepth integrates boundary-elevation analysis with hydrologically guided spatial inference \citep{tian2026floodxdepth}. Yang et al. connected water segmentation with FLEXTH-based geometric depth estimation, illustrating a way to link image-based identification with terrain-based depth estimation \citep{yang2026csmamba}. These studies provide a methodological basis for converting spatial flood information into water-depth information and indicate that depth estimation depends both on the selection of boundary elevations and on how these local references are used to infer the interior water surface.
+Water-depth estimation methods fall mainly into three categories: hydrodynamic models, data-driven models, and boundary-elevation-constrained methods. Hydrodynamic models simulate flood evolution by solving the Saint-Venant equations or simplified hydraulic relationships, but require detailed channel topography and roughness parameters \citep{teng2017floodInundationUncertainty}. Data-driven models use machine learning to regress water depth from SAR imagery and auxiliary data, requiring large numbers of measured depth samples \citep{chu2025urbanDepth}. Unlike these two categories, boundary-elevation-constrained methods require only flood extent and a DEM, making them suitable for rapid disaster assessment. Cian et al. estimated water levels from lidar terrain elevations at inundation margins \citep{cian2018flood}; FwDET v2.0 subsequently improved boundary identification and local water-level assignment \citep{cohen2019floodwater}, and FLEXTH further incorporated terrain conditions to constrain water levels \citep{betterle2024water}. RS-FloodXDepth and Yang et al. connected water-level references with hydrologically guided spatial inference and water segmentation, respectively \citep{tian2026floodxdepth,yang2026csmamba}. All these methods use boundary terrain elevations as water-level references and propagate boundary water levels into the interior to derive water depth.
 
-However, when the boundary-elevation-based depth-estimation methods discussed above are applied directly to change-detection results, not all detected boundaries meet the conditions for inferring water levels from ground elevations. Change detection identifies newly flooded areas whose boundaries may adjoin permanent water bodies, leaving areas classified as unchanged outside these boundaries still water-covered, so such boundaries cannot directly serve as wet--dry boundaries that provide water-level references \citep{betterle2024water}. Even along boundaries that satisfy wet--dry shoreline conditions, locally steep slopes and anomalous elevations may introduce biases into water-level references. Directly assigning these elevations to interior pixels may propagate the biases into the interior of the region \citep{cohen2019floodwater}. When adjacent pixels use boundary references with different elevations, this assignment may also introduce local jumps in the water surface. Depth estimation therefore requires screening boundary elevations to obtain stable constraints, provided that the boundaries meet the conditions for their use, and coordinating water-surface elevations at adjacent locations while preserving these constraints to reduce local bias propagation and discontinuities caused by direct assignment.
+The extent of the input mask determines the locations and number of boundary samples and affects the construction of water-level intervals and interior water-surface references. Travert et al. noted that depth-estimation accuracy is sensitive to the quality of the input flood mask \citep{travert2026uncertainty}. When the input mask comes from change detection, boundary samples occur both along newly inundated margins and on adjacent unchanged terrain. Elevation references vary with local terrain conditions, and a single boundary water level cannot adequately represent water-surface elevation variations within a connected component. Change-detection research focuses on identifying and spatially reconstructing newly inundated extents, whereas boundary-elevation-based depth estimation focuses on boundary water-level assignment and interior propagation for complete water-body extents. A common solution-domain definition is still lacking between these two lines of research: one in which the detection support directly determines the depth-estimation extent and local boundary water-level intervals are combined with terrain and continuity constraints.
 
-In summary, flood change detection focuses on identifying flooded areas, whereas depth estimation relies on inferring the water surface under terrain constraints, and the two tasks remain insufficiently connected in translating detection results into effective constraints for depth estimation. Yang et al. integrated water identification and depth estimation, illustrating the practical value of combining the two tasks for flood mapping \citep{yang2026csmamba}. Combining change detection with depth estimation therefore requires both accurate identification of newly flooded areas and the establishment of appropriate elevation constraints, enabling comprehensive flood mapping that captures both horizontal distribution and the vertical degree of submergence and provides more complete spatial information for disaster assessment.
+To address these issues, we propose Detection-to-Depth Flood Mapping (DDFlood), which organizes flood change detection and water-depth estimation into a two-stage workflow with a common spatial support. The workflow addresses the missing connection between existing change-detection and boundary-elevation-based methods in translating detection results into effective depth-estimation constraints. HarmoSSM produces the newly inundated extent in the detection stage, and Change-Constrained Flood Depth Estimation (CCDepth) uses the detection mask as the solution support for conditional depth estimation in the second stage. Both stages share the same spatial support. The main contributions are as follows.
 
-To address the above problems, this study proposes a two-stage mapping approach that combines flood change detection with depth estimation. In the change-detection stage, HarmoSSM harmonizes bi-temporal representations to address variations in change-response strength and combines regional context with local detail to delineate both contiguous inundation and narrow, scattered flooded areas. In the depth-estimation stage, CFDepth combines detection results with terrain information, using boundary-elevation screening and interior water-surface coordination to address local elevation biases and discontinuities caused by direct assignment. The approach links the identification of newly flooded areas with depth estimation within them in a unified mapping workflow, providing a comprehensive characterization of flood distribution and the degree of submergence.
-
-The main contributions of this study are as follows:
 \begin{enumerate}
-  \item \textbf{Harmonized change encoding that jointly uses state and difference information.} A Harmonized Change Encoder (HCE) is designed to compare pre-event and post-event features against a common statistical reference, jointly encode the states at both times and their differences, and aggregate regional information through query interaction, providing a basis for discriminating changes of varying response strengths using both state information and change cues.
-  \item \textbf{Omni-scale change decoding combining regional aggregation and detail recovery.} An Omni-Scale State-Space Change Decoder (OSCD) is designed to aggregate regional context from deep change features and progressively incorporate shallow spatial detail, reconstructing multiscale change information into flood extents that capture both contiguous coverage and the locations of narrow, scattered flooded areas.
-  \item \textbf{Depth estimation combining boundary constraints with water-surface coordination.} CFDepth is developed to screen boundary elevations based on slope and local elevation consistency, establish and preserve water-surface elevation constraints, and refine the continuity of the interior water surface to estimate first-order water depth within the supplied detection area under the available terrain conditions.
+  \item \textbf{Harmonized encoding of joint state and difference information and omni-scale reconstruction for flood change detection.} A Harmonized Change Encoder (HCE) uses Harmonized Alignment (HA) to establish comparable bi-temporal features. Change Query Interaction (CQI) combines pre-event states, post-event states, signed differences, and absolute differences in the same calibrated feature space. An Omni-Scale State-Space Decoder (OSSD) then aggregates regional context in deep change features and recovers local detail in shallow features. This decoding achieves the highest overlap accuracy for all three inundation morphologies: scattered patches and narrow flooded strips in Zhengzhou, contiguous inundation in Zhuozhou, and scattered fragments in Guangxi.
+  \item \textbf{Water-depth estimation constrained by the change support domain.} CCDepth constructs water-level intervals from terrain statistics on both sides of the boundary, uses a terrain lower bound to prevent the water surface from falling below the ground, and constrains water-surface continuity within each connected component through a weighted sum of squared water-surface elevation differences between adjacent pixels. Boundary water-level references are expressed as intervals. After median and median absolute deviation statistics are applied, local anomalous elevations fall within the interval bounds rather than being propagated throughout a component as individual values. The final output is pixelwise water depth.
+  \item \textbf{The two-stage DDFlood mapping framework.} HarmoSSM detection of newly inundated extents and CCDepth terrain-constrained depth estimation form a sequential mapping workflow with a common spatial support, in which the detected extent and DEM jointly determine the depth solution domain and boundary elevation references. Comparisons between manually delineated reference extents and detected extents hold the DEM, solver parameters, and depth-class thresholds fixed to analyze how extent changes affect depth classes and output availability. This establishes a traceable spatial connection between newly inundated extent identification and the characterization of submergence, providing both horizontal distribution and vertical depth information for rapid flood assessment.
 \end{enumerate}
-\clearpage
 
 \section{Study Areas and Data}
 
-\subsection{Study Areas and Flood Settings}
+\subsection{Flood Events and Study Areas}
 
-Three study areas are selected: central Zhengzhou in Henan Province, Zhuozhou in Hebei Province, and an area near Binyang County and Hengzhou in Guangxi. Their locations and land cover are shown in Fig.~\ref{fig:dataset}. The three settings comprise concentrated built-up land, interspersed cropland and settlements, and cropland and settlements distributed among tree-covered areas, respectively. They provide observations for examining flood-change detection under different surface conditions and cases for terrain-constrained depth estimation within the detected regions.
+Three study areas are selected for change detection and change-constrained depth estimation, and a separate flood event is selected for independent depth validation. The four events differ in flood causes, inundated objects, and surface conditions (Fig.~\ref{fig:dataset}).
 
-The Zhengzhou study area covers the city centre and corresponds to the July 2021 flood. Built-up land is concentrated in Fig.~\ref{fig:dataset}(b), with channels and other water bodies crossing or adjoining developed areas and cropland and vegetation along the periphery. Flood photographs (S1--S4 in Fig.~\ref{fig:flood_photos}) show standing water around roads, buildings, and vehicles, illustrating the complexity of locally inundated spaces among urban features. This setting is used to examine the identification of scattered inundation and complex boundaries in a built environment.
+From 17 to 22 July 2021, persistent heavy rainfall affected Henan Province, causing severe urban inundation in central Zhengzhou. Roads and low-lying areas were flooded, affecting vehicle safety \citep{dong2022urbanrisk}. The Zhengzhou study area covers built-up land interspersed with channels, roads, and low-lying terrain. Newly inundated areas mainly comprise scattered patches and locally narrow strips, providing a setting for examining the identification of scattered standing water, complex boundaries, and weak change responses in a built environment.
 
-The Zhuozhou study area corresponds to the flood of late July to early August 2023, for which the Haihe basin study by \citet{lan2025haihe} provides regional context. Cropland and settlements are interspersed with water bodies in Fig.~\ref{fig:dataset}(c), and the flood photographs (S5--S8 in Fig.~\ref{fig:flood_photos}) show inundation around roads, transport infrastructure, and buildings. Compared with central Zhengzhou, this area provides a setting where agricultural and built environments adjoin, allowing examination of the spatial continuity and local boundaries of inundated regions across different surfaces.
+From late July to early August 2023, the remnants of Typhoon Doksuri caused an extreme basin-wide flood in the Haihe basin. Parts of the cropland and residential areas in Zhuozhou, Hebei Province, experienced contiguous inundation, with inundation boundaries difficult to distinguish from pre-existing water bodies. The Zhuozhou study area mainly comprises interspersed cropland and settlements. Its reference inundation is relatively concentrated and contiguous, allowing examination of spatial continuity and local boundaries across different surface types.
 
-The Guangxi study area lies near Binyang County and Hengzhou and is delineated by the common valid coverage of the selected bi-temporal LT-1 imagery. The administrative names indicate its location rather than its boundary. Persistent heavy rainfall affected Nanning during 4--6 July 2026 under the influence of Typhoon Maysak. On the morning of 6 July, overtopping and breaches were reported at the Liulan and Yunbiao reservoirs in Hengzhou, while the Liuwang reservoir in Binyang County overtopped, with flooding in some downstream areas. Figure~\ref{fig:dataset}(d) shows cropland, settlements, and river waters distributed among tree-covered areas, while the flood photographs (S9--S12 in Fig.~\ref{fig:flood_photos}) illustrate inundation around settlements and roads. This setting complements the other two areas in both land-cover pattern and SAR observation conditions for examining flood-change detection and its connection to terrain-constrained depth estimation.
+In early July 2026, Typhoon Maysak brought persistent heavy rainfall to Nanning. Liuwang Reservoir in Binyang County overflowed its dam, while Liulan and Yunbiao reservoirs in Hengzhou experienced overtopping and breaches, inundating some downstream villages, towns, and cropland. The Guangxi study area is located near Binyang County and Hengzhou and is defined by the common valid coverage of the bi-temporal LT-1B imagery. Forest, cropland, and settlements form a mosaic, and inundation comprises multiple disconnected areas, irregular boundaries, and scattered fragments. This area is used to examine detection adaptability in a setting with multiple types of change.
+
+From July to September 2022, Pakistan experienced persistent heavy monsoon rainfall and extensive flooding in the Indus basin, affecting approximately 33 million people, causing more than 1,700 deaths, and resulting in approximately EUR 20 billion in direct losses \citep{nanditha2023pakistan,betterle2024water}. The Pakistan validation area lies in the middle and lower Indus Plain, mainly in Sindh Province and extending into eastern Balochistan and southern Punjab (Fig.~\ref{fig:dataset}(e)). Flooding was concentrated around Larkana, Shikarpur, and Jacobabad in northern Sindh \citep{betterle2024water}. Approximately 2.5 million hm\textsuperscript{2}, or 18\% of Sindh's area, was inundated, including approximately 1.1 million hm\textsuperscript{2} of cropland \citep{qamer2023cropLosses}. The area is low-lying and flat, dominated by irrigated cropland, and experienced extensive contiguous inundation that persisted for a prolonged period.
+
+Figure~\ref{fig:dataset} shows the locations and surface environments of the three detection events and the validation event. Photographs S1--S12 in Fig.~\ref{fig:flood_photos} document inundation around roads, buildings, cropland, and forest.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\textwidth,height=.65\textheight,keepaspectratio]{figure/Figure1.jpg}
-  \caption{Locations and land cover of the three study areas. Panel (a) shows their locations in China, and (b)--(d) show land cover in central Zhengzhou, Zhuozhou, and Guangxi, respectively.}
+  \caption{Locations and surface environments of the four study areas. (a) Study-area locations. Land cover and photograph locations in (b) Zhengzhou, (c) Zhuozhou, and (d) Guangxi. (e) The Pakistan validation area and the 2022 flood extent.}
   \label{fig:dataset}
 \end{figure}
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\textwidth,height=.35\textheight,keepaspectratio]{figure/Figure2.jpg}
-  \caption{Representative flood photographs from the three study areas. The left, middle, and right groups correspond to Zhengzhou (S1--S4), Zhuozhou (S5--S8), and Guangxi (S9--S12), respectively; each label gives the observed object and depth interval.}
+  \caption{Representative flood photographs from the three study areas. The left, middle, and right groups show Zhengzhou (S1--S4), Zhuozhou (S5--S8), and Guangxi (S9--S12), respectively. Locations are shown in Fig.~\ref{fig:dataset}. Photograph annotations identify the observed objects and water-depth ranges.}
   \label{fig:flood_photos}
 \end{figure}
 
-\subsection{Remote Sensing Observations and Terrain Data}\label{sec:depth_data}
+\subsection{Data Sources}\label{sec:depth_data}\label{sec:training_reference_data}
 
-Bi-temporal SAR imagery provides reference states and flood-period observations for the three areas, with key parameters summarized in Table~\ref{tab:gf3_eval}. Zhengzhou and Zhuozhou use HV-polarized GF3 imagery. Their reference and flood-period observations were acquired in July but one year apart, so surface changes over the intervening period still need to be distinguished from flood-related changes. Guangxi uses HH-polarized LT-1B imagery, with two scenes mosaicked for each acquisition date.
+The data are grouped by purpose. SAR imagery and change-detection samples support model training and scene testing; terrain data provide the ground elevations required for depth estimation; and validation and reference data support depth evaluation and local site comparisons. The specifications and preprocessing of these three groups are described below.
 
-\input{tables/table_gf3_eval_dataset.tex}
+Bi-temporal SAR imagery is used for the three detection study areas: GF3 HV-polarized imagery for Zhengzhou and Zhuozhou, and LT-1B HH-polarized imagery for Guangxi. The image pairs in all three areas have undergone radiometric tone harmonization and geometric registration and have been standardized to a pixel spacing of approximately 10 m. Table~\ref{tab:gf3_eval} lists their main parameters.
 
-All three study areas use FABDEM as the terrain data source, with a sampling interval of approximately 30 m. The product reduces the effects of building and forest heights on elevation to better represent ground elevations \citep{hawker2022fabdem}. FABDEM provides the ground-elevation reference and water-surface elevation constraints at valid boundaries for CFDepth, supporting first-order depth estimation within the supplied detection regions. The spatial detail of the estimates is limited by terrain sampling and elevation errors.
+\input{tables/table1_sar_imagery.tex}
 
+Training and validation samples for water change detection come from the public S1GFloods \citep{saleh2024dam} and VarFloods \citep{du2026high} datasets and bi-temporal GF3 samples from Zhengzhou. S1GFloods and VarFloods cover different flood events and surface conditions, while a small number of Zhengzhou GF3 images supplement local GF3 observation conditions. Table~\ref{tab:training_split} summarizes the training and validation sets. Learning samples are \(256\times256\) image tiles.
+
+\input{tables/table2_training_split.tex}
+
+FABDEM provides terrain data for the three detection study areas and the Pakistan validation area. It is derived from the Copernicus GLO-30 DEM by using machine learning to remove building and forest height biases, with a spatial resolution of 1 arc-second (approximately 30 m near the equator). The data used here were obtained through the Google Earth Engine Community Catalog \citep{hawker2022fabdem,fabdemGEE}.
+
+The Pakistan validation data comprise flood extent and along-track reference depths. Flood extent is derived from scene-level Global Flood Monitoring (GFM) products, which provide three layers: observed flood extent (F), a reference water mask (R), and an exclusion mask (X). Flood pixels are selected where all three layers are valid and \(F=1\), \(R=0\), and \(X=0\); all other pixels are assigned NoData \citep{gfm2025pum}. Scene-level results from July to September 2022 are aggregated over time to obtain the validation-area flood extent and cover the main inundation process during the monsoon period \citep{betterle2024water}. Along-track reference depths are constructed from wet-period minus dry-period elevations of medium- and high-confidence strong-beam photons from ICESat-2 ATL03. The wet-period observations were acquired on 3 September 2022, and the spatially matched dry-period track was acquired on 6 June 2021; the two tracks are separated by approximately 50 m across-track. Photon elevations are smoothed with a moving median filter using a 100-photon window, and along-track candidate points are then generated at latitude increments corresponding to approximately 5 m. Dry-period elevations represent ground elevation, and wet-period minus dry-period elevations define reference depth, retaining both positive and negative differences. The final set contains 14,902 along-track reference points with depths greater than 0.01 m.
+
+Local site reference data comprise the social-media flood photographs S1--S12 and their depth ranges in Fig.~\ref{fig:flood_photos}, together with literature depth records LS1--LS3 \citep{zhang2024yolomaskrcnn}. These records provide site-specific depth references for inundated objects such as roads, buildings, cropland, and forest, and support the site-level comparisons in Fig.~\ref{fig:depth_overview}(d).
+
+\begingroup
 \section{Methodology}\label{sec:methodology}
 
-\subsection{Overview}\label{sec:overview}
+\subsection{Overall Framework}\label{sec:overview}
 
-Flood mapping under complex surface conditions requires information on both the location of newly affected areas and the degree of inundation within them. To meet these needs, we develop a two-stage framework comprising bi-temporal SAR change detection and depth estimation within the detected extent (Fig.~\ref{fig:framework}). Registered pre-event and post-event SAR images, denoted by \(\mathbf{I}^A\) and \(\mathbf{I}^B\), provide the observations for identifying newly flooded areas, while the DEM supplies terrain elevations for depth estimation. The first stage uses HarmoSSM to produce the newly flooded extent \(\hat{\mathbf{M}}\). The second uses CFDepth to estimate internal depth from this extent and the DEM, spatially linking extent identification with the estimation of inundation severity.
+Flood mapping needs to describe both where new inundation occurs and the degree of submergence. Change detection locates changes in water extent, while depth estimation uses terrain elevations to establish the relationship between the water surface and ground within a given extent. DDFlood organizes these tasks into a sequential mapping workflow. The newly inundated mask produced by HarmoSSM directly determines the valid computational extent for CCDepth, so depth results share the spatial support of the detected extent.
 
-The change detection stage uses HarmoSSM, comprising a Harmonized Change Encoder (HCE) and an Omni-Scale State-Space Change Decoder (OSCD). HCE organizes shared spatial representations, semantic information, paired harmonization, and query interaction into a continuous change encoding process, yielding five levels of change features. OSCD aggregates deep regional context and then progressively incorporates shallow local detail to reconstruct pixel-level predictions of new inundation. The detection target is binary, with \(y=1\) denoting new inundation and \(y=0\) denoting background. Softmax converts the two-class logits into foreground probabilities, and the selected threshold produces \(\hat{\mathbf{M}}\) over valid input pixels as the spatial input to the depth estimation stage.
-
-In the depth estimation stage, CFDepth first intersects the detected extent with valid DEM coverage, screens boundary locations using slope and local elevation, and constructs water-surface anchors from terrain elevations at the boundary and its inner neighborhood. Anchor elevations propagate along reachable paths within the extent to initialize the water surface. Local continuity refinement then retains the anchors and enforces the terrain lower bound. Subtracting the DEM from the resulting water-surface elevation (WSE) yields the depth distribution within the given extent. The two stages provide horizontal flood distribution and vertical information, with depth estimates conditioned on the detected extent, valid terrain, and selected boundary constraints.
+The framework connects extent identification and depth estimation through a shared spatial domain. Pre-event and post-event SAR images produce a newly inundated mask, the DEM provides ground elevations, and the detection mask and valid terrain area jointly delimit the depth computational domain. The CCDepth solution support is defined as
+\begin{equation}\label{eq:framework_support}
+ \Omega_f=\{p:\hat{\mathbf M}(p)=1\}\cap\Omega_Z,\qquad
+ \hat{\mathbf M}=\Phi_{\mathrm H}(\mathbf I^A,\mathbf I^B),\qquad
+ \hat d=\Phi_{\mathrm C}(\hat{\mathbf M},Z),
+\end{equation}
+where \(\Phi_{\mathrm H}\) denotes the HarmoSSM change-detection mapping, \(\Phi_{\mathrm C}\) denotes the CCDepth depth-estimation mapping, \(\Omega_f\) delimits the valid depth-estimation extent, and \(\hat d\) is estimated water depth. HarmoSSM outputs the newly inundated mask \(\hat{\mathbf M}\) and foreground probability \(p_f\). The mask and decision threshold determine \(\Omega_f\). CCDepth solves for the water surface within \(\Omega_f\) and outputs a depth map \(\hat d\) and a component state map \(\mathrm{status}\), assigning NoData to pixels that do not meet the solution conditions. The detected extent defines where depth is calculated, while terrain and boundary intervals define the conditions for solving the water surface. These outputs form the unified mapping workflow in Fig.~\ref{fig:framework}.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure3.jpg}
-  \caption{Overall workflow of HarmoSSM and CFDepth.}
+  \caption{The two-stage DDFlood flood mapping framework. In the first stage, HarmoSSM extracts newly inundated extents from bi-temporal SAR imagery. In the second stage, CCDepth combines the detected extent with the DEM to construct the support domain, extract boundary constraints, reconstruct the water surface, and estimate water depth.}
   \label{fig:framework}
 \end{figure}
 
-\subsection{Harmonized Change Encoder (HCE)}\label{sec:encoder}\label{sec:ha}\label{sec:cqi}
+\subsection{HarmoSSM for Flood Change Detection}\label{sec:harmossm}
 
-New inundation discrimination requires information about surface states at both times and their changes, together with a comparable representation that relates them. The Harmonized Change Encoder (HCE) organizes shared representation extraction, paired harmonization, and change query interaction into a continuous process. It first extracts multiscale features for each time, then addresses the statistical reference and local correspondence, and finally combines state and difference information into change representations. HCE thus outputs five levels of change features for the decoder, expressing bi-temporal comparison at different spatial scales and supplying the inputs for flood-extent reconstruction.
+HarmoSSM performs bi-temporal SAR flood change detection using HCE and OSSD. HCE establishes shared bi-temporal features and generates five levels of change features through HA and CQI. OSSD builds regional context from deep features and then recovers flood extent using shallow features. The two components organize change features and perform spatial reconstruction, respectively.
 
-Shared spatial representations retain location cues, while semantic assistance supplements the interpretation of surfaces within their surroundings. A shared convolutional encoder and feature pyramid network extract spatial representations \(P1\)--\(P5\) \citep{tan2019efficientnet,lin2017fpn}, with progressively lower resolutions. Shallow levels retain finer position and texture cues, whereas deeper levels organize information over larger areas. Frozen DINOv3 representations are adapted and incorporated into \(P3\)--\(P5\) \citep{simeoni2025dinov3}, where they are concatenated with the corresponding CNN features and fused through convolution and CBAM \citep{woo2018cbam}; \(P1/P2\) retain convolutional features. The upper part of Fig.~\ref{fig:encoder_ha} shows these scale-dependent paths. The CNN and semantic branches each share their respective weights across the pre-event and post-event inputs, while fusion is performed separately within each time. Both times therefore use the same feature mappings while retaining their individual state information. The output at level \(i\) and time \(t\) is denoted by \(\mathbf P_i^t\).
+\subsubsection{Harmonized Change Encoder}\label{sec:encoder}\label{sec:ha}\label{sec:cqi}
+
+HCE constructs structurally consistent multiscale features for pre-event and post-event images. A shared EfficientNet-B2 and FPN generate a feature pyramid from \(P1\) to \(P5\) \citep{tan2019efficientnet,lin2017fpn}. Shallow features retain position and texture information, whereas deep features represent surface structures over larger areas. Both times use the same CNN encoding weights; \(\mathbf P_i^t\) denotes the feature at level \(i\) and time \(t\in\{A,B\}\).
+
+Features from layers 5, 8, and 11 of a frozen DINOv3 ViT-S/16 are adapted within each time branch and fused into \(P3\) to \(P5\) \citep{simeoni2025dinov3}. The fusion branch applies convolution, normalization, and CBAM in sequence \citep{woo2018cbam}, providing stable semantic context for deep convolutional features. The CNN and DINO branches each share weights between the two times, while semantic fusion is performed independently within each time branch. HCE passes \(P1\) to \(P5\) through HA and then CQI to produce five levels of change features, \(\mathbf D_1\) to \(\mathbf D_5\).
+
+\paragraph{Harmonized Alignment (HA)}
+
+HA establishes comparable bi-temporal features at \(P1\) to \(P3\). SAR image pairs differ in imaging statistics, speckle, and local positional correspondence, so direct comparison mixes appearance differences with actual change. At these levels, HA applies statistical calibration and local deformable alignment to bring pre-event and post-event features into a common feature space and provide spatially consistent inputs for subsequent change interaction. Inputs at level \(i\) are denoted by \(\mathbf P_i^A\) and \(\mathbf P_i^B\), and both times contribute to the channel means and standard deviations:
+\begin{equation}\label{eq:ha_calibration}
+ \boldsymbol\mu_i^{AB}=\operatorname{mean}_{t,\mathbf p}\mathbf P_i^t(\mathbf p),\qquad
+ \sigma_i^{AB}=\sqrt{\operatorname{var}_{t,\mathbf p}\mathbf P_i^t(\mathbf p)+\epsilon},
+\end{equation}
+\begin{equation}\label{eq:ha_affine}
+ \mathbf Y_i^t=(1/\sigma_i^{AB})(\mathbf P_i^t-\boldsymbol\mu_i^{AB})\odot
+ [\operatorname{softplus}(\mathbf s_i^c)+\epsilon]+\boldsymbol\mu_i^c,
+\end{equation}
+\begin{equation}\label{eq:ha_recovery}
+ \mathbf U_i^t=\mathbf Y_i^t+\mathcal{R}_i(\mathbf Y_i^t),
+ \qquad i\in\{1,2,3\},
+\end{equation}
+where \(\epsilon\) is a numerical stability term, \(\boldsymbol\mu_i^c\) and \(\mathbf s_i^c\) are learned affine parameters shared between the two times, and \(\mathcal R_i\) consists of a \(3\times3\) convolution, batch normalization, SiLU, a \(1\times1\) convolution, and batch normalization. Both times use the same statistics and affine parameters, placing the calibrated \(\mathbf U_i^A\) and \(\mathbf U_i^B\) in a common feature space. \(\mathcal R_i\) preserves shallow texture and compensates for information lost during calibration.
+
+After statistical calibration, HA performs local deformable alignment at \(P1\) to \(P3\) \citep{zhu2021deformable}. The calibrated post-event features act as queries and the pre-event features as keys and values. Local offsets and attention biases are predicted from \(\mathbf U_i^A\), \(\mathbf U_i^B\), and \(\mathbf U_i^B-\mathbf U_i^A\). Sampling locations and attention weights are written as
+\begin{equation}\label{eq:ha_alignment}
+ \mathbf p'_{ik}(\mathbf p)=\mathbf p+\mathbf r_k+\Delta\mathbf p_{ik}(\mathbf p),
+ \qquad
+ \mathbf K_{s,i}(\mathbf p)=\mathbf K_i(\mathbf p'_{ik}),
+ \qquad
+ \mathbf V_{s,i}(\mathbf p)=\mathbf V_i(\mathbf p'_{ik}),
+\end{equation}
+\begin{equation}\label{eq:ha_output}
+ \begin{aligned}
+ a_{ik}(\mathbf p)&=\operatorname{softmax}_k\!\left(
+ \frac{\mathbf q_i(\mathbf p)^{\top}\mathbf K_{s,i}(\mathbf p)}{\sqrt d}
+ +b_{ik}(\mathbf p)\right),\\
+ \mathbf X_i^A&=\mathbf U_i^A+\mathcal O_i\!\left(
+ \sum_{k=1}^{K}a_{ik}\mathbf V_{s,i}\right),\qquad
+ \mathbf X_i^B=\mathbf U_i^B.
+ \end{aligned}
+\end{equation}
+where \(\mathbf p\) is a grid location, \(\mathbf r_k\) is a fixed reference offset, \(\Delta\mathbf p_{ik}\) is a learned offset, \(b_{ik}\) is an attention bias, and \(K\) is the number of sampling points. A grouped convolutional branch predicts offsets and biases from \(\mathbf U_i^A\), \(\mathbf U_i^B\), and \(\mathbf U_i^B-\mathbf U_i^A\). \(\mathbf q_i\) is projected from \(\mathbf U_i^B\), while \(\mathbf K_i\) and \(\mathbf V_i\) are projected from \(\mathbf U_i^A\). HA alignment is applied at \(P1\) to \(P3\); \(P4\) and \(P5\) retain the encoder's semantically fused features. HA outputs the aligned bi-temporal features \(\mathbf X_i^A\) and \(\mathbf X_i^B\).
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure4.jpg}
-  \caption{Complete Harmonized Change Encoder. Shared CNN--FPN and frozen DINO features form the bi-temporal pyramid; paired calibration, local alignment, and change query interaction produce multiscale change features.}
-  \label{fig:encoder_ha}\label{fig:cqi}
+  \caption{Structure of Harmonized Alignment (HA). Bi-temporal features undergo statistical calibration followed by local deformable alignment. The lower panels illustrate shared statistics, residual recovery, and sampling locations.}
+  \label{fig:ha}
 \end{figure}
 
-Paired statistical calibration establishes a common reference for shallow-feature comparison from the current image pair. At \(P1/P2\), Harmonized Alignment (HA) computes channel-wise means \(\boldsymbol\mu_i^{AB}\) and variances \(\mathbf v_i^{AB}\) jointly over both times and spatial locations. The same statistics normalize both feature sets before a shared learnable affine transformation:
-\begin{equation}\label{eq:ha_calibration}
- \mathbf{G}_i^t=\frac{\mathbf{P}_i^t-\boldsymbol\mu_i^{AB}}{\sqrt{\mathbf{v}_i^{AB}+\epsilon}}
- \odot\left[\operatorname{softplus}(\mathbf{s}_i^c)+\epsilon\right]+\boldsymbol\mu_i^c,
- \qquad \mathbf{U}_i^t=\mathbf{G}_i^t+\mathcal{R}_i(\mathbf{G}_i^t).
-\end{equation}
-Here, \(t\in\{A,B\}\) denotes the pre-event and post-event times, respectively, \(i\in\{1,2\}\), and \(\epsilon\) is a numerical stabilizer. The affine location and scale parameters \(\boldsymbol\mu_i^c\) and \(\mathbf s_i^c\) are learned during training. Pair-dependent statistics give both feature sets the same normalization reference, while the affine parameters learn the scale and offset of this common space. The convolutional mapping \(\mathcal R_i\) takes the transformed feature \(\mathbf G_i^t\) as input and adds its residual output to \(\mathbf G_i^t\). This provides a learnable recovery path for the calibrated local representation, yielding \(\mathbf U_i^t\).
+\paragraph{Change Query Interaction (CQI)}
 
-Local correspondence processing then relates spatial features across the two times within a limited neighborhood. Statistical calibration acts on their common reference; local soft alignment uses post-event features as queries and samples keys and values from pre-event features to construct a local correction to the pre-event representation. At \(P1/P2\), calibration precedes alignment, with \(\mathbf B_i^t=\mathbf U_i^t\); at \(P3\), alignment directly receives the semantically fused features \(\mathbf B_3^t=\mathbf P_3^t\). The pre-event update is
-\begin{equation}\label{eq:ha_alignment}
-  \tilde{\mathbf{P}}_{i}^{A}(\mathbf{p})
-  =
-  \mathbf{B}_{i}^{A}(\mathbf{p})
-  +
-  \mathcal{O}_{i}\!\left[
-  \sum_{k=1}^{K}
-  a_{ik}(\mathbf{p})\,
-  \mathbf{V}_{i}^{A}
-  \!\left(\mathbf{p}+\mathbf{r}_{k}+\Delta\mathbf{o}_{ik}(\mathbf{p})\right)
-  \right],
-  \quad i\in\{1,2,3\}.
-\end{equation}
-Here, \(\mathbf p\) is a grid position, \(\mathbf r_k\) is the \(k\)th reference sampling offset, \(\Delta\mathbf o_{ik}\) is a learned local offset, and \(\mathbf V_i^A\) is the pre-event value mapping. Paired features and their directed difference jointly predict offsets and attention biases. Offsets change where pre-event keys and values are sampled; biases enter the matching scores between post-event queries and sampled keys before local softmax produces \(a_{ik}\). The mapping \(\mathcal O_i\) combines weighted values across heads and updates the pre-event feature through a residual. The local-alignment stage leaves its post-event input \(\mathbf B_i^B\) unchanged, and \(P4/P5\) retain their incoming features. The resulting pyramids \(\{\mathbf X_i^A,\mathbf X_i^B\}_{i=1}^5\) supply subsequent interaction. These paths connect shallow statistical harmonization with local spatial correspondence while defining the processing applied at each scale.
-
-Change Query Interaction (CQI) jointly organizes state and difference information from the harmonized paired representations (Fig.~\ref{fig:cqi}). Pre-event and post-event features retain the surface states before and after a change; the directed difference preserves the direction of feature change, and the absolute difference supplies a sign-independent magnitude cue. At each scale, convolutional projection \(\mathcal P_i\) combines these four inputs into the dense pair feature \(\mathbf Z_i\):
+CQI receives \(\mathbf X_i^A\) and \(\mathbf X_i^B\) from HA and combines pre-event states, post-event states, signed differences, and absolute differences at the same scale. Together, these four types of information describe the states and change direction of the bi-temporal features. The paired feature at level \(i\) is
 \begin{equation}\label{eq:cqi_pair}
   \mathbf{Z}_{i}
   =
@@ -269,9 +260,9 @@ Change Query Interaction (CQI) jointly organizes state and difference informatio
   \right]\right),
   \quad i=1,\ldots,5,
 \end{equation}
-Brackets denote channel concatenation. State features provide the before-and-after context for interpreting differences, while difference features explicitly express the relationship between the two times. These quantities belong to the learned representation and do not directly represent backscatter differences or water depth. Flattening \(\mathbf Z_i\) into spatial tokens \(\mathbf T_i=\operatorname{Flatten}(\mathbf Z_i)\) preserves the correspondence between each token and its grid position, providing a common dense basis for information aggregation and spatial restoration.
+where \(\mathcal P_i\) is a convolutional pairing projection, brackets denote channel concatenation, and \(\mathbf Z_i\) retains all four types of change cues at each spatial location. \(\mathbf Z_i\) is flattened into spatial tokens \(\mathbf T_i\), which provide the dense input for bidirectional attention.
 
-Query interaction uses two steps, from spatial information to queries and from queries back to spatial positions, to incorporate regional relationships into dense change encoding. At each scale, learnable queries \(\mathbf Q_i^0\) first aggregate information from \(\mathbf T_i\). The updated queries \(\mathbf Q_i^1\) then serve as keys and values to return context to the original tokens. The two multi-head attention (MHA) operations therefore have different information directions:
+Each scale uses its own learnable queries \(\mathbf Q_i^0\). CQI first lets the queries aggregate global information from \(\mathbf T_i\), then passes the updated query information back to the tokens. Both updates use residual forms:
 \begin{align}
  \mathbf{Q}_{i}^{1}
  &=\operatorname{LN}_{q,i}\!\left[\mathbf{Q}_{i}^{0}
@@ -280,26 +271,38 @@ Query interaction uses two steps, from spatial information to queries and from q
  &=\operatorname{LN}_{t,i}\!\left[\mathbf{T}_{i}
  +\operatorname{MHA}_{t\leftarrow q}(\mathbf{T}_{i},\mathbf{Q}_{i}^{1},\mathbf{Q}_{i}^{1})\right].\label{eq:cqi_token}
 \end{align}
-The operators \(\operatorname{LN}_{q,i}\) and \(\operatorname{LN}_{t,i}\) denote separate query and token layer normalization. The first step gathers spatial information into a limited set of queries, while the second retains the original tokens as query inputs so that returned information corresponds to their positions. Both attention updates retain input residuals. A residual feed-forward network (FFN) then updates the tokens and reuses \(\operatorname{LN}_{t,i}\). After spatial reshaping, the features are added to the original dense feature \(\mathbf Z_i\) and passed through output convolution and CBAM:
+where MHA denotes multi-head attention and \(\operatorname{LN}\) denotes layer normalization. The second update uses the original tokens as queries, so the returned information corresponds to the original grid locations. The updated tokens pass through a feed-forward network (FFN) and are restored to spatial features:
 \begin{equation}\label{eq:cqi_output}
  \mathbf{D}_i=\mathcal{O}_i\!\left[
  \operatorname{Reshape}\!\left(\operatorname{LN}_{t,i}\left[\mathbf{T}_{i}^{1}+\operatorname{FFN}_i(\mathbf{T}_{i}^{1})\right]\right)+\mathbf{Z}_i\right].
 \end{equation}
-Here, \(\mathcal O_i\) denotes the CQI output mapping. The dense residual preserves a direct path for the original paired information alongside query interaction. Each of the five scales has independent query and interaction parameters, exchanges information within that scale, and outputs \(\mathbf D_1\)--\(\mathbf D_5\) for OSCD flood-extent reconstruction. Input conversion and numerical settings are specified in Section~\ref{sec:eval_protocol}.
+where \(\mathcal O_i\) is an output mapping comprising a depthwise separable convolution and CBAM. The residual term \(\mathbf Z_i\) retains the original paired information, while \(\mathcal O_i\) adjusts channel and spatial responses. The five scales independently produce \(\mathbf D_1\) to \(\mathbf D_5\), which are passed to OSSD.
 
-\subsection{Omni-Scale State-Space Change Decoder (OSCD)}\label{sec:oscd}\label{sec:loss}
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure5.jpg}
+  \caption{Structure of Change Query Interaction (CQI). Pre-event, post-event, signed-difference, and absolute-difference features are jointly projected, then transformed into change features through bidirectional interaction between queries and dense tokens and residual refinement.}
+  \label{fig:cqi}
+\end{figure}
 
-Flood-extent reconstruction must translate regional change judgments into the spatial coverage and local positions of affected areas. The Omni-Scale State-Space Change Decoder (OSCD) organizes deep context aggregation followed by shallow-detail recovery. Features \(\mathbf D_3\)--\(\mathbf D_5\) establish a regional representation \(\mathbf R_3\), which is then combined with \(\mathbf D_2\) and \(\mathbf D_1\) on progressively finer grids. The left part of Fig.~\ref{fig:oscd} shows the complete path from HCE change features to extent prediction, connecting broader change relationships with local positioning.
+\subsubsection{Omni-Scale State-Space Decoder}\label{sec:oscd}
 
-Deep fusion first establishes a common spatial grid for change information from different scales. Features \(\mathbf D_3\)--\(\mathbf D_5\) undergo separate channel projections \(\rho_i^c\) and are resized to the \(\mathbf D_3\) grid, producing \(\mathbf E_3,\mathbf E_4,\mathbf E_5\). Concatenation and fusion then yield \(\mathbf F\):
+OSSD reconstructs the five levels of CQI change features into dense flood predictions through deep context modeling and progressive shallow-feature recovery (Fig.~\ref{fig:oscd}). The decoder builds regional context from \(\mathbf D_3\) to \(\mathbf D_5\), then progressively recovers local positions using \(\mathbf D_2\) and \(\mathbf D_1\), before a classification head produces pixelwise predictions. Deep features are projected onto the level-3 grid and fused into \(\mathbf F\):
 \begin{equation}\label{eq:oscd_deep_fusion}
  \mathbf E_i=\operatorname{Resize}_{3}\!\left(\rho_i^c(\mathbf D_i)\right),
  \quad i\in\{3,4,5\},\qquad
  \mathbf F=\operatorname{Fuse}\!\left[\mathbf E_3,\mathbf E_4,\mathbf E_5\right].
 \end{equation}
-Here, \(\operatorname{Resize}_3\) adjusts features to the third-level spatial dimensions, and \(\operatorname{Fuse}\) denotes convolutional fusion after concatenation. The common grid permits position-wise combination of information from the three levels, while the separately retained \(\mathbf E_i\) also support subsequent context reinjection. This context structure follows the multiscale organization of SegMAN \citep{fu2025segman}; here it receives deep change features from HCE for bi-temporal flood-extent reconstruction.
+where \(\rho_i^c\) is a channel projection, \(\operatorname{Resize}_3\) resizes features to level 3, and \(\operatorname{Fuse}\) performs convolutional fusion after concatenation. \(\mathbf E_3\) to \(\mathbf E_5\) are retained for subsequent regional reconstruction so that the regional information obtained by scanning can be returned to each deep feature.
 
-Multiresolution input construction further organizes information with different spatial coverage from the fused feature, as shown in the lower-right part of Fig.~\ref{fig:oscd}. Feature \(\mathbf F\) follows original-resolution, twofold-downsampling, and fourfold-downsampling paths. Pixel unshuffle rearranges spatial positions into channels in the first two paths, bringing all three to the same coarser grid. Separate channel reductions and concatenation produce the scan input \(\mathbf G\):
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure6.jpg}
+  \caption{Structure of the Omni-Scale State-Space Decoder (OSSD). The left panel shows the deep context modeling and progressive shallow-feature recovery paths; the upper right shows regional context construction, and the lower right shows multiresolution input construction.}
+  \label{fig:oscd}
+\end{figure}
+
+Regional context is constructed using multiresolution inputs and state-space scanning. \(\mathbf F\) is processed along paths at its original scale and with downsampling factors of two and four. The first two paths are rearranged onto a common grid by pixel unshuffle, followed by channel compression and concatenation to form the scanning input:
 \begin{equation}\label{eq:oscd_scan_input}
  \mathbf G=\left[
  \rho_0\!\left(\operatorname{PU}_{4}(\mathbf F)\right),
@@ -307,11 +310,9 @@ Multiresolution input construction further organizes information with different 
  \rho_2\!\left(\mathcal C_{4}(\mathbf F)\right)
  \right].
 \end{equation}
-Here, \(\mathcal C_2\) and \(\mathcal C_4\) denote stride-2 and stride-4 convolutions, \(\operatorname{PU}_r\) rearranges each \(r\times r\) spatial block into channels, and \(\rho_0,\rho_1,\rho_2\) reduce channels in the respective paths. Spatial rearrangement expresses the local arrangement at the original resolution and the downsampled regional information on a common grid for a shared context module. The equation omits boundary padding where needed; dimensions, convolution kernels, and padding rules are specified in Section~\ref{sec:eval_protocol}.
-
-State-space context aggregates regional information on the common grid and returns it to the deep change representations. The operator \(\operatorname{SSContext}\) unfolds sequences in horizontal, vertical, and their reverse directions, applies selective state-space scanning, and restores and merges the results on the spatial grid \citep{gu2023mamba,liu2024vmamba}, yielding \(\mathbf O\). Upsampling \(\mathbf O\) to the context grid produces \(\mathbf S\), which is then projected by \(\rho^r\) into \(\mathbf J\) with channels matching \(\mathbf E_i\). The regional representation is constructed as
+where \(\mathcal C_2\) and \(\mathcal C_4\) are convolutions with strides of 2 and 4, \(\operatorname{PU}_r\) rearranges \(r\times r\) spatial blocks into the channel dimension, and \(\rho_0\) to \(\rho_2\) compress the channels of each path. \(\mathbf G\) enters a state-space module comprising local positional encoding, four-directional selective scanning, and a local feed-forward network \citep{gu2023mamba,liu2024vmamba}. Scanning propagates horizontally, vertically, and in the reverse directions to produce \(\mathbf O\), which is then upsampled and projected to obtain \(\mathbf S\) and \(\mathbf J\):
 \begin{equation}\label{eq:oscd_context_flow}
- \mathbf O=\operatorname{SSContext}(\mathbf G),\qquad
+ \mathbf O=\operatorname{SS2D}(\mathbf G),\qquad
  \mathbf S=\operatorname{Up}_{3}(\mathbf O),\qquad
  \mathbf J=\rho^r(\mathbf S).
 \end{equation}
@@ -322,9 +323,9 @@ State-space context aggregates regional information on the common grid and retur
  &\mathbf E_3+\mathbf J,\mathbf E_4+\mathbf J,\mathbf E_5+\mathbf J\big].
  \end{aligned}
 \end{equation}
-The operator \(\operatorname{Short}\) is a short convolutional branch applied directly to \(\mathbf F\), while \(\operatorname{Global}_3\) includes global pooling, projection, and resizing to the context grid. Upsampled features \(\mathbf S\) enter concatenation directly, and \(\mathbf J\) is added separately to each \(\mathbf E_i\), supplying a common context contribution to the deep levels. The upper-right part of Fig.~\ref{fig:oscd} corresponds to this six-path aggregation: the scanned representation, local convolution, global information, and three reinjected deep features are concatenated and reconstructed into \(\mathbf R_3\). Context return and retention of the original level-specific information are thus organized within the same aggregation structure.
+where \(\operatorname{Short}\) is a short convolutional branch, \(\operatorname{Global}_3\) performs global pooling, projection, and spatial-size restoration, and \(\operatorname{Reconstruct}\) applies convolutional reconstruction to the six inputs. \(\mathbf S\) retains the full output of the scanning branch, while \(\mathbf E_i+\mathbf J\) returns regional information to \(\mathbf D_3\) to \(\mathbf D_5\). The short convolutional and global branches supplement local responses and overall statistics, respectively. The regional reconstruction is denoted by \(\mathbf R_3\).
 
-Shallow-detail recovery carries \(\mathbf R_3\) toward higher resolutions while introducing the corresponding local position cues at each level. First, \(\mathbf R_3\) is upsampled to the \(\mathbf D_2\) grid and concatenated with projected \(\mathbf D_2\) to reconstruct \(\mathbf R_2\). The same procedure incorporates \(\mathbf D_1\) to obtain \(\mathbf R_1\):
+Local recovery progressively maps regional decisions onto finer grids. OSSD first upsamples \(\mathbf R_3\) to the \(\mathbf D_2\) grid and fuses it with projected \(\mathbf D_2\) to obtain \(\mathbf R_2\), then incorporates \(\mathbf D_1\) to reconstruct \(\mathbf R_1\):
 \begin{equation}\label{eq:oscd_reconstruction}
   \mathbf{R}_{2}
   =
@@ -338,121 +339,116 @@ Shallow-detail recovery carries \(\mathbf R_3\) toward higher resolutions while 
   \operatorname{Up}(\mathbf{R}_{2}),\rho_{1}^{d}(\mathbf{D}_{1})
   \right].
 \end{equation}
-Here, \(\rho_i^d\) is a detail projection, \(\mathcal R_i\) is the convolutional reconstruction mapping at that level, and \(\operatorname{Up}\) resizes to the current shallow feature dimensions. Concatenation presents the aggregated regional information and level-specific detail jointly to the reconstruction mapping, progressively locating the extent judgment on finer grids. A convolutional head maps \(\mathbf R_1\) to two-class logits, which are bilinearly resized to the input grid; softmax and the selected threshold then convert them into the newly flooded extent.
+where \(\rho_i^d\) is a detail projection and \(\mathcal R_i\) is the convolutional reconstruction mapping at the corresponding level. The classification head maps \(\mathbf R_1\) to binary classification outputs, which are restored to the input size by bilinear interpolation. Softmax and the selected threshold then produce the flood mask \(\hat{\mathbf M}\). The same softmax output provides the foreground probability \(p_f\) for each pixel.
 
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure5.jpg}
-  \caption{Omni-Scale State-Space Change Decoder. Deep change features are fused and processed with multiscale state-space context before progressive recovery with shallow detail.}
-  \label{fig:oscd}
-\end{figure}
+During whole-scene inference, \(p_f\) is accumulated in overlapping areas using valid-pixel weights and used for mosaicking. The resulting probability variance and threshold-vote proportions identify candidate patches whose predictions are unstable across tiles. The filtered binary output and the original mosaic are exported separately to maintain consistency between predictions from different tiles.
 
-The training objective constrains both the final extent prediction and the five HCE change-feature levels, jointly supervising reconstruction and multiscale change encoding. Five auxiliary heads directly receive \(\mathbf D_1\)--\(\mathbf D_5\), and the main and auxiliary predictions contribute to pixel-classification and foreground-overlap losses. Shallow auxiliary predictions provide a detached support reference. A support-preservation term constrains the main response at supported locations, while coarse consistency constrains excessive responses where support is low. The total objective is
-\begin{equation}\label{eq:total_loss}
-  \mathcal{L}
-  =
-  \mathcal{L}_{\mathrm{seg}}
-  +
-  \lambda_{\mathrm{sup}}(e)\mathcal{L}_{\mathrm{sup}}
-  +
-  \lambda_{\mathrm{coarse}}(e)\mathcal{L}_{\mathrm{coarse}}.
+\subsection{Change-Constrained Flood Depth Estimation}\label{sec:ccdepth}
+
+The newly inundated extent obtained by change detection identifies locations where the water--land relationship has changed. Its boundary includes newly inundated margins, unchanged higher terrain, and locally missing observation pixels. Boundary-elevation-based depth methods generally extract water-level references from inundation boundaries and propagate them into the interior \citep{cohen2019floodwater,betterle2024water}. Change extents can be narrow and fragmented, with inconsistent boundary conditions, so a single boundary water level can readily produce inconsistent water-surface references within a connected component. CCDepth uses the change extent as the solution support and organizes boundary elevations into acceptable water-level intervals, jointly constraining water-surface estimation through the support domain, terrain, and boundary intervals.
+
+The central formulation of CCDepth defines the water-surface solution space through boundary water-level intervals and interior terrain lower bounds, and reconstructs a continuous water surface within the support domain by solving a constrained energy using four-color coordinate descent. Inner- and outer-boundary samples jointly determine boundary water-level intervals that accommodate local fluctuations in boundary elevations. Terrain lower-bound constraints in the interior prevent the water surface from falling below the ground. A continuity term, expressed as a weighted sum of squared water-surface elevation differences between adjacent pixels, couples the water surface within each eight-connected component. These three constraints represent boundary water levels, ground references, and spatial continuity, respectively, so water-surface elevations within a component are jointly determined by boundary intervals, terrain lower bounds, and neighborhood continuity.
+
+CCDepth takes the detection mask \(\hat{\mathbf M}\) and DEM \(Z\) as inputs and estimates depth within the newly inundated domain \(\Omega_f\) defined in Eq.~(\ref{eq:framework_support}). Depth is solved on the detection-mask grid, with terrain elevations read at the row and column positions corresponding to the mask. To distinguish boundary neighborhoods from interior constraints, \(\Omega_f\) is eroded with a \(3\times3\) window and the boundary band is extracted:
+\begin{equation}\label{eq:ccdepth_domains}
+ \mathcal H_f=\operatorname{Erode}_{3\times3}(\Omega_f),\qquad
+ \mathcal B_f=\Omega_f\setminus\mathcal H_f,
 \end{equation}
-Here, \(\mathcal L_{\mathrm{seg}}\) combines Focal and Tversky losses for the main and auxiliary outputs, \(\mathcal L_{\mathrm{sup}}\) and \(\mathcal L_{\mathrm{coarse}}\) denote support preservation and coarse consistency, and \(e\) is the training epoch. Auxiliary supervision applies task constraints to HCE change features before decoding, while the support-related terms connect shallow predictions to the final or coarse outputs. Definitions, weights, and schedules are specified in Section~\ref{sec:eval_protocol}.
+where \(\mathcal H_f\) is the interior obtained by \(3\times3\) erosion of the support domain, and \(\mathcal B_f\) is the boundary band within the support domain but outside this interior. Pixels in \(\mathcal H_f\) are subject to stronger terrain lower-bound constraints, whereas pixels in \(\mathcal B_f\) can adjust between the boundary water-level interval and the terrain lower bound. Let \(\mathcal C_p\) denote the eight-connected component containing pixel \(p\), and let \(\Omega_d=\Omega_Z\setminus\{p:\hat{\mathbf M}(p)=1\}\) denote the valid unchanged terrain domain.
 
-\subsection{First-Order Depth Estimation Constrained by Inundation Extent and Terrain (CFDepth)}\label{sec:cfdepth}
-
-Depth estimation within an inundated extent requires relating the horizontal flood distribution to terrain elevation. CFDepth takes the newly flooded extent \(\hat{\mathbf M}\) and DEM \(Z\) as inputs. Its estimation support is the intersection with the valid terrain domain \(\Omega_Z\), namely \(\Omega_f=\{p:\hat{\mathbf M}(p)=1\}\cap\Omega_Z\). The extent determines where computation is performed, and the DEM constrains water-surface elevation relative to the ground. Dilation and erosion define the immediately adjacent exterior candidate boundary \(\mathcal B_{\mathrm{raw}}\) and interior boundary \(\mathcal B_{\mathrm{in}}\):
-\begin{equation}\label{eq:cfdepth_boundary}
- \mathcal B_{\mathrm{raw}}=\operatorname{Dilate}(\Omega_f)\setminus\Omega_f,
- \qquad
- \mathcal B_{\mathrm{in}}=\Omega_f\setminus\operatorname{Erode}(\Omega_f).
+Boundary water-level intervals are jointly constructed from inner-boundary samples in the boundary band and outer-boundary samples. For a boundary pixel \(p\), inner-boundary samples \(\mathcal W_p\) are extracted from pixels in the same component as \(p\) within the local window \(\mathcal N_{r_p}(p)\), while outer-boundary samples \(\mathcal D_p\) are extracted from unchanged areas adjacent to \(\mathcal C_p\):
+\begin{equation}\label{eq:ccdepth_samples}
+ \mathcal W_p=\{q\in\mathcal N_{r_p}(p):q\in\mathcal C_p\},\qquad
+ \mathcal D_p=\{q\in\mathcal N_{r_p}(p)\cap\Omega_d:\mathcal N_1(q)\cap\mathcal C_p\neq\emptyset\}.
 \end{equation}
-These boundaries supply exterior terrain samples and interior pairing locations, respectively, defining the spatial domains for subsequent screening and water-surface anchor construction.
-
-Candidate-boundary screening is intended to prevent invalid terrain, steep slopes, and local elevation anomalies from directly entering water-surface constraints. Candidates with valid DEM values and slope \(\theta\) no greater than \(\theta_{\max}\) form \(\mathcal B_c\). Within local neighborhood \(\mathcal N_b(p)\), the median candidate elevation \(m(p)\) defines a pointwise absolute deviation \(e(p)\). A second local median \(a(p)\) is then computed over this deviation field to select the valid exterior boundary \(\mathcal B_v\):
-\begin{equation}\label{eq:cfdepth_boundary_screen}
+The median elevation, median absolute deviation (MAD), and dispersion scale are calculated separately for the samples on each side:
+\begin{equation}\label{eq:ccdepth_interval}
  \begin{aligned}
- \mathcal B_c&=\{p\in\mathcal B_{\mathrm{raw}}\cap\Omega_Z:
-       \theta(p)\text{ is finite},\ \theta(p)\leq\theta_{\max}\},\\
- m(p)&=\operatorname{median}_{q\in\mathcal N_b(p)\cap\mathcal B_c} Z(q),
- \qquad e(p)=|Z(p)-m(p)|,\\
- a(p)&=\operatorname{median}_{\substack{q\in\mathcal N_b(p)\cap\mathcal B_c\\e(q)\text{ is finite}}}e(q),\\
- \mathcal B_v&=\{p\in\mathcal B_c:e(p),a(p)\text{ are finite},\
- e(p)\leq\max[\kappa a(p),\tau_{\min}]\}.
+ m_w(p)&=\operatorname{median}_{q\in\mathcal W_p}Z(q),&
+ m_d(p)&=\operatorname{median}_{q\in\mathcal D_p}Z(q),\\
+ \sigma_w(p)&=\max\!\left[\sigma_0,\,1.4826\operatorname{MAD}_{q\in\mathcal W_p}Z(q)\right],&
+ \sigma_d(p)&=\max\!\left[\sigma_0,\,1.4826\operatorname{MAD}_{q\in\mathcal D_p}Z(q)\right],\\
+ L_p&=m_w(p)-\sigma_w(p),&
+ U_p&=m_d(p)+\sigma_d(p),\qquad m_p=(L_p+U_p)/2.
  \end{aligned}
 \end{equation}
-Here, \(\kappa\) is the deviation multiplier and \(\tau_{\min}\) is the minimum elevation tolerance. The second median uses each candidate's deviation from its own local elevation median, preserving the implemented sequence of a local elevation reference, a deviation field, and a local tolerance. The minimum tolerance retains a nonzero acceptance range where deviations are small. This screening constrains terrain-sample validity and local elevation consistency; it does not classify the water-body type adjoining a boundary.
+where \(\sigma_0\) is the lower limit of dispersion, \(L_p\) and \(U_p\) define the water-level interval, and \(m_p\) is its midpoint. Inner-boundary samples provide terrain references within the inundated extent, while outer-boundary samples provide references from adjacent unchanged terrain. Together, they define an acceptable water-level range for the subsequent solution.
 
-Water-surface anchors pair local terrain samples from the exterior and interior boundaries at interior-boundary locations. For each \(p\in\mathcal B_{\mathrm{in}}\), median elevations within a pairing neighborhood are computed separately from \(\mathcal B_v\) and \(\mathcal B_{\mathrm{in}}\), denoted by \(Z_{\mathrm{dry}}(p)\) and \(Z_{\mathrm{wet}}(p)\). The wet-side statistic uses only interior-boundary samples. Locations where both medians are valid form the anchor set \(\mathcal A\), with water-surface elevation
-\begin{equation}\label{eq:cfdepth_anchor}
-  S_{b}
-  =
-  \max\!\left(
-  \frac{Z_{\mathrm{wet}}+Z_{\mathrm{dry}}}{2},
-  \mathbf{Z}+d_{\min}
-  \right).
+Initial boundary-sample weights jointly account for sample counts, slope, dispersion on both sides of the boundary, and elevation ordering. For a boundary pixel with complete samples, the initial weight is
+\begin{equation}\label{eq:ccdepth_weight}
+ \beta_p^0=
+ \min\!\left(1,\frac{\min(|\mathcal W_p|,|\mathcal D_p|)}{n_0}\right)
+ \prod_{k=1}^{3}\frac{1}{1+\Delta_{p,k}^2},
 \end{equation}
-All elevations in this equation are evaluated at the same pairing location \(p\in\mathcal A\), and \(d_{\min}\) is the numerical lower bound above terrain. Averaging the two medians supplies a terrain reference at the boundary, and the lower bound keeps the anchor at or above local terrain plus the minimum depth. These anchors are water-surface constraints derived from the detected boundary and terrain; their applicability depends on the supplied extent and boundary samples.
-
-The initial water surface is obtained by propagating the nearest reachable anchor within the support. For each support pixel \(p\), the nearest anchor \(b(p)\) is selected by path distance through eight-connected pixels in \(\Omega_f\), subject to the maximum propagation distance when configured. Where an anchor is available, initialization uses \(S^{(0)}(p)=\max[S_b(b(p)),Z(p)+d_{\min}]\). Where no anchor is reachable or the propagation limit is exceeded, initialization falls back to \(Z(p)+d_{\min}\) and retains a low-confidence flag. Paths within the support determine where anchor information can reach, while the terrain lower bound applies to all initialized pixels. Propagation supplies the starting surface for continuity refinement.
-
-Continuity refinement coordinates neighboring water-surface elevations within the valid support while retaining anchor and terrain constraints. For a support pixel, the local neighborhood mean and current surface are combined using relaxation coefficient \(\eta\):
-\begin{equation}\label{eq:cfdepth_continuity}
- S^{(k+1)}(p)=\max\!\left[(1-\eta)S^{(k)}(p)+\eta\operatorname{mean}_{q\in\mathcal{N}(p)\cap\Omega_f}S^{(k)}(q),\ Z(p)+d_{\min}\right].
+where \(n_0\) is the minimum sample count, \(\Delta_{p,1}=\theta_p/\theta_s\), \(\Delta_{p,2}=\sqrt{\sigma_w^2(p)+\sigma_d^2(p)}/\delta\), \(\Delta_{p,3}=\max(m_w(p)-m_d(p),0)/\sqrt{\sigma_w^2(p)+\sigma_d^2(p)}\), \(\theta_p\) is slope, \(\theta_s\) is the slope scale, and \(\delta\) is the dispersion scale. High-weight boundary candidates are further compared with the interval midpoints of peer candidates within the same component. When at least 3 high-weight candidates occur in the neighborhood, their midpoints and MAD are used to construct a consistency penalty:
+\begin{equation}\label{eq:ccdepth_peer}
+ \beta_p=\beta_p^0\left\{1+\left[\frac{\max(0,|m_p-\tilde m_p|-3\tilde\sigma_p)}{\sigma_w(p)+\sigma_d(p)}\right]^2\right\}^{-1},
 \end{equation}
-The neighborhood \(\mathcal N(p)\) includes the center pixel, and its mean uses only valid water-surface pixels in \(\Omega_f\). Each update applies the terrain lower bound and then restores \(p\in\mathcal A\) to fixed anchor values \(S_b(p)\). Other support pixels participate in refinement, and low-confidence flags from initialization are retained. After \(K\) updates, depth is obtained by subtracting terrain from the final water surface:
-\begin{equation}\label{eq:cfdepth_depth}
-  \hat{\mathbf{d}}(\mathbf{p})
-  =
-  \begin{cases}
-    \max\!\left(\mathbf{S}^{(K)}(\mathbf{p})-\mathbf{Z}(\mathbf{p}),0\right),
-      & \mathbf{p}\in\Omega_f,\\
-    \text{NoData}, & \text{otherwise}.
-  \end{cases}
+where \(\tilde m_p\) and \(\tilde\sigma_p\) are the median and MAD of the interval midpoints of peer boundary candidates, respectively. This penalty retains samples consistent with neighboring boundary water levels and reduces the influence of local anomalous elevations on water-level intervals. A component enters the water-surface solver only if it contains at least 3 high-weight boundary candidates with a spatial span of at least 2 pixels. Components with insufficient support are assigned NoData.
+
+Within an eligible component, let \(S_p\) be the unknown water-surface elevation and \(T_p=Z_p+d_{\min}\) be the terrain lower bound, where \(d_{\min}\) is the minimum positive depth. CCDepth constructs an energy from continuity, boundary intervals, terrain lower bounds, and boundary midpoints:
+\begin{equation}\label{eq:ccdepth_energy}
+ \begin{aligned}
+ J_C&=\sum_{(p,q)\in\mathcal E}w_{pq}(S_p-S_q)^2,\qquad w_{pq}=\lambda_C h_{\mathrm{ref}}^2/d_{pq}^2,\\
+ J_B&=\sum_{p\in\mathcal B_f}\beta_p\operatorname{dist}(S_p,[L_p,U_p])^2,\qquad
+ J_T=\sum_{p\in\mathcal B_f}\max(T_p-S_p,0)^2,\\
+ J_M&=\sum_{p\in\mathcal B_f}\beta_p(S_p-m_p)^2,\qquad
+ J_0=J_C+\lambda_B J_B+\lambda_T J_T,\qquad J_\mu=J_0+\mu J_M,
+ \end{aligned}
 \end{equation}
-NoData is retained outside the support, keeping the estimation domain consistent with the extent and valid-terrain conditions. This procedure provides a first-order depth estimate conditional on the supplied extent and boundary constraints. Propagation initialization, continuity refinement, and final depth calculation are sequential stages. Grid handling, screening thresholds, neighborhoods, and iteration settings are specified in Section~\ref{sec:eval_protocol}.
-
-\clearpage
-\section{Experiments and Results}
-
-\subsection{Experimental configuration and evaluation protocol}\label{sec:eval_protocol}
-
-\subsubsection{Datasets and data preparation}\label{sec:experiment_data}
-
-The experimental data serve three purposes: learning bi-temporal flood changes, comparing flood-change detection across the three study areas, and evaluating depth within a supplied extent. The identified training snapshot combines S1GFloods \citep{saleh2024dam}, VarFloods \citep{du2026high}, and GF3 Henan samples, with membership summarized in Table~\ref{tab:training_split}. It contains 4,737 training pairs and 1,593 validation pairs, combining two public data sources with a small GF3 subset. GF3 Henan samples occur in both splits, and their spatial relationship to the Zhengzhou evaluation domain remains unresolved. The Zhengzhou comparison is therefore not defined as an independent cross-sensor transfer test.
-
-\input{tables/table_training_split.tex}
-
-Learning samples use \(256\times256\) image tiles, a three-channel representation of the available SAR band, and binary labels for newly inundated areas. Normalization statistics come from the selected dataset. The semantic branch separately restores the image range and converts it to the normalization required by the pretrained model, as described in Section~\ref{sec:experiment_implementation}. Scene-specific preprocessing versions, label sources, invalid-pixel rules, and registration records still require association with the evaluated products; tile dimensions and input channels alone do not establish that association.
-
-The scene comparison uses bi-temporal SAR imagery and flood-change reference labels for Zhengzhou, Zhuozhou, and Guangxi. Zhengzhou and Zhuozhou use GF3 imagery, while Guangxi uses LT-1B imagery. Observation parameters are listed in Table~\ref{tab:gf3_eval}, and terrain data are described in Section~\ref{sec:depth_data}. Zhengzhou and Zhuozhou use image pairs from different years, whereas the Guangxi pair was acquired in May and July 2026. The reference labels support spatial comparison with predictions, and local inspection regions are shown in the qualitative comparison figures.
-
-Depth data follow a separate evaluation arrangement. The GF3 depth illustrations use prescribed inundation supports and the FABDEM data introduced in Section~\ref{sec:depth_data}. The Brazos river--floodplain comparison uses existing CFDepth and FwDET depth products and a reference raster attributed to USGS. It evaluates depth products within a supplied domain, independently of HarmoSSM flood detection. The reference product, vertical datum, exact support, and generating implementation remain incompletely linked; conclusions are therefore limited to the supplied products.
-
-\subsubsection{Implementation and optimization settings}\label{sec:experiment_implementation}
-
-Table~\ref{tab:method_config} consolidates the HarmoSSM representation and reconstruction settings, training selection, and CFDepth parameters. Model and depth parameters describe the current implementation, while optimization and selection values come from the identified training run. The association between that run and all GF3 comparison entries remains to be verified. The following input conversion, loss definitions, and inference settings are presented on this basis, without extending one training record to a common protocol for every comparison method.
-
-\input{tables/table_method_configuration.tex}
-
-The shared EfficientNet-B2 encoder and FPN produce five 128-channel levels, \(P1\)--\(P5\), at spatial reductions of 2, 4, 8, 16, and 32. Frozen DINOv3 ViT-S/16 uses a separate input conversion. For dataset-normalized input \(\mathbf{x}^t=(\mathbf{r}^t-\boldsymbol\mu_d)/\boldsymbol\sigma_d\), the image range is restored before applying the fixed ImageNet normalization associated with LVD pretraining:
-\begin{equation}\label{eq:dino_input}
-  \tilde{\mathbf{r}}^{t}
-  =
-  \operatorname{clip}\!\left(
-  \mathbf{x}^{t}\odot\boldsymbol{\sigma}_{d}+\boldsymbol{\mu}_{d},0,1
-  \right),
-  \qquad
-  \mathbf{x}_{\mathrm{DINO}}^{t}
-  =
-  \frac{\tilde{\mathbf{r}}^{t}-\boldsymbol{\mu}_{\mathrm{IM}}}
-       {\boldsymbol{\sigma}_{\mathrm{IM}}}.
+where \(\mathcal E\) is the set of eight-neighbor edges within the same component, \(w_{pq}\) is determined by the reference pixel scale \(h_{\mathrm{ref}}\) and pixel distance \(d_{pq}\), and \(\operatorname{dist}(S_p,[L_p,U_p])=\max(0,L_p-S_p,S_p-U_p)\). The parameters \(\lambda_C\), \(\lambda_B\), and \(\lambda_T\) control the relative contributions of continuity, boundary intervals, and terrain lower bounds, respectively, while \(\mu\) controls the strength of the boundary-midpoint term. Pixels in \(\mathcal H_f\) must also satisfy the hard constraint \(S_p\geq T_p\). To remove the influence of absolute scale, the objective energy is normalized by
+\begin{equation}\label{eq:ccdepth_normalized_energy}
+ Q=\sum_{(p,q)\in\mathcal E}w_{pq}+\lambda_B\sum_{p\in\mathcal B_f}\beta_p+\lambda_T|\mathcal B_f|
 \end{equation}
-The semantic input is then resized to \(512\times512\), distinct from the \(256\times256\) learning tile. Semantic features from layers 5, 8, and 11 are adapted to \(P3\), \(P4\), and \(P5\), respectively, and fused with CNN features through concatenation, convolution, and CBAM before HA; \(P1/P2\) retain CNN representations. The HA stabilizer, local-alignment heads and sampling points, and scale-specific CQI query settings are listed in Table~\ref{tab:method_config}.
+and subsequent convergence checks use \(E_0=J_0/Q\) and \(E_\mu=J_\mu/Q\). Normalization makes objective values comparable across components and pixel counts, and provides a common scale for convergence criteria for the primary and secondary objectives. This energy formulation jointly incorporates boundary water-level intervals, interior terrain lower bounds, and neighborhood continuity, allowing the water surface to vary continuously within each connected component while retaining flexibility where boundary constraints are inconsistent. The hard terrain lower bound in \(\mathcal H_f\) ensures that the water surface does not fall below the ground.
 
-OSCD organizes deep change information according to Eqs.~\ref{eq:oscd_deep_fusion} and~\ref{eq:oscd_scan_input}. Right and bottom replication padding makes the context grid divisible by four when necessary. The three \(\mathbf E_i\) receive the same padding, which is cropped after reconstructing \(\mathbf R_3\). Convolution \(\mathcal C_2\) uses kernel size 3 and stride 2, while \(\mathcal C_4\) uses kernel size 5 and stride 4; each branch is reduced to 128 channels. For an unpadded divisible \(H\times W\) input, \(\mathbf G\in\mathbb R^{384\times H/32\times W/32}\). The context module comprises positional encoding, four-direction selective state-space scanning, and a depthwise feed-forward update, followed by context aggregation and detail recovery according to Eqs.~\ref{eq:oscd_context_reconstruction} and~\ref{eq:oscd_reconstruction}.
+The water surface is initialized using a weighted combination of boundary water-level intervals. For an eligible component, the initial water level \(s_0\) is
+\begin{equation}\label{eq:ccdepth_initialization}
+ s_0=\frac{\sum_{p\in\mathcal B_f}\beta_p m_p}{\sum_{p\in\mathcal B_f}\beta_p},\qquad
+ S_p^{(0)}=
+ \begin{cases}
+  \max(s_0,T_p), & p\in\mathcal H_f,\\
+  s_0, & p\in\mathcal B_f.
+ \end{cases}
+\end{equation}
+This initialization starts each connected component from a common water level, keeps the interior at or above the terrain lower bound, and leaves the boundary band free to adjust within the water-level intervals. Components with insufficient support do not enter the water-surface solver and are marked as NoData in the output.
 
-Training constrains detection outputs through pixel classification and foreground overlap. For \(N\) labeled pixels and target-class probability \(p_{n,y_n}\), focal loss \citep{lin2017focal} uses class weights \(w_0=0.25,w_1=0.75\):
+Water-surface solution is organized by eight-connected components and uses four-color scanning. The continuity term couples water-surface elevations within each component. Pixels in each component are assigned to four update colors according to the parity of their row and column indices in the full image. Pixels of the same color are not eight-neighbors, and sequentially updating the four colors completes one sweep.
+
+For pixel \(p\), a weighted water-surface elevation \(\bar S_p=\sum_{q\in\mathcal N_p}w_{pq}S_q/\sum_{q\in\mathcal N_p}w_{pq}\) is first calculated from its eight-neighborhood. Six candidate branches are then constructed according to the candidate's position relative to the boundary interval and terrain lower bound. Each branch includes only the applicable objective terms, giving the following closed-form update:
+\begin{equation}\label{eq:ccdepth_update}
+\begin{aligned}
+u_p^{(k)}&=\frac{\begin{aligned}
+ &\sum_{q\in\mathcal N_p}w_{pq}S_q\\
+ &+\chi_p\lambda_B\beta_p\left(\mathbf{1}_{\{r_k=\mathrm{low}\}}L_p+\mathbf{1}_{\{r_k=\mathrm{high}\}}U_p\right)\\
+ &+\chi_p\lambda_T\mathbf{1}_{\{g_k=\mathrm{below}\}}T_p+\chi_p\mu\beta_pm_p
+ \end{aligned}}{\begin{aligned}
+ &d_p\\
+ &+\chi_p\lambda_B\beta_p\left(\mathbf{1}_{\{r_k=\mathrm{low}\}}+\mathbf{1}_{\{r_k=\mathrm{high}\}}\right)\\
+ &+\chi_p\lambda_T\mathbf{1}_{\{g_k=\mathrm{below}\}}+\chi_p\mu\beta_p
+ \end{aligned}},\\
+s_p^{(k)}&=\Pi_{\mathcal F_p^{(k)}}\!\left(u_p^{(k)}\right).
+\end{aligned}
+\end{equation}
+where \(d_p=\sum_{q\in\mathcal N_p}w_{pq}\), \(\chi_p=\mathbf{1}_{\mathcal B_f}(p)\), \(r_k\) indicates whether the candidate water surface lies below, within, or above the boundary interval, and \(g_k\) indicates whether it lies below or above the terrain lower bound. The set \(\mathcal F_p^{(k)}\) is jointly defined by the corresponding interval and terrain positions; interior candidates must also satisfy the hard constraint \(S_p\geq T_p\). Thus, the boundary-interval term is active only in the branches below or above the interval, the soft terrain term in the boundary band is active only below \(T_p\), and the midpoint term is weighted by \(\beta_p\) in the boundary band. After each candidate is projected onto its feasible set, its local energy is calculated using Eq.~(\ref{eq:ccdepth_energy}), and the candidate with the lowest energy is selected to update \(S_p\). This pixelwise update incorporates boundary intervals, terrain lower bounds, and continuity into a single coordinate optimization process according to the branch conditions.
+
+Each component is solved in two stages, using primary and secondary objectives. The primary stage solves \(E_0\) with \(\mu=0\). After convergence, secondary objectives \(E_\mu\) are attempted sequentially with \(\mu=\lambda_B[10^{-3},10^{-4},10^{-5},10^{-6}]\). A secondary solution is accepted if it converges at fixed \(\mu\) and the increase in the primary objective does not exceed \(\max(10^{-4}E_0^{\mathrm{base}},10^{-8})\). If no secondary solution passes, the component reverts to the primary solution. A component is assigned NoData if the primary objective fails to converge within the budget or violates hard constraints. Diagnostics are checked every 10 sweeps, including the fixed-point residual, relative changes in the normalized primary objective \(E_0\) and current total objective \(E_\mu\), total-objective monotonicity, hard-constraint violations, and diagnostic validity. A stage is considered converged when two consecutive checks satisfy the corresponding thresholds and feasibility conditions. The depth experiments use a fixed-point residual threshold of \(0.5\) m and an objective relative-change threshold of \(10^{-3}\), with at most 2000 sweeps for each primary or secondary objective.
+
+Final depth is obtained as the difference between water-surface and terrain elevations in successfully solved components:
+\begin{equation}\label{eq:ccdepth_depth}
+ \hat d_p=
+ \begin{cases}
+  \max(S_p-Z_p,0), & p\in\Omega_f\text{ and the component passes the audit},\\
+  \text{NoData}, & \text{otherwise}.
+ \end{cases}
+\end{equation}
+Successfully solved domains output both zero and positive depths, whereas locations with insufficient support or a failed primary objective are assigned NoData. Valid depths and NoData are marked separately in the output. Algorithm~\ref{alg:ccdepth} presents the main CCDepth solution procedure. Boundary-sample statistics, energy construction, and candidate updates are given in Eqs.~(\ref{eq:ccdepth_interval})--(\ref{eq:ccdepth_update}), and the main numerical settings are listed in Table~\ref{tab:method_config}.
+
+\input{tables/algorithm1_ccdepth.tex}
+
+\subsection{Loss Function}\label{sec:loss}\label{sec:training_objective}
+
+HarmoSSM is optimized using focal and Tversky losses, with five auxiliary heads providing additional multiscale supervision. Focal loss \citep{lin2017focal} adjusts the classification loss at each labeled pixel:
 \begin{equation}\label{eq:focal_loss}
   \mathcal{L}_{\mathrm{focal}}
   =
@@ -462,12 +458,12 @@ Training constrains detection outputs through pixel classification and foregroun
   \log p_{n,y_n},
   \qquad \gamma=2.
 \end{equation}
-Tversky loss \citep{salehi2017tversky} computes soft TP, FP, and FN from foreground probabilities:
+where \(N\) is the number of labeled pixels, \(p_{n,y_n}\) is the predicted probability for label \(y_n\) at pixel \(n\), and \(\gamma=2\). The background and flood weights are \(w_0=0.25\) and \(w_1=0.75\), respectively. Tversky loss \citep{salehi2017tversky} uses the soft foreground counts \(\mathrm{TP}_b\), \(\mathrm{FP}_b\), and \(\mathrm{FN}_b\) to control missed detections and false alarms:
 \begin{equation}\label{eq:tversky_loss}
  \mathcal{L}_{\mathrm{Tv}}=1-\frac{1}{B}\sum_{b=1}^{B}
  \frac{\mathrm{TP}_b+\epsilon_{\mathrm{Tv}}}{\mathrm{TP}_b+\alpha(e)\mathrm{FP}_b+\beta(e)\mathrm{FN}_b+\epsilon_{\mathrm{Tv}}},\qquad\alpha(e)=1-\beta(e).
 \end{equation}
-Here, \(B\) is the batch size, soft counts are computed per image, and \(\epsilon_{\mathrm{Tv}}=10^{-6}\). The false-negative weight \(\beta(e)\) decreases linearly from 0.70 at epoch 1 to 0.55 at epoch 20 and remains constant thereafter. The main head and five auxiliary heads share the same loss formulation:
+where \(B\) is the batch size, \(\epsilon_{\mathrm{Tv}}=10^{-6}\), and \(e\) is the training epoch. The false-negative weight \(\beta(e)\) decreases linearly from 0.70 at epoch 1 to 0.55 at epoch 20 and remains constant thereafter. The main and auxiliary outputs use the same combination of focal and Tversky losses:
 \begin{equation}\label{eq:segmentation_loss}
   \mathcal{L}_{\mathrm{seg}}
   =
@@ -482,126 +478,216 @@ Here, \(B\) is the batch size, soft counts are computed per image, and \(\epsilo
   \mathcal{L}_{\mathrm{Tv}}^{(i)}
   \right).
 \end{equation}
-The auxiliary ratios \((1,1,0.5,0.25,0.25)\) are normalized by their sum. Their common multiplier is 1 through epoch 5, decreases linearly to 0.5 at epoch 20, and remains 0.5 thereafter. Shallow support \(s=\max(p_{D1},p_{D2})\) is detached, and \(\mathcal L_{\mathrm{sup}}\) is the mean of \(\max(s-p_{\mathrm{main}},0)\) over \(s>0.60\). The coarse term averages \(\max(p_j-s-0.15,0)\) over \(s<0.35\), then over \(j\in\{\mathrm{main},D4,D5\}\); empty masks contribute zero. The complete objective is given in Eq.~\ref{eq:total_loss}. Both consistency weights are zero through epoch 6, increase linearly to 0.03 and 0.02 at epoch 15, and remain fixed. This corresponds to a five-epoch warm-up followed by a ten-epoch ramp whose first value is zero. These settings specify the loss implementation and do not establish an independently measured component benefit.
+The relative weights of the five auxiliary heads are \((1,1,0.5,0.25,0.25)\). After normalization, they are multiplied by a common coefficient, which is 1 for the first 5 epochs, decreases linearly to 0.5 between epochs 5 and 20, and remains fixed thereafter.
 
-The implementation remains stored under the HA-CQI identifier. The associated record uses the 80-epoch optimization settings in Table~\ref{tab:method_config}, random seed 1, and shared bi-temporal radiometric augmentation. Validation flood IoU jointly selects the checkpoint and threshold, with epoch 77 and 0.80 selected in the record. This validation selection is distinct from GF3 scene-comparison results. The eight comparison methods are FC-Siam-Diff \citep{daudt2018fully}, HANet \citep{han2023hanet}, SNUNet \citep{fang2022snunet}, BIT \citep{chen2021remote}, ChangeFormer \citep{bandara2022changeformer}, CGNet \citep{han2023change}, TTP \citep{chen2023ttp}, and ChangeDINO \citep{cheng2025changedino}. Together with HarmoSSM, they form the nine-method set in Table~\ref{tab:main_comparison}. That table transcribes author-supplied results; row-specific checkpoints, predictions, thresholds, and valid domains have not been independently verified. The configuration table therefore does not establish identical training settings across all methods.
+To coordinate responses across scales, the stop-gradient quantity \(s=\max(p_{D1},p_{D2})\) serves as a support reference. The support-preservation term \(\mathcal L_{\mathrm{sup}}\) is the mean of \(\max(s-p_{\mathrm{main}},0)\) over locations where \(s>0.60\). The coarse-scale consistency term \(\mathcal L_{\mathrm{coarse}}\) computes \(\max(p_j-s-0.15,0)\) where \(s<0.35\) and averages over \(j\in\{\mathrm{main},D4,D5\}\). The full training objective is
+\begin{equation}\label{eq:total_loss}
+  \mathcal{L}
+  =
+  \mathcal{L}_{\mathrm{seg}}
+  +
+  \lambda_{\mathrm{sup}}(e)\mathcal{L}_{\mathrm{sup}}
+  +
+  \lambda_{\mathrm{coarse}}(e)\mathcal{L}_{\mathrm{coarse}}.
+\end{equation}
+Both constraint weights are zero for the first 6 epochs, increase to 0.03 and 0.02, respectively, between epochs 6 and 15, and remain constant thereafter. The training objective optimizes HarmoSSM parameters. CCDepth independently performs deterministic solution under terrain and boundary constraints.
 
-CFDepth maps the extent to the DEM grid by maximum-value aggregation and intersects it with the valid DEM mask. Candidate exterior pixels are eight-neighbor adjacent and screened using the slope and local-deviation thresholds in Table~\ref{tab:method_config}. Local deviations are constructed sequentially from candidate elevation medians, pointwise absolute deviations, and local medians of the deviation field. Radius-two interior and exterior boundary neighborhoods provide paired anchors. Nearest reachable anchors propagate within eight-connected support up to 10 km; pixels beyond that distance or without reachable anchors fall back to \(Z+0.01\) m and retain low-confidence flags. Continuity refinement uses a center-inclusive \(3\times3\) window, applies the terrain lower bound, and restores fixed anchors at each update. Locations outside the support or without valid DEM data are NoData. CFDepth does not enter the detection model's loss optimization.
+\endgroup
 
-\subsubsection{Evaluation metrics and protocols}\label{sec:experiment_metrics}
+\section{Experiments and Results}
 
-Flood-change mapping treats flood as the positive class, with \(TP\), \(FP\), \(FN\), and \(TN\) denoting confusion counts over the valid labeled domain. Precision (P) measures the correct fraction of predicted flood, recall (R) measures the detected fraction of reference flood, F1 and IoU summarize detection performance and foreground overlap, and OA measures correctness across all valid pixels:
+\begingroup
+\subsection{Experimental Design}\label{sec:eval_protocol}
+
+\subsubsection{Implementation Settings and Comparison Methods}\label{sec:experiment_implementation}
+
+The experiments specify the implementation settings for HarmoSSM and the comparison methods used for detection and depth estimation.
+
+The main HarmoSSM implementation settings are listed in Table~\ref{tab:method_config}; the training objective and main and auxiliary supervision weights are described in Section~\ref{sec:training_objective}. The frozen semantic branch restores the image value range, applies ImageNet normalization, and then resizes images to the semantic input dimensions. The CNN branch uses dataset normalization. HarmoSSM selects the checkpoint and decision threshold using validation flood IoU.
+
+\input{tables/table3_method_configuration.tex}
+
+The comparison methods are FC-Siam-Diff \citep{daudt2018fully}, CGNet \citep{han2023change}, HANet \citep{han2023hanet}, SNUNet \citep{fang2022snunet}, BIT \citep{chen2021remote}, ChangeFormer \citep{bandara2022changeformer}, TTP \citep{chen2023ttp}, and ChangeDINO \citep{cheng2025changedino}. These cover Siamese convolution, attention fusion, Transformer modeling, and pretrained representation transfer, forming a nine-method comparison with HarmoSSM. Each comparison method is trained using the optimizer, learning rate, batch size, number of training epochs, and default decision procedure recommended in its paper. All methods use the same training and validation members, label definitions, and study-area evaluation extents.
+
+The depth-estimation comparison method is FwDET v2.0 \citep{cohen2019floodwater}. It assigns water-surface elevations within the flood extent from terrain elevations along its boundary and calculates water depth accordingly, providing a comparison with CCDepth within the category of boundary-elevation-constrained methods.
+
+\subsubsection{Evaluation Metrics and Protocols}\label{sec:experiment_metrics}
+
+Flood is the positive class in flood change detection. \(TP\), \(FP\), \(FN\), and \(TN\) are confusion-matrix counts within the valid reference domain, and evaluation uses precision (P), recall (R), F1, IoU, and OA:
 \begin{align}
  \mathrm{Precision}&=\frac{TP}{TP+FP}, & \mathrm{Recall}&=\frac{TP}{TP+FN},\label{eq:precision}\\
  \mathrm{F1}&=\frac{2TP}{2TP+FP+FN}, & \mathrm{IoU}&=\frac{TP}{TP+FP+FN},\label{eq:f1}\\
  \mathrm{OA}&=\frac{TP+TN}{TP+FP+FN+TN}.\label{eq:oa}
 \end{align}
-All five metrics are reported as percentages. Because background prevalence affects OA, flood-region overlap is assessed primarily through IoU and F1, with P and R explaining commission--omission trade-offs. This chapter uses only the author-designated result sheet dated 2 September 2026. Numerical transcription and relationships among metrics can be checked, but those checks do not replace verification of the original predictions, labels, thresholds, and valid evaluation domains.
+Each scene undergoes tiled inference, overlap fusion, and whole-scene mosaicking before pixelwise statistics are calculated over the reference domain jointly defined by the imagery, labels, and valid masks. Each pixel is counted only once. All five metrics are reported as percentages. Results are reported separately for Zhengzhou, Zhuozhou, and Guangxi, with consistent reference extents and NoData rules across methods within each area.
 
-Depth coverage and error use different statistical domains. In the existing Brazos evaluation, reference resampling uses a valid-area fraction threshold of 0.50, and finite positive-depth pixels define the reference domain:
+Depth evaluation measures positive-depth coverage, errors over common-valid samples, and water-surface continuity. Let \(\mathcal P\) denote the candidate along-track reference points in Pakistan. The subset \(\Omega_r\) contains the 14,902 points with reference depths greater than 0.01 m. Positive-depth coverage is the proportion of these locations at which CCDepth or FwDET provides a valid positive depth:
 \begin{equation}\label{eq:valid_depth_ratio}
- \Omega_r=\{p:\ d_r(p)>0.01\,\mathrm{m},\ d_r(p)\text{ finite}\},\qquad
  R_j=100\frac{|V_j|}{|\Omega_r|},
 \end{equation}
-Here, \(V_j=\{p:\ p\in\Omega_r,\ d_j(p)>0.01\,\mathrm{m},\ d_j(p)\text{ finite}\}\) is the valid set for method \(j\). The ratio \(R_j\) measures positive-depth coverage within this reference domain. MAE, RMSE, Bias, squared Pearson correlation \(r^2\), and Nash--Sutcliffe efficiency (NSE) are computed on \(V_{\mathrm{CFDepth}}\cap V_{\mathrm{FwDET}}\). NoData is not replaced by zero, avoiding the treatment of unavailable estimates as zero-depth errors.
+where \(d_r\) is the along-track reference depth and \(V_j=\{p\in\Omega_r:d_j(p)>0.01\,\mathrm m,\ d_j(p)\text{ finite}\}\).
 
-Bias is prediction minus reference. Pearson \(r^2\) measures linear association, whereas NSE compares squared error with reference variation about its mean. Lower aggregate error, broader coverage, and closer spatial agreement must therefore be assessed separately. The evaluation script does not itself remove permanent water; any earlier masking remains part of the unresolved product lineage. This protocol keeps depth-product comparison separate from flood-extent detection.
+Depth errors are defined as reference minus estimated depth. Error statistics are based on 11,319 points valid for both methods. These are first grouped by native-grid row and column combinations, using the median reference depth within each group as the sample value to form 2,442 aggregated samples. Mean error, error standard deviation, mean absolute error (MAE), and root mean square error (RMSE) are then calculated over these aggregated samples:
+\begin{equation}\label{eq:depth_error_stats}
+ e_p=d_r(p)-d_j(p),\qquad
+ \bar e=\frac{1}{N}\sum_{p=1}^{N}e_p,\qquad
+ \mathrm{MAE}=\frac{1}{N}\sum_{p=1}^{N}\left|e_p\right|,\qquad
+ \mathrm{RMSE}=\sqrt{\frac{1}{N}\sum_{p=1}^{N}e_p^{2}},
+\end{equation}
+where \(e_p\) is reference minus estimated depth, \(\bar e\) is mean error, \(\sigma_e\) is the error standard deviation, and \(N=2{,}442\) is the number of aggregated samples. The water-surface elevation gradient is calculated from elevation differences between adjacent valid solution pixels to describe water-surface spatial continuity.
 
-\subsection{Quantitative flood-change mapping results}
+\FloatBarrier
+\endgroup
 
-To compare bi-temporal flood-extent delineation, Table~\ref{tab:main_comparison} summarizes P, R, F1, IoU, and OA for nine methods in Zhengzhou and Zhuozhou. Values are transcribed from the result sheet dated 2 September 2026, supplied by the authors and identified by them as measured results; the original predictions have not been reevaluated. The following comparison uses IoU and F1 as the main overlap measures and P and R to examine commission--omission trade-offs. All numerical comparisons are confined to the methods and results in this table.
+\subsection{HarmoSSM Flood Change Detection Results}
 
-\input{tables/table_main_comparison.tex}
+Tables~\ref{tab:comparison_zhengzhou}--\ref{tab:comparison_guangxi} report whole-scene detection accuracy for HarmoSSM and the eight comparison methods in Zhengzhou, Zhuozhou, and Guangxi. Figures~\ref{fig:qual_zhengzhou}--\ref{fig:qual_guangxi} show the corresponding whole-scene and local results. Metrics are compared by accuracy, with the best and second-best values in each column shown in bold and underlined, respectively; all displayed values have two decimal places. HarmoSSM achieves the highest F1 and IoU in all three study areas. OA exceeds 94\% for every method in all three areas, and even the method with the lowest IoU in Zhengzhou has an OA above 97\%. This indicates that OA has limited ability to distinguish flood-identification performance when inundated pixels occupy a small proportion of the reference domain. Subsequent comparisons therefore focus on IoU and F1, using P and R to explain the composition of errors.
 
-The main pattern in the Zhengzhou entries is the combination of high flood recall and higher overall overlap. HarmoSSM has an IoU of 74.23\% and an F1 of 85.21\%, exceeding CGNet's 67.50\% and 80.60\% by 6.73 and 4.61 percentage points, respectively. Its recall of 91.59\% is close to HANet's 92.74\%, while its precision of 79.66\% is higher than HANet's 58.08\%. Conversely, ChangeFormer has a precision of 97.95\% but a recall of 49.24\%. These reported values show that a high correct fraction of predicted flood or a high coverage of reference flood alone does not ensure high overlap. In this comparison, HarmoSSM retains much of the reference flood while limiting commission relative to the high-recall comparator, yielding higher F1 and IoU.
+\input{tables/table4_comparison_zhengzhou.tex}
 
-The Zhuozhou entries instead emphasize differences in coverage under high precision. HarmoSSM has an IoU of 86.71\% and an F1 of 92.88\%, exceeding CGNet by 4.31 and 2.53 percentage points, respectively; its precision is 97.58\% and recall is 88.61\%. ChangeFormer has higher precision, 99.39\%, but recall of 75.87\%, while CGNet has precision and recall of 93.08\% and 87.78\%. HarmoSSM's overlap in this result sheet therefore corresponds to a combination of a high correct fraction of predictions and broader reference-flood coverage, rather than the highest precision alone. Its OA of 98.84\% is consistent with the foreground metrics, although OA cannot substitute for flood-region evaluation.
+HarmoSSM consistently leads in all three study areas, whereas the ranking of the comparison methods varies by scene. ChangeDINO ranks second in IoU and F1 in Zhengzhou and Guangxi, while CGNet ranks second in Zhuozhou. CGNet is among the leading methods in Zhuozhou but ranks substantially lower in Zhengzhou, and ChangeDINO falls to third in Zhuozhou, indicating that relative performance varies with surface conditions and inundation morphology. HarmoSSM's IoU advantage over the second-ranked method exceeds 20 percentage points in Zhengzhou and remains above 9 percentage points in Zhuozhou and Guangxi. It maintains the highest overlap accuracy across urban built-up land, interspersed urban and rural surfaces, and agricultural--forest mosaics, with the largest margin in Zhengzhou.
 
-The supplied results place HarmoSSM highest in IoU and F1 in both scenes, while its relative precision and recall vary by scene. Zhengzhou emphasizes the balance between recall and commission, whereas Zhuozhou emphasizes coverage under high precision. These differences relate to the need to organize regional change information together with local positioning cues, providing quantitative context for the spatial illustrations that follow. The comparison does not separate the contributions of HCE, OSCD, or their internal operations, and it establishes neither statistical significance nor independent cross-sensor generalization.
-
-\subsection{Qualitative comparison in complex scenes}
+\input{tables/table5_comparison_zhuozhou.tex}
 
 \setcounter{figure}{6}
-
-Figure~\ref{fig:qual_zhengzhou} shows the pre-event and post-event SAR images, reference labels, and flood-change predictions from HarmoSSM and the eight comparison methods in Zhengzhou. The lower local enlargements allow the inundated-area distribution and boundary positions to be compared across methods.
 
 \begin{figure*}[!t]
   \centering
   \includegraphics[width=\textwidth,height=.40\textheight,keepaspectratio]{figure/Figure7.jpg}
-  \caption{Flood-change detection results and local enlargements in Zhengzhou.}
+  \caption{Visual comparison of flood change detection in Zhengzhou. (A) Whole-scene comparison. (B) Local enlargements labeled ROI-1 to ROI-3. (a) Pre-event SAR imagery. (b) Post-event SAR imagery. (c) Reference labels. (d)--(l) Results from FC-Siam-Diff, CGNet, HANet, SNUNet, BIT, ChangeFormer, TTP, ChangeDINO, and HarmoSSM, respectively. In the local comparisons, TP, FN, and FP denote correctly detected, missed, and falsely detected flood pixels, respectively.}
   \label{fig:qual_zhengzhou}
 \end{figure*}
 
-Figure~\ref{fig:qual_zhuozhou} shows the bi-temporal SAR images, reference labels, and predictions from the compared methods in Zhuozhou. The full-scene results and local enlargements together show differences in regional coverage and local spatial details.
+Omission is the main error among the comparison methods, and HarmoSSM's overlap-accuracy advantage is primarily reflected in higher recall. In Zhengzhou, most comparison methods have R below 35\%, while several have P above 90\%. In Zhuozhou, several comparison methods have P above 97\% but R below 60\%. FC-Siam-Diff likewise has high P and low R in Guangxi. HarmoSSM achieves the highest R in every study area and is the only method with R above 80\% in all three. Its P is lower than that of the comparison method with the highest P in each area, with gaps of less than 5 percentage points in Zhuozhou and Guangxi and nearly 15 percentage points in Zhengzhou. Thus, in Zhuozhou and Guangxi, substantially higher recall accompanies a small precision gap, and the improvement in overlap accuracy mainly corresponds to fewer omitted pixels. The Zhengzhou results also contain more evident additional predictions.
+
+\input{tables/table6_comparison_guangxi.tex}
 
 \begin{figure*}[!t]
   \centering
   \includegraphics[width=\textwidth,height=.40\textheight,keepaspectratio]{figure/Figure8.jpg}
-  \caption{Flood-change detection results and local enlargements in Zhuozhou.}
+  \caption{Visual comparison of flood change detection in Zhuozhou. (A) Whole-scene comparison. (B) Local enlargements labeled ROI-1 to ROI-3. (a) Pre-event SAR imagery. (b) Post-event SAR imagery. (c) Reference labels. (d)--(l) Results from FC-Siam-Diff, CGNet, HANet, SNUNet, BIT, ChangeFormer, TTP, ChangeDINO, and HarmoSSM, respectively. In the local comparisons, TP, FN, and FP denote correctly detected, missed, and falsely detected flood pixels, respectively.}
   \label{fig:qual_zhuozhou}
 \end{figure*}
 
-Figure~\ref{fig:qual_guangxi} shows the bi-temporal SAR images, reference labels, and flood-change predictions from the compared methods in Guangxi. The full-scene comparison shows the distribution of predicted inundation and its correspondence with the reference labels.
+The whole-scene and enlarged local results show that error locations correspond to inundation morphology in the three study areas (Figs.~\ref{fig:qual_zhengzhou}--\ref{fig:qual_guangxi}). Reference inundation in Zhengzhou mainly consists of narrow linear flooded features and scattered small patches. In the whole-scene results, the comparison methods leave more reference areas uncovered along channels and within the eastern patch clusters. ChangeDINO produces numerous scattered predictions within the study area. HarmoSSM covers the main linear inundation along channels and the major eastern patch clusters, leaving fewer reference areas uncovered. In ROI-2 and ROI-3, continuous omissions occur along diagonal flooded strips and groups of patches. HarmoSSM covers the main linear inundation and patch clusters; its remaining FN occur in some lower patches, while FP mainly occur along upper patch margins and in the lower-left corner.
+
+Reference inundation in Zhuozhou mainly comprises extensive contiguous flooded cropland. In the whole-scene results, several comparison methods leave large reference areas uncovered within the contiguous inundation in the central and northern parts, with HANet and SNUNet having the largest uncovered extents. HarmoSSM covers most of the contiguous region. In ROI-2, extensive FN occur in cropland divided by roads. HarmoSSM preserves the linear non-inundated gaps formed by these roads, with remaining FN at the region's edges.
 
 \begin{figure*}[!t]
   \centering
   \includegraphics[width=\textwidth,height=.40\textheight,keepaspectratio]{figure/Figure9.jpg}
-  \caption{Flood-change detection results in Guangxi.}
+  \caption{Visual comparison of flood change detection in Guangxi. (A) Whole-scene comparison. (B) Local enlargements labeled ROI-1 to ROI-3. (a) Pre-event SAR imagery. (b) Post-event SAR imagery. (c) Reference labels. (d)--(l) Results from FC-Siam-Diff, CGNet, HANet, SNUNet, BIT, ChangeFormer, TTP, ChangeDINO, and HarmoSSM, respectively. In the local comparisons, TP, FN, and FP denote correctly detected, missed, and falsely detected flood pixels, respectively.}
   \label{fig:qual_guangxi}
 \end{figure*}
 
-\subsection{Conditional depth-estimation results}
+Reference inundation in Guangxi consists of irregular areas and small fragments in the south. Whole-scene coverage of the main northern and central areas differs relatively little among methods; differences are concentrated at their margins and in the small southern fragments, more of which are identified by HarmoSSM. The branching area in ROI-1 contains contiguous FN in its lower-right part. The fragmented area in ROI-2 contains more FN on the right and FP along its margins. Most comparison methods miss nearly all the narrow curved fragments in ROI-3, whereas HarmoSSM identifies the main parts of most fragments. Guangxi's bi-temporal images were acquired in the same year, approximately two months apart. Seasonal progression, agricultural irrigation, and cultivation change vegetation cover and background soil moisture, producing flood-induced change signals of varying strength. HarmoSSM nevertheless achieves the highest overlap accuracy and recall under these conditions, indicating stable detection capability amid differences in seasonal background and interference from agricultural activities.
 
-Depth results are evaluated through spatial distribution, valid output coverage, and error within a reference domain. Figure~\ref{fig:depth_overview} summarizes CFDepth and FwDET products for Zhengzhou, Zhuozhou, and Guangxi, including valid-depth ratios, WSE-gradient distributions, and a cross-source comparison; Figure~\ref{fig:depth_brazos} further presents spatial errors, estimate--reference relationships, and statistics in the Brazos reference domain. These evaluations are conditional on the supplied support, valid DEM, and reference data and do not provide joint accuracy validation of the complete HarmoSSM--CFDepth chain.
+Omissions in the three study areas are concentrated in narrow scattered patches, the interiors of contiguous regions, and narrow curved fragments, respectively. HarmoSSM's remaining FN mainly occur at patch and field margins, while its FP are most evident in Zhengzhou. These patterns agree with the relatively low R of the comparison methods, HarmoSSM's highest R, and its relatively lower P ranking in Zhengzhou in Tables~\ref{tab:comparison_zhengzhou}--\ref{tab:comparison_guangxi}.
 
-The valid-depth ratios in Figure~\ref{fig:depth_overview} are 37.83\% for FwDET and 93.89\% for CFDepth in Zhengzhou, 61.26\% and 91.70\% in Zhuozhou, and 40.79\% and 94.11\% in Guangxi, respectively. These ratios describe the spatial extent with positive depth, while the WSE-gradient and cross-source panels provide complementary views of surface continuity and product distributions; they are not used to infer independent contributions from the detection modules.
+\subsection{HarmoSSM Ablation Analysis}\label{sec:ablation}
+
+To examine the effects of HA, CQI, and OSSD on detection performance, a common baseline without these three designs is extended with single modules, pairs of modules, and the full configuration. Comparisons in Zhengzhou, Zhuozhou, and Guangxi use the same training settings, threshold-selection rules, and evaluation metrics. Table~\ref{tab:ablation_modules} reports IoU and F1 for eight configurations, A--H. A is the common baseline; B, C, and D add HA, CQI, and OSSD to A, respectively; E, F, and G combine HA with CQI, HA with OSSD, and CQI with OSSD, respectively; and H contains all three modules.
+
+\input{tables/table7_ablation_hacqi.tex}
+
+The common baseline and full model share the encoder backbone, auxiliary supervision, and training settings, differing only in the use of basic structures at the positions corresponding to HA, CQI, and OSSD. The encoder retains the shared EfficientNet-B2 and FPN, together with semantic fusion from frozen DINOv3 ViT-S/16 layers 5, 8, and 11 into P3--P5, and outputs bi-temporal features \(P_i^A\) and \(P_i^B\) (\(i=1,\dots,5\)). Without HA, the two temporal features enter change modeling directly as \(X_i^A\) and \(X_i^B\), without statistical calibration or deformable alignment. Without CQI, the change feature at level \(i\) is obtained by convolutional projection of the absolute difference, \(D_i=\Psi_i(|X_i^B-X_i^A|)\), where \(\Psi_i\) consists of a 1×1 convolution, batch normalization, and a 3×3 depthwise separable convolution. Without OSSD, the decoder uses progressive top-down reconstruction, sequentially fusing \(\mathbf D_5\) with \(\mathbf D_4\) through \(\mathbf D_1\). Each fusion consists of bilinear upsampling, channel concatenation, and a 3×3 convolution, followed at the end by the same classification head as the full model. The five auxiliary heads, combined focal and Tversky losses, support-preservation term, and coarse-scale consistency term are identical across configurations. Training data, optimizer, learning-rate schedule, number of training epochs, checkpoint- and threshold-selection rules, and whole-scene mosaicking are the same as in Section~\ref{sec:experiment_implementation}.
+
+The ablation results show consistent trends across the three study areas. All single-module configurations exceed the common baseline in IoU and F1, with IoU gains of 2.37--4.56 percentage points. CQI gives the largest gain in Zhengzhou and Guangxi, and OSSD in Zhuozhou. Pairwise configurations improve IoU by 6.56--11.64 percentage points over the common baseline, exceeding the sum of the corresponding two single-module gains in every case. This excess is more pronounced in Zhengzhou and Zhuozhou, and G is the best pairwise configuration in all three areas. The full configuration H achieves the highest IoU and F1 in every study area, improving IoU by 11.99--26.84 percentage points and F1 by 8.13--21.36 percentage points over the common baseline. Its IoU gain over the best pairwise configuration G is 2.80--15.20 percentage points. The three designs complement one another within the same detection framework, jointly supporting the reconstruction of contiguous and scattered inundation and addressing limitations in bi-temporal change encoding and multiscale spatial reconstruction.
+
+Figure~\ref{fig:feature_vis} shows CQI change features \(\mathbf D_1\) to \(\mathbf D_5\), OSSD reconstruction features \(\mathbf R_3\), \(\mathbf R_2\), and \(\mathbf R_1\), and final predictions for Zhengzhou, Zhuozhou, and Guangxi. In the visualizations, \(\mathbf D_1\) and \(\mathbf D_2\) show finer, more fragmented boundary and local patch responses, whereas \(\mathbf D_3\) to \(\mathbf D_5\) show more spatially continuous responses. \(\mathbf R_3\), \(\mathbf R_2\), and \(\mathbf R_1\) progressively reconstruct coarse regional structures and finer boundary details. The final predictions retain the main inundation structures in the reference labels for all three areas.
 
 \begin{figure*}[!t]
-\setcounter{figure}{10}
   \centering
-  \includegraphics[width=\textwidth,height=.66\textheight,keepaspectratio]{figure/Figure11.jpg}
-  \caption{Flood-depth estimates and summary statistics for the three study areas: (a) CFDepth and FwDET spatial distributions; (b) valid-depth ratios; (c) WSE-gradient distributions; (d) cross-source flood-depth comparison.}
+  \includegraphics[width=\textwidth,height=.40\textheight,keepaspectratio]{figure/Figure10.jpg}
+  \caption{Visualization of HarmoSSM multiscale change and decoder features. Rows show Zhengzhou, Zhuozhou, and Guangxi, respectively. Columns show pre-event SAR, post-event SAR, reference labels, CQI change features \(D_1\) to \(D_5\), OSSD reconstruction features \(R_3\), \(R_2\), and \(R_1\), and overlays of predictions and reference labels.}
+  \label{fig:feature_vis}
+\end{figure*}
+
+\subsection{CCDepth Performance Evaluation}
+
+\setcounter{figure}{10}
+
+CCDepth is evaluated at two levels. In the Pakistan validation area, GFM flood extent is used as input, ICESat-2 along-track reference depths are used to compare CCDepth and FwDET depth accuracy, and constraint ablations examine the contribution of each constraint. GFM flood extent is selected where all masks are valid and \(F=1\), \(R=0\), and \(X=0\). The resulting extent represents newly inundated areas relative to the reference water bodies and thus has the same target meaning as a change-detection mask. In Zhengzhou, Zhuozhou, and Guangxi, manually delineated reference extents and HarmoSSM-detected extents are used as separate inputs. Depth-class transitions between these inputs are compared to examine the effects of changes in input extent on depth estimates.
+
+Figure~\ref{fig:pakistan_depth_validation}(a) shows depth distributions from both methods in the Pakistan validation area; Fig.~\ref{fig:pakistan_depth_validation}(b) shows positive-depth coverage and cumulative distributions of water-surface elevation (WSE) gradients; and Fig.~\ref{fig:pakistan_depth_validation}(c) shows depth-error distributions and the ICESat-2 reference-depth distribution. The population for positive-depth coverage comprises 14,902 along-track reference points with depths greater than 0.01~m. Errors are calculated after points valid for both methods are aggregated by native-grid row and column combinations into 2,442 samples.
+
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth,height=.50\textheight,keepaspectratio]{figure/Figure11.jpg}
+  \caption{Depth estimation and evaluation in the Pakistan validation area. (a) CCDepth and FwDET depth distributions. (b) Positive-depth coverage and cumulative distributions of water-surface elevation (WSE) gradients. (c) Depth-error distributions for both methods and the ICESat-2 reference-depth distribution. Error is defined as reference minus estimated depth.}
+  \label{fig:pakistan_depth_validation}
+\end{figure*}
+
+Positive-depth coverage is 92.36\% for CCDepth and 55.96\% for FwDET. CCDepth has an MAE of 0.4910~m and an RMSE of 0.6917~m, compared with 0.8742~m and 1.0677~m for FwDET, representing reductions of 43.8\% and 35.2\%, respectively. Error is defined as reference minus estimated depth. Mean errors are 0.2937~m and 0.8641~m, and error standard deviations are 0.6262~m and 0.6271~m for the two methods, respectively. The 14,902 along-track reference points have a mean depth of 1.1126~m, a median of 0.9423~m, and a standard deviation of 0.7646~m, describing the validation-sample depth distribution. Both methods have positive mean errors, indicating that estimated depths are generally lower than reference depths. Their error standard deviations are similar, so the error difference is primarily a reduction in mean bias. In Fig.~\ref{fig:pakistan_depth_validation}(b), median WSE gradients are 3.73‰ for CCDepth and 28.87‰ for FwDET. CCDepth's cumulative distribution rises more rapidly at smaller gradients, corresponding to smaller water-surface elevation differences between adjacent valid pixels.
+
+Table~\ref{tab:ccdepth_ablation} reports the CCDepth constraint ablations. Nine single-factor configurations and one combined configuration, F1, examine five groups of constraints: boundary references, terrain lower bounds, continuity, boundary weights, and the secondary objective. Each single-factor configuration changes only one constraint, with all other parameters matching Table~\ref{tab:method_config}. All configurations use the components deemed eligible by the full model. Errors are calculated over the same 2,442 aggregated samples, counting valid zero depths as 0~m, while positive-depth coverage continues to use the 14,902 reference points.
+
+A1 collapses each boundary water-level interval to its midpoint, while A2 and A3 use only inner- and outer-boundary samples, respectively. B1 removes the hard interior terrain lower bound, and B2 replaces it with the same soft constraint used in the boundary band. C1 directly uses the initialized component water surface. D1 uses uniform boundary weights, and D2 removes the peer consistency penalty. E1 solves only the primary objective, while F1 combines inner-boundary samples with the initialized component water surface.
+
+\input{tables/table8_ccdepth_constraint_ablation.tex}
+
+The full model achieves the best positive-depth coverage, mean error, error standard deviation, MAE, and RMSE among all configurations (Table~\ref{tab:ccdepth_ablation}). MAE increases over the full model range from 0.0011 to 0.3106~m. The increases for D2 and E1 are 0.0092~m and 0.0011~m, respectively, both below 0.01~m. In the boundary-reference group, A2 has a mean error of 0.5347~m and an MAE of 0.6482~m, both higher than A3, while A3 has an error standard deviation of 0.6874~m, higher than A2. In the terrain lower-bound group, B1's positive-depth coverage falls to 86.12\%, the lowest among single-factor configurations. In the continuity group, C1 has the largest error standard deviation of all configurations, at 0.7431~m. In the boundary-weight group, D1 increases MAE by 0.0414~m. The combined configuration F1 has positive-depth coverage of 63.28\% and an MAE of 0.8016~m, both the worst among all configurations. Its MAE increase of 0.3106~m exceeds the sum of the increases for A2 and C1.
+
+Figure~\ref{fig:two_stage_consistency} compares depth-class transitions between two extent inputs: the manually delineated reference extent (Label) and the HarmoSSM-detected extent (seg). Both inputs use the same DEM and solver parameters, with identical depth-class thresholds as shown in Fig.~\ref{fig:two_stage_consistency}. Transition-matrix rows represent valid depth classes under Label for each method, and columns represent depth classes and missing-output categories under seg. Each matrix is row-normalized, with diagonal entries giving the proportions that retain the same class. Missed denotes pixels with valid depth under Label that are classified as background in the detection mask. No data denotes pixels inside the detection mask without valid depth output. Each matrix uses the corresponding method's valid-depth pixels under the manually delineated reference extent as its reference domain.
+
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth,height=.50\textheight,keepaspectratio]{figure/Figure13.jpg}
+  \caption{Depth-class transition matrices for CCDepth and FwDET with different extent inputs. (a)--(c) CCDepth results for Zhengzhou, Zhuozhou, and Guangxi. (d)--(f) FwDET results for the corresponding study areas. The vertical axis, Label depth, represents depth classes obtained by each method using the manually delineated reference extent; the horizontal axis, HarmoSSM depth, represents depth classes obtained using the detected extent. Each matrix uses the corresponding method's valid-depth pixels under the manually delineated reference extent as its reference domain and is row-normalized. Values and colors represent transition proportions, and diagonal entries indicate retention of the same class. Missed denotes reference-domain pixels classified as background in the detection mask. No data denotes reference-domain pixels inside the detection mask without valid depth output. Depth is in m.}
+  \label{fig:two_stage_consistency}
+\end{figure*}
+
+The proportions retaining the same depth class for CCDepth are 0.77--0.82 in Zhengzhou, 0.66--0.71 in Zhuozhou, and 0.74--0.78 in Guangxi, compared with 0.19--0.86, 0.38--0.63, and 0.63--0.73 for FwDET, respectively. CCDepth has a higher retention proportion than FwDET in every depth class in Zhuozhou and Guangxi. In Zhengzhou's shallowest class, FwDET's retention proportion is 0.86, higher than CCDepth's. In Zhengzhou's deepest class, retention proportions are 0.82 and 0.19 for CCDepth and FwDET, respectively; transitions to the 2--4~m class account for 0.06 and 0.36, and No data accounts for 0.00 and 0.25. In Zhuozhou's shallowest class, CCDepth's Missed and No data proportions are 0.14 and 0.06, compared with 0.26 and 0.18 for FwDET. In Guangxi's deepest class, No data proportions are 0.04 and 0.09 for the two methods, respectively.
+
+\FloatBarrier
+
+\subsection{DDFlood Framework Performance Analysis}
+
+Figure~\ref{fig:depth_overview} compares regional depth products from CCDepth and FwDET in Zhengzhou, Zhuozhou, and Guangxi using manually delineated reference extents as inputs, together with their correspondence to local reference records. The three areas contain scattered patches and local strips, contiguous inundation, and multiple disconnected areas, respectively, providing settings for comparing depth-estimation performance under different inundation morphologies. Figure~\ref{fig:depth_overview}(a) shows their spatial depth distributions. In Fig.~\ref{fig:depth_overview}(b), valid-depth proportions for CCDepth are 93.89\%, 91.70\%, and 94.11\%, compared with 37.83\%, 61.26\%, and 40.79\% for FwDET, respectively. In Fig.~\ref{fig:depth_overview}(c), CCDepth's cumulative WSE-gradient distributions rise more rapidly at smaller gradients.
+
+\begin{figure*}[!t]
+  \centering
+  \includegraphics[width=\textwidth,height=.66\textheight,keepaspectratio]{figure/Figure12.jpg}
+  \caption{Regional depth products and local reference comparisons for the three study areas using manually delineated reference extents as inputs. (a) CCDepth and FwDET depth distributions in Zhengzhou, Zhuozhou, and Guangxi. (b) Valid-depth proportions. (c) Cumulative distributions of water-surface elevation (WSE) gradients. (d) Depth ranges within the connected components corresponding to photograph sites S1--S12 and literature sites LS1--LS3, compared with local reference records.}
   \label{fig:depth_overview}
 \end{figure*}
 
-The common-valid Brazos comparison is shown in Figure~\ref{fig:depth_brazos} and Table~\ref{tab:cfdepth_validation}. Positive-depth coverage is 94.570\% for the CFDepth-labeled product and 46.650\% for FwDET; on common-valid pixels, MAE is 0.828 and 1.099 m and RMSE is 1.100 and 1.359 m, respectively. Signed Bias, defined as prediction minus reference, is -0.139 and -0.895 m, while squared Pearson correlation is 0.072 and 0.052 and NSE is -1.014 and -2.032. These values compare the supplied products under the stated support and reference conditions; the bias bars in the summary panel show magnitudes, whereas the table retains the signed definition.
+Figure~\ref{fig:depth_overview}(d) presents the site-level comparisons. For the components corresponding to S8 and S9, CCDepth's depth ranges overlap the reference ranges, whereas FwDET's ranges lie below them. At S12, CCDepth's range covers the reference range and its median falls within it. At S5--S7, both methods' depth ranges lie below the reference ranges. LS1--LS3 are depth records reported in the literature. LS1 contains multiple records: CCDepth's range overlaps one record's range, while the other three records report greater depths than CCDepth estimates; FwDET deviates more strongly. At LS2 and LS3, CCDepth's ranges cover the reference records better than FwDET's.
 
-\input{tables/table_cfdepth_validation.tex}
-
-Lower aggregate error does not imply complete representation of reference depth variation. The scatter, error-map, and WSE-gradient panels in Figure~\ref{fig:depth_brazos} provide spatial and distributional context, while negative NSE indicates that squared error exceeds that of a constant prediction equal to the common-domain reference mean. The evaluated rasters remain tied to the supplied reference and support conditions, so their differences cannot be attributed to a single CFDepth operation or generalized to measured urban flood-depth accuracy.
+Figure~\ref{fig:framework_efficiency}(a) presents IoU, FLOPs, and parameter counts for the nine detection methods in Guangxi. Complexity records correspond to \(256\times256\) bi-temporal image tiles and include local model statistics and reference configurations from the literature. Local per-tile measurements use an NVIDIA GeForce RTX 4090 D, while CCDepth and FwDET depth experiments use an AMD Ryzen 9 7950X. HarmoSSM requires approximately 175~G FLOPs, on the same order as CGNet and TTP, while its IoU is 11.60 and 11.57 percentage points higher, respectively. TTP has the largest parameter count among the nine methods and an IoU of 70.22\%. Figure~\ref{fig:framework_efficiency}(b) presents CCDepth and FwDET depth-estimation times in the four areas.
 
 \begin{figure*}[!t]
   \centering
-  \includegraphics[width=\textwidth,height=.50\textheight,keepaspectratio]{figure/Figure12.jpg}
-  \caption{Spatial errors and quantitative comparison of flood-depth estimates in the Brazos region: (a) spatial depth maps; (b) estimate--reference density scatter; (c) depth-error maps; (d) WSE-gradient cumulative distributions; (e) coverage and accuracy metrics.}
-  \label{fig:depth_brazos}
+  \includegraphics[width=\textwidth,height=.50\textheight,keepaspectratio]{figure/Figure14.jpg}
+  \caption{DDFlood detection accuracy, model complexity, and depth-estimation runtime. (a) IoU versus FLOPs for nine detection methods in Guangxi; bubble area represents parameter count. Complexity records correspond to \(256\times256\) bi-temporal image tiles and include local model statistics and reference configurations from the literature. (b) CCDepth and FwDET depth-estimation times in Zhengzhou, Zhuozhou, Guangxi, and Pakistan from existing runtime records. The horizontal axis uses a logarithmic scale in seconds, and annotations beside the points give the corresponding times.}
+  \label{fig:framework_efficiency}
 \end{figure*}
+
+Using HarmoSSM-detected extents as inputs, CCDepth requires 17.9~s, 7.8~s, and 33.5~s for depth estimation in Zhengzhou, Zhuozhou, and Guangxi, respectively, compared with 62.14~s, 62.16~s, and 108.47~s for FwDET. In the Pakistan validation area, the two methods require 25~min~01.3~s and 95.45~min, respectively. FwDET takes similar times in Zhengzhou and Zhuozhou, whereas CCDepth's time in Zhuozhou is less than half that in Zhengzhou. Existing detection-stage records show that HarmoSSM's tiled inference loop takes 19~s, 14~s, and 86~s in the three areas, respectively. This loop includes data loading, prediction, and accumulation over overlapping areas. These records characterize processing times for the detection and depth-estimation stages separately and inform computational planning for regional flood mapping.
+
+\FloatBarrier
 
 \section{Discussion}
 
-\subsection{Landscape-dependent mapping and interpretation}
+\subsection{Depth-Estimation Constraints and Detection-Error Propagation}
 
-The two scenes expose different spatial requirements of flood mapping. In the Zhengzhou panels, a small number of pixels may represent an inundated patch beside a built structure or linear feature. In Zhuozhou, regional coverage must be maintained while resolving field margins and fragmented transitions. A single scene can therefore require both contextual interpretation and detailed delineation. These observations motivate the joint treatment of the two spatial scales, but selected windows cannot determine how frequently each difficulty occurs across a scene.
+The error difference between CCDepth and FwDET primarily reflects mean bias and is related to how boundary water-level references are constructed. Inner-boundary samples lie inside the inundated extent, where elevations are generally below the actual water level; using only these samples raises mean error to 0.5347~m. Outer-boundary samples lie on adjacent unchanged terrain, with elevations varying according to local relief; using only these samples raises the error standard deviation to 0.6874~m. Two-sided intervals use inner statistics to set the lower water-level limit and outer statistics to set the upper limit, so boundary water-level references reflect both terrain inside the inundated area and adjacent terrain. The initialized-component-water-surface configuration produces an error standard deviation of 0.7431~m, supporting the use of continuity constraints to adjust the water surface and allow gradual variations within components. This agrees with the regional depth products, in which WSE gradients are concentrated at small values and terrain variation is mainly expressed as depth differences. F1 combines inner-boundary references with the initialized component water surface. Its positive-depth coverage and mean error approach those of FwDET, and its MAE increase exceeds the sum of the two single-factor increases, showing that the two simplifications jointly amplify the error increase. The terrain lower bound keeps the water surface above the ground; removing it reduces positive-depth coverage, consistent with CCDepth's higher valid-depth proportions in the three study areas. MAE increases associated with removing the consistency penalty and the boundary-midpoint secondary objective are both below 0.01~m, indicating limited contributions to accuracy. The secondary objective further adjusts the water surface within the change permitted by the primary objective.
 
-HarmoSSM implements this treatment by coordinating the paired feature basis before change interaction and retaining shallow detail during dense reconstruction. The directed difference preserves the sign of feature change, while the two state features provide context for its interpretation. These are properties of the design, not direct measurements of reduced false change or improved narrow-feature recall. AWCA-Net and RAFNet already address heterogeneous flood responses through different processing strategies \citep{du2026high,li2026rafnet}. The relevant distinction is how information is organized for the present binary change target; component-level benefit cannot be inferred from architectural differences or visual examples alone.
+The depth-estimation stage of DDFlood depends only on the detected extent and DEM and obtains the water surface through deterministic solution: the same inputs produce the same output. It can therefore operate in areas without measured depth training samples. The detection and depth-estimation stages can be updated separately. With the DEM and solver parameters fixed, changes in depth classes can be attributed directly to differences in input extent, allowing detection and depth-estimation errors to be evaluated separately. CCDepth iterates only within connected components of \(\Omega_f\), and components with insufficient support exit after the boundary model is constructed. Computational demand therefore varies with the support-domain size. This agrees with the similar FwDET runtimes in Zhengzhou and Zhuozhou and the larger difference between CCDepth runtimes in these two areas.
 
-\subsection{Conditional value of depth information}
+The cost of the cascaded design is that detection errors propagate in one direction through the support domain into depth estimation. Missed detections and false alarms alter the extent of \(\Omega_f\), boundary samples, and connected-component structure simultaneously. IoU decreases from Guangxi to Zhuozhou to Zhengzhou, yet CCDepth's same-class retention is highest in Zhengzhou and lowest in Zhuozhou. Across these three areas, stability when transferring the extent to depth estimation does not vary monotonically with IoU, possibly because of connected-component structure. Zhuozhou is dominated by contiguous inundation, with fewer but larger components. Extent errors along their margins may change boundary samples and water-level intervals and affect the interior water surface through the continuity term. The Missed proportion of 0.14 in Zhuozhou's shallowest class represents missing depths caused by extent omissions. Zhengzhou is dominated by scattered patches and narrow strips, so extent errors are mostly confined to individual small components. When boundary samples change, robust statistics and boundary weights adjust local elevation references, while interval and continuity terms jointly determine the interior water surface, thereby preserving the main depth classes. Detected boundaries and connectivity in large contiguous inundation areas therefore warrant particular attention. Joint optimization of detection and depth estimation under depth supervision could use depth loss to adjust detection boundaries, but requires paired depth labels and a differentiable solution procedure. The cascaded design is easier to deploy in emergency settings where measured depths are scarce.
 
-Depth adds information inside an inundation support, but its interpretation depends on the available constraints. Boundary-derived WSE can be useful where valid wet--dry interfaces and suitable terrain data are available; permanent-water interfaces and unobserved margins weaken those constraints. FwDET, FLEXTH, and RS-FloodXDepth address related boundary and extent limitations \citep{cohen2019floodwater,betterle2024water,tian2026floodxdepth}. CFDepth adopts screening, constrained initialization, and local continuity refinement within a supplied support. This formulation produces a terrain-consistent first-order surface, without enforcing water balance or observed hydraulic connections.
+\subsection{Limitations and Future Directions}
 
-The Brazos product comparison illustrates why output coverage and depth accuracy require separate assessment. More positive-depth pixels do not necessarily imply more accurate depths, and lower common-valid error does not establish accurate spatial patterning. Negative NSE means that, on the evaluated common-valid set, squared error exceeds that of predicting its reference mean. This limits the quantitative interpretation even where aggregate error is lower than that of the compared product. The unresolved generating-version lineage further prevents attributing these differences to a specific CFDepth operation.
+DDFlood depth products use approximately 30~m FABDEM terrain data and mainly describe regional submergence. FABDEM's sampling interval is approximately three times the detection-mask pixel spacing, limiting the representation of elevation variations in narrow flooded strips and microtopography. The generally shallow estimates in the Pakistan validation and some site comparisons may be related to this scale difference. Depth representations at higher spatial resolution require finer terrain data. CCDepth's water-surface solution assumes geometric connectivity and water-surface continuity and is suited to inundated areas with continuous terrain and relatively consistent hydraulic conditions. Underground drainage networks and buildings that obstruct flow can affect the correspondence between geometric and hydraulic connectivity, while local flow conditions affect the applicability of a smooth-water-surface approximation. Current results at these locations describe regional submergence under terrain constraints; more detailed hydraulic assessment requires corresponding hydraulic information.
 
-\subsection{Applicability and limitations}
-
-SAR observability remains a physical limitation. Building geometry, layover, shadow, vegetation, roughness, and acquisition timing can obscure flooding or resemble non-flood change \citep{wagner2026gfm,tsyganskaya2018vegetation}. Feature calibration cannot guarantee recovery of an unobserved water signal. Likewise, label resolution and uncertain event timing affect which regions are counted as newly inundated \citep{zhang2025floodplanet}. The unresolved training/evaluation overlap and prediction provenance preclude an independent cross-sensor conclusion; dataset-dependent generalization requires evidence beyond a change of sensor name \citep{portales2025flood}.
-
-CFDepth also inherits the spatial and vertical limits of the DEM. A narrow SAR detection may be represented by only part of a terrain cell, and retaining its support through maximum aggregation does not recover subcell topography. Erroneous supports change both the estimated domain and the available boundary elevations; this is a dependency of the formulation, not a measured perturbation result. A processing-chain study of Garonne floods also shows the influence of input extents and parameter choices on depth estimates \citep{travert2026uncertainty}, although its sensitivity magnitudes cannot be transferred to the present cases. Bridges, culverts, drainage, and exchange between image-disconnected regions are not represented. Pixels lacking reachable anchors use a terrain-relative fallback and should be distinguished from anchored estimates. Together with the unverified photograph timing and reference-product lineage, these limitations restrict the depth results to conditional information rather than surveyed flood depths or event dynamics.
+Future work can proceed in two directions. The first is to broaden the data conditions and evaluation scope by adding training samples from different sensors and polarization combinations, conducting experiments with training and test samples separated by event, and performing independent depth validation in additional settings such as urban inundation. The second is to incorporate finer physical constraints through higher-resolution terrain data, hydraulic-connectivity analysis, and flow-direction information to improve depth estimation in complex urban areas and areas with variable relief. These directions address detection-stage generalization and depth-stage physical representation, respectively, and will further strengthen the spatial connection between newly inundated extent identification and depth estimation.
 
 \section{Conclusion}
 
-HarmoSSM addresses newly inundated land in complex landscapes by combining comparable bi-temporal SAR representations, state and change evidence, and regional context with local reconstruction. CFDepth extends a supplied inundation extent to a first-order depth field using screened terrain constraints. The formulation connects the location of new inundation with conditional information inside that extent while preserving their different observation and evaluation requirements.
+This study develops DDFlood, a two-stage flood mapping framework that uses newly inundated extents detected by HarmoSSM as the solution support for CCDepth. HarmoSSM combines bi-temporal state and difference information through HA and CQI, and uses OSSD to reconstruct inundation extent from regional context and local detail. Its IoU values are 72.46\%, 77.83\%, and 81.79\% for the Zhengzhou, Zhuozhou, and Guangxi events, respectively, exceeding all eight comparison methods. In the ablation experiments, the full configuration improves IoU by 11.99--26.84 percentage points over the baseline, with the largest improvement in Zhengzhou, where scattered inundation predominates. CCDepth constructs water-level intervals from terrain statistics on both sides of the boundary and reconstructs the water surface under terrain lower-bound and continuity constraints. In the Pakistan validation, CCDepth achieves an MAE of 0.4910~m and an RMSE of 0.6917~m, reductions of 43.8\% and 35.2\% relative to FwDET, respectively, with positive-depth coverage of 92.36\%; estimated depths are generally shallow. Constraint ablations show that two-sided boundary references, terrain lower bounds, and continuity constraints have different effects on depth errors and positive-depth coverage. When detected extents replace manually delineated reference extents, the proportions retaining the same depth class range from 0.66 to 0.82 across CCDepth's depth classes in the three study areas. Existing runtime records show that CCDepth requires less depth-estimation time than FwDET in all four evaluation areas.
 
-The Zhengzhou and Zhuozhou panels illustrate the coexistence of localized, narrow, fragmented, and extensive inundation. They support the relevance of the mapping problem but do not establish morphology-specific improvements or component effects. In the separate Brazos product comparison, broader positive-depth coverage and lower aggregate error coexist with low correlation and negative NSE. These findings constrain interpretation to the displayed spatial cases and supplied depth products; they do not establish independent sensor transfer, surveyed urban depth accuracy, or hydrodynamic fidelity.
+The results show that using the detection mask to determine both the depth solution domain and boundary elevation references directly translates newly inundated extent identification into terrain-constrained depth estimates. Boundary elevation intervals, terrain lower bounds, and continuity constraints jointly yield lower depth-estimation errors and higher positive-depth coverage in this study's validation. The extent-substitution analysis suggests that detected boundaries and connected structure are important factors in the transfer from detection results to depth products, with boundary changes in contiguous inundation areas warranting particular attention. DDFlood maps floods using SAR imagery and public DEM data and is suited to rapid flood assessment where measured depth training samples are scarce. Future work will combine higher-resolution terrain, hydraulic-connectivity information, and independent depth validation in more regions to improve depth estimation in complex urban areas, and explore joint optimization of detection and depth estimation through differentiable water-surface solution.
 
 \section*{Acknowledgements}
 
