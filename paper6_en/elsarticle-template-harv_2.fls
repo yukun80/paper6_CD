@@ -415,12 +415,12 @@ INPUT tables/table4_comparison_zhengzhou.tex
 INPUT ./tables/table5_comparison_zhuozhou.tex
 INPUT ./tables/table5_comparison_zhuozhou.tex
 INPUT tables/table5_comparison_zhuozhou.tex
-INPUT ./figure/Figure6.jpg
-INPUT ./figure/Figure6.jpg
-INPUT ./figure/Figure6.jpg
 INPUT ./tables/table6_comparison_guangxi.tex
 INPUT ./tables/table6_comparison_guangxi.tex
 INPUT tables/table6_comparison_guangxi.tex
+INPUT ./figure/Figure6.jpg
+INPUT ./figure/Figure6.jpg
+INPUT ./figure/Figure6.jpg
 INPUT ./figure/Figure7.jpg
 INPUT ./figure/Figure7.jpg
 INPUT ./figure/Figure7.jpg
