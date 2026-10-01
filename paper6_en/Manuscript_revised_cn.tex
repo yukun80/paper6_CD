@@ -83,7 +83,7 @@
 \setcounter{totalnumber}{3}
 \setcounter{dbltopnumber}{2}
 \renewcommand{\topfraction}{0.85}
-\renewcommand{\dbltopfraction}{0.95}
+\renewcommand{\dbltopfraction}{0.85}
 \renewcommand{\bottomfraction}{0.40}
 \renewcommand{\textfraction}{0.15}
 \renewcommand{\floatpagefraction}{0.80}
@@ -101,11 +101,11 @@
 \makeatother
 \setlength{\textfloatsep}{8pt plus 2pt minus 2pt}
 
-% 仅在中文稿中为区域比较表和模块消融表开放浮动，共享表格保持原样。
-\newcommand{\cnfloatingtableinput}[1]{%
+% 为比较表和消融表开放浮动，共享表格保持原样。
+\newcommand{\floatingtableinput}[1]{%
   \begingroup
-  \let\cnoriginaltable\table
-  \renewcommand{\table}[1][]{\cnoriginaltable[!htb]}%
+  \let\originaltable\table
+  \renewcommand{\table}[1][]{\originaltable[!htb]}%
   \input{#1}%
   \endgroup
 }
@@ -138,27 +138,31 @@ SAR洪水变化检测 \sep 双时相遥感 \sep 新增淹没制图 \sep 变化�
 \end{frontmatter}
 \linenumbers
 
-\section{引言}
+\section{\texorpdfstring{\textcolor{blue}{引言}}{引言}}
 
-洪水是全球发生频率最高、影响范围最广的自然灾害之一，每年造成数千人死亡及数百亿美元的经济损失，严重威胁居民生命安全与社会经济活动\citep{credUndrr2020disasters}。卫星观测进一步表明，已观测受淹区域内的人口暴露比例呈上升趋势\citep{tellman2021exposure}，及时获取灾情空间分布信息已成为洪灾响应和灾后评估的关键需求。合成孔径雷达（SAR）凭借主动微波成像能力，能够在云雨和夜间条件下获取地表信息，已成为洪水监测的重要数据来源\citep{wagner2026gfm}。因此，从SAR观测中可靠提取新增淹没范围和水深信息，是支撑快速洪灾评估的基础。
+洪水是全球发生频繁、影响广泛的自然灾害之一，严重威胁居民生命安全和社会经济活动\citep{credUndrr2020disasters}。卫星观测表明，已观测受淹区域内的人口暴露比例呈上升趋势\citep{tellman2021exposure}。及时获取洪水的空间范围和受淹深度，是洪灾应急响应和灾后评估的重要需求。合成孔径雷达（SAR）通过主动微波成像，在云雨和夜间条件下获取地表信息，已成为业务化洪水监测的重要数据来源\citep{wagner2026gfm}。
 
-淹没范围与水深提供互补的洪水信息。范围指示受影响区域，水深描述区域内受淹程度，二者共同支持人员与资产风险评估，例如郑州洪水中的人员和车辆风险评估结合了淹没条件与水力失稳状况\citep{dong2022urbanrisk}。从SAR获取这两类信息面临不同约束。光滑开阔水面的镜面反射通常使后向散射减弱，为识别淹没提供依据\citep{amitrano2024sarFloodReview}。后向散射本身不直接反映水深，将已识别范围与地形高程结合，以边界地形高程作为水位参照并向区域内部传播，得到水面高程场后由其与地面高程之差推算水深，则能够为边界高程约束估深提供基础\citep{cian2018flood}。因此，将SAR新增淹没范围识别与地形辅助水深估算衔接起来，可以同时提供水平分布和内部受淹程度信息。
+淹没范围与水深提供互补的洪水信息。范围指示受影响区域，水深描述区域内部的受淹程度，两者共同支撑人员和资产风险评估。郑州洪水中的人员和车辆风险评估即结合了淹没条件与水力失稳条件\citep{dong2022urbanrisk}。两类信息的获取依据不同。光滑开阔水面的镜面反射通常使后向散射减弱，为识别淹没范围提供依据\citep{amitrano2024sarFloodReview}。水深估算进一步结合地形信息，以淹没边界处的地形高程作为水位参照，构建范围内部的水面高程场，再由水面高程与地面高程之差得到水深\citep{cian2018flood}。在这一流程中，范围识别结果同时决定估深的空间支撑和边界参照。
 
-在SAR水体提取方面，阈值分割适用于地表覆盖单一和对比度高的区域，但城市建成区的建筑阴影、叠掩与积水具有相似的低后向散射\citep{yu2024urbanFloodThreshold}。监督分类受样本代表性限制，深度学习方法通过多尺度特征与上下文建模扩展复杂场景下的水体识别能力\citep{du2026high}，多源SAR观测与辅助数据被用于补充范围识别信息\citep{lee2026smagnet}。然而水体在SAR影像中没有统一散射特征，开阔水面为低后向散射，植被覆盖下的洪水可能因多次散射增强\citep{tsyganskaya2018vegetation}。城市积水受建筑反射与遮挡影响，干旱沙地也可能呈现类似的低后向散射\citep{garg2024aridFlood}，上述散射差异使洪水引起的后向散射变化强弱不一\citep{giustarini2013urbanFloodCd,amitrano2024sarFloodReview}。特征融合与上下文建模提高了弱变化的可分性\citep{saleh2024dam}，上述策略仍依赖变化在特征空间中足够显著。如何在同一组统计量校准的双时相特征中联合状态与差异信息，仍是变化编码需要解决的问题。
+SAR范围识别需要处理不同地表的散射差异。阈值分割适用于地表覆盖单一、水陆对比明显的区域，城市建成区的建筑阴影、叠掩和积水则可能呈现相似的低后向散射\citep{yu2024urbanFloodThreshold}。深度学习方法通过多尺度特征和上下文建模，提高了复杂场景下的水体识别能力\citep{du2026high}。开阔水面通常表现为低后向散射，植被覆盖下的洪水可能因多次散射增强后向散射\citep{tsyganskaya2018vegetation}，干旱沙地也可能呈现与水体相近的低散射特征\citep{garg2024aridFlood}。双时相变化检测通过比较灾前和灾后观测，为识别新增淹没提供时间信息\citep{giustarini2013urbanFloodCd}。地表背景与散射机制的差异使洪水引起的变化强弱不一\citep{amitrano2024sarFloodReview}，弱变化区域的识别因而需要结合双时相的地表状态和变化响应。
 
-洪水范围识别还需要适应大范围连片淹没、狭长受淹带和零散积水等形态差异。多尺度表征方法融合不同层次特征或引入多尺度金字塔\citep{wu2022msdeeplab,zhao2023siamdwenet,tahermanesh2025siscnet}。与之并行，特征选择方法通过注意力加权或自适应窗口组织多尺度特征\citep{yadav2022attentive,du2026high,zhu2025globalfloodsar}。在此基础上，区域上下文方法通过双时相语义交互或深层变化先验引导特征融合\citep{chen2021remote,han2023change}。上述方法分别改善了大范围连片淹没与局部细节的识别，但区域信息聚合和局部细节保留在单一特征空间中存在竞争关系。区域聚合倾向于平滑局部波动，局部细节则要求保留高分辨率边缘和边界，现有范围重建方式难以同时兼顾两者。
+弱变化判别要求双时相特征具有可比较的统计分布和空间对应关系。特征融合与上下文建模有助于提高变化的可分性\citep{saleh2024dam}，同时，双时相影像的成像条件、斑点噪声和局部位置差异会影响特征比较，使差异响应同时包含观测差异和地表变化。特征统计校准与局部对齐为比较提供共同基础。在此基础上，灾前和灾后的状态信息描述各自的地表表现，有向差和绝对差描述变化方向与强度，联合编码这些信息能够为弱变化位置提供更完整的判别依据。因此，协调双时相特征并联合组织状态与差异信息，是洪水变化编码需要处理的重要环节。
 
-水深估算方法主要包括水动力模型、数据驱动模型和边界高程约束三类。水动力模型求解圣维南方程或简化水力关系模拟洪水演进，但依赖精细河道地形和糙率参数\citep{teng2017floodInundationUncertainty}。数据驱动模型通过机器学习从SAR影像和辅助数据中回归水深，需要大量实测水深样本\citep{chu2025urbanDepth}。与前两类方法不同，边界高程约束方法只需要洪水范围和DEM即可运行，适用于快速灾情评估。Cian等利用淹没边缘的激光雷达地形高程估计水位\citep{cian2018flood}，FwDET v2.0在此基础上改进边界识别与局部水位赋值\citep{cohen2019floodwater}，FLEXTH进一步结合地形条件约束水位\citep{betterle2024water}。RS-FloodXDepth与Yang等则把水位参照与水文引导的空间推断或水体分割衔接起来\citep{tian2026floodxdepth,yang2026csmamba}。上述方法均以边界地形高程作为水位参照，由边界水位向区域内部传播得到水深。
+洪水范围重建需要兼顾连片淹没的区域完整性与狭长受淹带、零散积水的局部形态。多尺度表征方法通过融合不同层次特征或引入特征金字塔表达尺度差异\citep{wu2022msdeeplab,zhao2023siamdwenet,tahermanesh2025siscnet}，特征选择方法通过注意力加权或自适应窗口组织多尺度信息\citep{yadav2022attentive,zhu2025globalfloodsar}。双时相语义交互和深层变化先验进一步为特征融合提供区域上下文\citep{chen2021remote,han2023change}。连片区域需要较大范围的上下文，窄带和零散斑块需要高分辨率的边缘及位置信息。Mamba与VMamba以随序列长度线性扩展的计算复杂度建模长程依赖\citep{gu2023mamba,liu2024vmamba}，ChangeMamba将状态空间建模用于遥感双时相特征交互\citep{chen2024changemamba}。这些研究为区域上下文建模提供了基础，将深层区域聚合与浅层细节恢复结合，可为不同淹没形态的空间重建提供互补信息。
 
-输入掩膜的范围决定边界样本的位置与数量，并影响水位区间与内部水面参照的构造。Travert等指出水深估算精度对输入洪水掩膜质量敏感\citep{travert2026uncertainty}。当输入掩膜来自变化检测时，边界样本同时落在新增淹没边缘与相邻未变化地形上，高程参照随局部地形条件变化，单一边界水位不足以表达连通分量内部的水面高程变化。变化检测研究侧重新增淹没范围识别和空间重建，边界高程估深研究侧重完整水体范围下的边界水位赋值和内部传播。两类研究之间仍缺少共同的求解域定义，使检测支撑直接决定估深范围，并将局部边界水位区间与地形和连续性约束结合。
+水深估算方法主要包括水动力模型、数据驱动模型和边界高程约束方法。水动力模型通过求解圣维南方程或简化水力关系模拟洪水演进，需要精细的河道地形和糙率参数\citep{teng2017floodInundationUncertainty}。数据驱动模型利用机器学习从SAR影像和辅助数据中回归水深，其训练依赖实测水深样本\citep{chu2025urbanDepth}。边界高程约束方法以洪水范围和DEM为输入，适用于快速灾情评估。Cian等利用淹没边缘的激光雷达地形高程估计水位\citep{cian2018flood}。FwDET以淹没范围与地形为基础推算水深\citep{cohen2018estimating}，其v2.0版本改进边界识别，并以最近边界像元的高程为内部像元赋值水位\citep{cohen2019floodwater}。FLEXTH结合地形条件约束水位传播\citep{betterle2024water}，RS-FloodXDepth与Yang等分别将水位参照与水文引导的区域生长、水体分割相衔接\citep{tian2026floodxdepth,yang2026csmamba}。边界高程参照的构造与传播是这类方法的共同环节。Cohen等对FwDET v2.1的分析表明，在中、粗分辨率DEM条件下，估深结果对边界平滑和过滤参数较为敏感\citep{cohen2022sensitivity}。
 
-针对上述问题，本文提出Detection-to-Depth Flood Mapping（DDFlood），将洪水变化检测和水深估算组织为共享同一空间支撑的两阶段流程。该流程针对已有变化检测和边界高程估深方法在检测结果向有效估深约束转化上缺少衔接的问题。检测阶段由HarmoSSM生成新增淹没范围，估深阶段由变化约束水深估计（Change-Constrained Flood Depth Estimation，CCDepth）将检测掩膜作为水深求解支撑并完成条件水深估算，两个阶段共享同一空间支撑。本文的主要贡献如下。
+输入范围通过边界样本的位置、数量和连通结构影响水深估算。Travert等在其洪水处理链对照研究中发现，输入洪水图及方法超参数是影响水深结果的重要因素\citep{travert2026uncertainty}。当输入来自变化检测时，新增淹没边界与相邻未变化地形共同构成局部高程参照，检测范围的变化还会改变边界样本和连通分量结构。以单个边界高程为参照时，局部高程偏差可随水位赋值影响内部估计。将边界参照表达为区间，并结合地形下界和分量内水面连续性进行求解，有助于同时利用边界与内部地形信息。变化检测研究侧重新增淹没的识别和空间重建，边界高程估深研究侧重给定洪水范围内的水位参照与传播。两类任务之间需要明确共同求解域，使检测结果直接确定估深的空间支撑和边界参照，并通过范围替换评价其对水深结果的影响。
+
+针对上述需求，本文提出Detection-to-Depth Flood Mapping（DDFlood）两阶段框架，将SAR新增淹没识别与地形约束水深估算组织为共享空间支撑的制图流程。检测阶段由HarmoSSM生成新增淹没范围，估深阶段由变化约束水深估计（Change-Constrained Flood Depth Estimation，CCDepth）结合检测范围和DEM重建水面并输出水深。本文的主要贡献如下。
 
 \begin{enumerate}
-  \item \textbf{面向洪水变化检测的联合状态与差异信息协调编码与全尺度重建。}设计协调变化编码器（HCE），通过协调对齐（HA）建立可比较的双时相特征。变化查询交互（CQI）在同一校准后的特征空间中联合灾前状态、灾后状态、有向差和绝对差。在此基础上，设计全尺度状态空间解码器（Omni-Scale State-Space Decoder，OSSD），在深层变化特征中聚合区域上下文，在浅层特征中恢复局部细节。该解码在郑州分散斑块与狭长受淹带、涿州连片淹没和广西零散片段三类形态下均取得最高重叠精度。
-  \item \textbf{变化支撑域约束的水深估算。}CCDepth以边界内外两侧地形统计构造水位区间，以地形下界限定水面不低于地面，以相邻像元水面高程差的加权平方和约束同一连通分量内水面的连续性。边界水位参照以区间形式给出，局部异常高程经中位数与中位绝对偏差统计后落于区间边界之内，不会以单值形式传播至整个分量。最终输出逐像元水深。
-  \item \textbf{DDFlood两阶段制图框架。}将HarmoSSM的新增淹没检测与CCDepth的地形约束估深组织为共享空间支撑的连续制图流程，使检测范围与DEM共同确定水深求解域及边界高程参照。通过人工参考范围与检测范围的对照，在固定DEM、求解参数和水深分级阈值的条件下，分析范围变化对水深等级及结果可用性的影响，建立新增淹没识别与受淹程度表达之间可追踪的空间联系，为快速洪灾评估同时提供水平分布和垂向水深信息。
+  \item \textbf{面向洪水变化检测的协调编码与全尺度重建。}设计HarmoSSM，由协调变化编码器（Harmonized Change Encoder，HCE）和全尺度状态空间解码器（Omni-Scale State-Space Decoder，OSSD）组成。HCE通过协调对齐（HA）利用双时相共享统计量校准特征并调整局部位置对应，变化查询交互（CQI）联合编码灾前状态、灾后状态、有向差和绝对差。OSSD在深层变化特征中聚合区域上下文，在浅层特征中恢复局部细节，结合两类信息重建新增淹没范围。
+  \item \textbf{变化支撑域约束的水深估算。}构建CCDepth，以边界内外两侧地形的中位数和中位绝对偏差统计构造水位区间，外侧地形统计为区间提供上端参照。通过稳健统计和边界权重降低局部异常高程的影响，以边界带区间软约束、内部硬地形下界和相邻像元水面高程差的加权平方和共同构造水面优化问题。在具备边界支持的连通分量内联合求解水面高程，再逐像元计算水深。
+  \item \textbf{共享空间支撑的两阶段制图与范围传递评价。}通过DDFlood将HarmoSSM检测范围与DEM共同用于确定CCDepth的求解域和边界参照。在固定DEM、求解参数和水深分级阈值的条件下，对照人工参考范围与检测范围两类输入，分析范围变化对水深等级和输出覆盖的影响，建立新增淹没识别与受淹程度表达之间的空间联系。
 \end{enumerate}
+
+本文其余部分安排如下。第2章介绍研究区与数据，第3章阐述DDFlood框架及HarmoSSM和CCDepth的方法设计，第4章给出变化检测、水深估算和框架性能的实验结果，第5章讨论估深约束机制、检测误差传递及适用条件，第6章总结全文。
 
 \section{Study Areas and Data}
 
@@ -174,25 +178,18 @@ SAR洪水变化检测 \sep 双时相遥感 \sep 新增淹没制图 \sep 变化�
 
 2022年7至9月，巴基斯坦持续遭受强季风降雨，印度河流域发生大范围洪水，影响约3,300万人，造成超过1,700人死亡和约200亿欧元直接损失\citep{nanditha2023pakistan,betterle2024water}。巴基斯坦验证区位于印度河平原中下游，以信德省为主体，并延伸至俾路支省东部和旁遮普省南部（图~\ref{fig:dataset}(e)）。洪涝集中出现在信德省北部的拉尔卡纳、希卡布尔和雅各布阿巴德一带\citep{betterle2024water}，信德省受淹面积约250万hm²，约占全省面积的18\%，其中耕地约110万hm²\citep{qamer2023cropLosses}。区内地势低平，以灌溉农田为主，洪水呈大范围连片淹没且长时间滞留。
 
-三次检测事件和一次验证事件的位置与地表环境见图~\ref{fig:dataset}，图~\ref{fig:flood_photos}的S1至S12记录了道路、建筑、农田和林地环境中的积水情况。
+三次检测事件和一次验证事件的位置与地表环境见图~\ref{fig:dataset}。
 
-\begin{figure}[H]
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=\textwidth,height=.65\textheight,keepaspectratio]{figure/Figure1.jpg}
+  \includegraphics[width=\linewidth]{figure/Figure1.jpg}
   \caption{四个研究区的位置与地表环境。（a）研究区位置。（b）郑州、（c）涿州和（d）广西的地表覆盖及照片点位。（e）巴基斯坦验证区及2022年洪水范围。}
   \label{fig:dataset}
 \end{figure}
 
-\begin{figure}[H]
-  \centering
-  \includegraphics[width=\textwidth,height=.35\textheight,keepaspectratio]{figure/Figure2.jpg}
-  \caption{三研究区的典型受灾照片。左、中、右三组分别为郑州（S1至S4）、涿州（S5至S8）和广西（S9至S12）。点位位置见图~\ref{fig:dataset}。照片标注给出观测对象及水深区间。}
-  \label{fig:flood_photos}
-\end{figure}
-
 \subsection{Data Sources}\label{sec:depth_data}\label{sec:training_reference_data}
 
-本节数据按用途分为三组。SAR与变化检测样本数据用于模型训练和场景测试，地形数据提供水深求解的地面高程条件，验证与参考数据用于水深评价和局地点位对照。三组数据的规格和预处理分别说明如下。
+研究数据按用途分为三组。SAR影像与变化检测样本用于模型训练和场景测试，地形数据提供水深求解的地面高程条件，验证与参考数据用于水深评价和局地点位对照。
 
 三个检测研究区采用双时相合成孔径雷达影像。郑州和涿州使用GF3 HV极化影像，广西使用LT-1B HH极化影像。三区双时相影像已完成辐射色调统一与几何配准，并统一至约10 m的像素间距，主要参数见表~\ref{tab:gf3_eval}。
 
@@ -206,7 +203,7 @@ SAR洪水变化检测 \sep 双时相遥感 \sep 新增淹没制图 \sep 变化�
 
 巴基斯坦验证数据包括洪水范围和沿轨参考水深。洪水范围来自全球洪水监测系统（Global Flood Monitoring，GFM）逐景产品，该产品提供观测洪水范围（F）、参考水体掩膜（R）和排除掩膜（X）三层信息。本文按三层均有效且满足\(F=1\)、\(R=0\)和\(X=0\)的条件筛选洪水范围，其余像元记为NoData\citep{gfm2025pum}。验证区的洪水范围由2022年7至9月的逐景结果在时间上聚合得到，用于覆盖季风期的主要淹没过程\citep{betterle2024water}。沿轨参考水深由ICESat-2 ATL03中等和高置信度强光束光子的湿期与干期高程差构建。湿期观测为2022年9月3日，干期观测为2021年6月6日获取的空间匹配轨道，两条轨道在横轨方向约相隔50 m。光子高程经过100个光子窗口的移动中值滤波，再按约5 m纬度步长生成沿轨候选点。干期高程作为地面高程，湿期与干期高程差作为参考水深，差值保留正负。最终得到14,902个参考水深大于0.01 m的沿轨参考点。
 
-局地点位对照数据包括图~\ref{fig:flood_photos}所示S1至S12社交媒体洪灾照片及其水深区间，以及LS1至LS3文献水深记录\citep{zhang2024yolomaskrcnn}。两类记录给出道路、建筑、农田和林地等具体受淹对象的点位水深参照，用于图~\ref{fig:depth_overview}(d)的点位尺度对照。
+局地点位对照数据包括S1至S12社交媒体洪灾照片及其水深区间，以及LS1至LS3文献水深记录\citep{zhang2024yolomaskrcnn}。照片标注提供受淹对象及其参考水深区间，文献记录提供局地点位的观测水深，两类数据用于对照相应连通域的水深估算结果。
 
 \begingroup
 \section{Methodology}\label{sec:methodology}
@@ -225,7 +222,7 @@ SAR洪水变化检测 \sep 双时相遥感 \sep 新增淹没制图 \sep 变化�
 
 \begin{figure}[!htb]
   \centering
-  \includegraphics[width=\linewidth,height=0.70\textheight,keepaspectratio]{figure/Figure3.jpg}
+  \includegraphics[width=.95\linewidth,keepaspectratio]{figure/Figure2.jpg}
   \caption{DDFlood两阶段洪水制图框架。第一阶段由HarmoSSM提取双时相SAR中的新增淹没范围。第二阶段由CCDepth结合检测范围与DEM，完成支撑域构建、边界约束提取、水面重建及水深估算。}
   \label{fig:framework}
 \end{figure}
@@ -275,9 +272,9 @@ HA在\(P1\)至\(P3\)范围内建立可比较的双时相特征。SAR影像对在
 \end{equation}
 其中\(\mathbf p\)为网格位置，\(\mathbf r_k\)为固定参考偏移，\(\Delta\mathbf p_{ik}\)为学习偏移，\(b_{ik}\)为注意力偏置，\(K\)为采样点数。偏移和偏置由一个分组卷积分支从\(\mathbf U_i^A\)、\(\mathbf U_i^B\)和\(\mathbf U_i^B-\mathbf U_i^A\)预测。\(\mathbf q_i\)由\(\mathbf U_i^B\)投影得到，\(\mathbf K_i\)和\(\mathbf V_i\)由\(\mathbf U_i^A\)投影得到。\(P1\)至\(P3\)执行HA对齐，\(P4\)和\(P5\)保持编码器输出的语义融合特征。HA输出对齐后的双时相特征\(\mathbf X_i^A\)和\(\mathbf X_i^B\)。
 
-\begin{figure}[htbp]
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=\linewidth,height=0.62\textheight,keepaspectratio]{figure/Figure4.jpg}
+  \includegraphics[width=.95\linewidth,keepaspectratio]{figure/Figure3.jpg}
   \caption{协调对齐模块（HA）结构。双时相特征依次经过统计校准和局部可变形对齐。下方展示共享统计量、残差恢复和采样位置示意。}
   \label{fig:ha}
 \end{figure}
@@ -315,9 +312,9 @@ CQI接收HA输出的\(\mathbf X_i^A\)和\(\mathbf X_i^B\)，在同一尺度内�
 \end{equation}
 其中\(\mathcal O_i\)为深度可分离卷积和CBAM组成的输出映射。残差项\(\mathbf Z_i\)保留原始配对信息，\(\mathcal O_i\)调整通道和空间响应。五个尺度分别生成\(\mathbf D_1\)至\(\mathbf D_5\)，并传递给OSSD。
 
-\begin{figure}[htbp]
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=\linewidth,height=0.62\textheight,keepaspectratio]{figure/Figure5.jpg}
+  \includegraphics[width=.95\linewidth,keepaspectratio]{figure/Figure4.jpg}
   \caption{变化查询交互模块（CQI）结构。灾前、灾后、有向差和绝对差特征经联合投影，通过查询与密集token的双向交互和残差细化生成变化特征。}
   \label{fig:cqi}
 \end{figure}
@@ -332,9 +329,9 @@ OSSD通过深层上下文建模和浅层逐级恢复，将CQI输出的五级变�
 \end{equation}
 其中\(\rho_i^c\)为通道投影，\(\operatorname{Resize}_3\)将特征调整至第三级尺寸，\(\operatorname{Fuse}\)为拼接后的卷积融合。\(\mathbf E_3\)至\(\mathbf E_5\)在后续区域重建中保留，用于将扫描得到的区域信息返回各深层特征。
 
-\begin{figure}[htbp]
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=\linewidth,height=0.66\textheight,keepaspectratio]{figure/Figure6.jpg}
+  \includegraphics[width=.95\linewidth,keepaspectratio]{figure/Figure5.jpg}
   \caption{全尺度状态空间解码器（OSSD）结构。左侧为深层上下文建模与浅层逐级恢复路径，右上为区域上下文构建，右下为多分辨率输入构造。}
   \label{fig:oscd}
 \end{figure}
@@ -576,6 +573,12 @@ HarmoSSM的主要实现设置见表~\ref{tab:method_config}，训练目标及主
 \end{equation}
 其中\(e_p\)为参考水深与估计水深之差，\(\bar e\)为误差均值，\(\sigma_e\)为误差标准差，\(N=2{,}442\)为聚合样本数。水面高程梯度由相邻有效求解像元的水面高程差计算，用于描述水面空间连续性。
 
+区域水深产品以HarmoSSM检测范围内的像元总数为统计总体，有效水深比例为其中具有有效水深输出的像元数占该总体的百分比，用于评价估深结果对检测范围的覆盖程度。
+
+局地点位评价以HarmoSSM检测范围为水深求解输入，以点位所在连通分量内有效水深的中位数和最小至最大取值范围表示估计结果。中位数反映分量内的水深分布中心，取值范围反映分量内部受淹程度的差异。照片点位的参考区间由参照物判读得到，文献点位的参考区间取已有观测记录的最小值至最大值。
+
+点位结果按中位数与参考区间的位置关系优先判定。中位数位于参考区间内时记为中位数命中，端点相等计入命中。中位数位于区间外、但估计取值范围与参考区间相交时，记为仅范围重叠，端点接触计入相交。估计范围上端低于参考区间下端时，记为整体偏低。当前图示结果归入上述三类，前两类表示估计结果与参考区间相容。
+
 \FloatBarrier
 \arrayrulecolor{black}
 \endgroup
@@ -584,30 +587,28 @@ HarmoSSM的主要实现设置见表~\ref{tab:method_config}，训练目标及主
 
 表~\ref{tab:comparison_zhengzhou}至\ref{tab:comparison_guangxi}给出HarmoSSM与八种比较方法在郑州、涿州和广西的整景检测精度，图~\ref{fig:qual_zhengzhou}至\ref{fig:qual_guangxi}给出对应的整景与局部结果。表中各指标按精度比较，每列最优与次优结果分别加粗与加下划线，显示值统一保留两位小数。HarmoSSM在三个研究区均取得最高F1和IoU。三区各方法的OA均高于94\%，郑州IoU最低的方法其OA仍高于97\%，说明受淹像元在参考域中占比较低时，OA对洪水识别差异的区分能力有限。因此后续比较以IoU和F1为主，并结合P与R解释误差构成。
 
-\cnfloatingtableinput{tables/table4_comparison_zhengzhou.tex}
+\floatingtableinput{tables/table4_comparison_zhengzhou.tex}
 
 HarmoSSM的领先在三个研究区保持一致，比较方法的排序则随场景变化。IoU和F1排名第二的方法在郑州与广西为ChangeDINO，在涿州为CGNet。CGNet在涿州进入前列而在郑州明显靠后，ChangeDINO在涿州退至第三，说明比较方法的相对表现随地表与淹没形态变化。HarmoSSM相对各区第二名的IoU优势在郑州超过20个百分点，在涿州与广西保持在9个百分点以上。在城市建成区、城乡交错地表和农林镶嵌地表三类场景中，HarmoSSM均保持最高重叠精度，其中与比较方法的差距在郑州最大。
 
-\cnfloatingtableinput{tables/table5_comparison_zhuozhou.tex}
-
-\setcounter{figure}{6}
+\floatingtableinput{tables/table5_comparison_zhuozhou.tex}
 
 \begin{figure}[!htb]
   \centering
   \captionsetup{font={small,stretch=1}}
-  \includegraphics[width=\linewidth]{figure/Figure7.jpg}
+  \includegraphics[width=.90\linewidth,height=.58\textheight,keepaspectratio]{figure/Figure6.jpg}
   \caption{郑州洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}
   \label{fig:qual_zhengzhou}
 \end{figure}
 
 比较方法的主要误差为遗漏，HarmoSSM的重叠精度优势主要体现为召回率提高。郑州多数比较方法的R不足35\%，其中若干方法的P高于90\%，涿州多种比较方法的P高于97\%而R不足60\%，广西FC-Siam-Diff同样呈高P低R。HarmoSSM在三个研究区均取得最高R，也是唯一在三区R均高于80\%的方法。HarmoSSM的P在各区均低于P最高的比较方法，涿州与广西的差距在5个百分点以内，郑州的差距接近15个百分点。因此涿州和广西以较小的精确率差距换取明显更高的召回率，重叠精度提升主要对应遗漏像元减少，郑州结果中则同时存在较明显的额外预测。
 
-\cnfloatingtableinput{tables/table6_comparison_guangxi.tex}
+\floatingtableinput{tables/table6_comparison_guangxi.tex}
 
 \begin{figure}[!htb]
   \centering
   \captionsetup{font={small,stretch=1}}
-  \includegraphics[width=\linewidth]{figure/Figure8.jpg}
+  \includegraphics[width=.90\linewidth,height=.58\textheight,keepaspectratio]{figure/Figure7.jpg}
   \caption{涿州洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}
   \label{fig:qual_zhuozhou}
 \end{figure}
@@ -619,7 +620,7 @@ HarmoSSM的领先在三个研究区保持一致，比较方法的排序则随场
 \begin{figure}[!htb]
   \centering
   \captionsetup{font={small,stretch=1}}
-  \includegraphics[width=\linewidth]{figure/Figure9.jpg}
+  \includegraphics[width=.90\linewidth,height=.58\textheight,keepaspectratio]{figure/Figure8.jpg}
   \caption{广西洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}
   \label{fig:qual_guangxi}
 \end{figure}
@@ -634,80 +635,113 @@ HarmoSSM的领先在三个研究区保持一致，比较方法的排序则随场
 
 统一Baseline与完整模型共享编码器主干、辅助监督和训练设置，仅在HA、CQI和OSSD对应位置采用基础结构。编码器沿用共享EfficientNet-B2与FPN，并保留冻结DINOv3 ViT-S/16第5、8和11层在P3至P5的语义融合，输出双时相特征\(P_i^A\)和\(P_i^B\)（\(i=1,\dots,5\)）。移除HA的配置将两时相特征直接作为\(X_i^A\)和\(X_i^B\)输入变化建模。移除CQI的配置将第\(i\)级特征的绝对差经卷积投影得到变化特征，即\(D_i=\Psi_i(|X_i^B-X_i^A|)\)，其中\(\Psi_i\)由1×1卷积、批归一化和3×3深度可分离卷积组成。移除OSSD的配置采用自顶向下的逐级重建结构，\(\mathbf D_5\)依次与\(\mathbf D_4\)至\(\mathbf D_1\)融合，每级融合由双线性上采样、通道拼接和3×3卷积完成，末端使用与完整模型相同的分类头。五个辅助头、Focal与Tversky组合损失、支撑保持项和粗尺度一致性项在各配置中保持一致。训练数据、优化器、学习率调度、训练轮数、检查点与阈值选择规则以及整景拼接方式均与第~\ref{sec:experiment_implementation}节相同。
 
-\cnfloatingtableinput{tables/table7_ablation_hacqi.tex}
+\floatingtableinput{tables/table7_ablation_hacqi.tex}
 
 单模块配置在三个研究区的IoU和F1均高于统一Baseline，IoU增量为2.37至8.49个百分点。郑州和广西以CQI的增量最大，涿州以OSSD的增量最大。郑州Baseline的IoU为43.27\%，是三个研究区中最低的。三个单模块在郑州的IoU增量为7.17至8.49个百分点，高于涿州的2.37至4.00个百分点和广西的2.91至3.73个百分点。两两组合相对统一Baseline的IoU增量为6.56至17.75个百分点，均高于对应两个单模块增量之和，超出幅度为0.10至2.09个百分点。G在三个研究区均为最优两两组合。
 
 完整配置H在三个研究区的IoU和F1均为最高。H相对统一Baseline的IoU提升11.99至29.19个百分点，F1提升8.13至23.63个百分点，相对最优两两组合G的IoU提升2.80至11.44个百分点，三项提升幅度均以郑州最大。图~\ref{fig:feature_vis}展示郑州、涿州和广西的CQI变化特征\(\mathbf D_1\)至\(\mathbf D_5\)、OSSD重建特征\(\mathbf R_3\)、\(\mathbf R_2\)、\(\mathbf R_1\)以及最终预测。\(\mathbf D_1\)和\(\mathbf D_2\)呈现较细碎的边界与局部斑块响应，\(\mathbf D_3\)至\(\mathbf D_5\)呈现较连续的空间响应。\(\mathbf R_3\)、\(\mathbf R_2\)和\(\mathbf R_1\)依次呈现由粗区域结构到细边界细节的重建结果，三地最终预测均保留了参考标签中的主要淹没结构。
 
-\begin{figure*}[htbp]
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=\textwidth,height=.32\textheight,keepaspectratio]{figure/Figure10.jpg}
+  \includegraphics[width=\linewidth]{figure/Figure9.jpg}
   \caption{HarmoSSM的多尺度变化特征与解码特征可视化。三行依次为郑州、涿州和广西。各列依次为灾前SAR、灾后SAR、参考标签、CQI变化特征\(D_1\)至\(D_5\)、OSSD重建特征\(R_3\)、\(R_2\)、\(R_1\)，以及预测与参考标签的叠加结果。}
   \label{fig:feature_vis}
-\end{figure*}
+\end{figure}
 
-\subsection{CCDepth Performance Evaluation}
+\subsection{\texorpdfstring{\textcolor{blue}{CCDepth 性能评估}}{CCDepth 性能评估}}\label{sec:ccdepth_evaluation}
 
-\setcounter{figure}{10}
+水深估算评价从局地点位对照、独立事件验证和约束项消融三个层次展开。首先以HarmoSSM检测范围为输入，将郑州、涿州和广西的估计水深与照片及文献参考区间对照，考察DDFlood两阶段输出在具体受淹位置的水深表现。随后以巴基斯坦GFM洪水范围为输入，采用ICESat-2沿轨参考水深评价估深精度，并通过约束项消融分析误差和正水深覆盖率的变化。
 
-CCDepth的评价分为两个层次。在巴基斯坦验证区，以GFM洪水范围为输入，用ICESat-2沿轨参考水深比较CCDepth与FwDET的估深精度，并通过约束项消融检验各约束的贡献。GFM洪水范围在各掩膜均有效的条件下，按\(F=1\)、\(R=0\)和\(X=0\)筛选，所得范围表示相对于参考水体的新增淹没，与变化检测掩膜具有一致的目标含义。在郑州、涿州和广西，分别以人工参考范围和HarmoSSM检测范围为输入，比较两类输入下的水深等级转移，检验输入范围变化对估深结果的影响。
+图~\ref{fig:local_depth_comparison}将三个研究区的受淹场景与局地点位水深结果结合。郑州S1至S4以车辆为参照，涿州S5至S7以交通标志为参照，S8以车辆为参照，广西S9至S12以墙面水痕、卡车和建筑为参照，照片参考区间介于0.4至2.0~m。LS1至LS3为郑州研究区的文献水深记录\citep{zhang2024yolomaskrcnn}。图~\ref{fig:local_depth_comparison}(a)展示两种方法的点位估计水深及取值范围，图~\ref{fig:local_depth_comparison}(b)汇总估计结果与参考区间的对应类别。
 
-图~\ref{fig:pakistan_depth_validation}(a)给出巴基斯坦验证区两种方法的水深分布，图~\ref{fig:pakistan_depth_validation}(b)给出正水深覆盖率和水面高程（water surface elevation, WSE）梯度累积分布，图~\ref{fig:pakistan_depth_validation}(c)给出水深误差分布及ICESat-2参考水深分布。正水深覆盖率的统计总体为参考水深大于0.01~m的14,902个沿轨参考点。误差在两种方法共同有效点的基础上，按原生栅格行列组合聚合为2,442个样本后计算。
-
-\begin{figure*}[htbp]
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=\textwidth,height=.50\textheight,keepaspectratio]{figure/Figure11.jpg}
-  \caption{巴基斯坦验证区的水深估算与评价。（a）CCDepth与FwDET的水深分布。（b）正水深覆盖率与水面高程（WSE）梯度累积分布。（c）两种方法的水深误差分布及ICESat-2参考水深分布。误差定义为参考水深减估计水深。}
+  \includegraphics[width=\linewidth]{figure/Figure10.jpg}
+  \caption{三研究区局地点位的受淹场景与水深对照。照片标注参照物与参考水深区间，点位位置见图~\ref{fig:dataset}。（a）以HarmoSSM检测范围为输入的点位水深，蓝色圆点和橙色三角分别为CCDepth与FwDET的连通分量水深中位数，误差线为分量内最小至最大水深，绿色线段为照片参考区间，黑色点为LS1至LS3的文献记录。（b）15个点位的中位数命中、仅范围重叠和整体偏低计数。}
+  \label{fig:local_depth_comparison}
+\end{figure}
+
+15个点位均位于检测范围内，两种方法在全部点位均得到有效水深。CCDepth的中位数命中、仅范围重叠和整体偏低点位分别为5、6和4个，FwDET分别为2、4和9个。前两类合计，CCDepth与参考区间相容的点位为11个，FwDET为6个。误差线表示点位所在连通分量内有效水深的最小至最大取值范围，反映分量内部受淹程度的差异。
+
+郑州照片点位中，CCDepth在S1中位数命中，在S2和S3仅范围重叠，在S4整体偏低。FwDET在S1仅范围重叠，在S2至S4整体偏低。文献点位LS1至LS3的CCDepth中位数均位于参考区间内，FwDET在LS2和LS3中位数命中，在LS1仅范围重叠。该区域中，两种方法在照片点位上的差异主要体现为CCDepth估计范围与参考区间的重叠程度较高。
+
+涿州S5至S7的照片参考区间均为1.8至2.0~m，两种方法的估计范围上端均低于参考下端。S8的参考区间为1.5至1.8~m，CCDepth仅范围重叠，FwDET整体偏低。两种方法在该区域均表现出偏浅倾向，其中交通标志对应点位的参考水深均高于估计范围上端。
+
+广西S9的参考区间为1.4至1.8~m，CCDepth中位数位于区间下方，估计范围与参考区间重叠，FwDET整体偏低。S10至S12的参考区间均为0.5至1.0~m。S10处CCDepth仅范围重叠，FwDET估计水深接近0~m。S11处两种方法均仅范围重叠，S12处CCDepth中位数命中，FwDET仅范围重叠。综合三个研究区，CCDepth整体偏低的点位集中于S4至S7，FwDET则集中于S2至S10，CCDepth在更多位置的估计范围与局地参考区间相容。
+
+为进一步评价独立洪水事件中的估深精度，巴基斯坦验证采用GFM洪水范围和ICESat-2沿轨参考水深开展对照。GFM洪水范围在各掩膜均有效的条件下，按\(F=1\)、\(R=0\)和\(X=0\)筛选，表示相对于参考水体的新增淹没，与变化检测掩膜具有一致的目标含义。图~\ref{fig:pakistan_depth_validation}(a)展示两种方法的水深空间分布，CCDepth在连片淹没区的估计水深较大，FwDET整体偏浅。图~\ref{fig:pakistan_depth_validation}(b)给出正水深覆盖率和水面高程（water surface elevation，WSE）梯度累积分布，图~\ref{fig:pakistan_depth_validation}(c)给出水深误差及ICESat-2参考水深的分布。
+
+正水深覆盖率以参考水深大于0.01~m的14,902个沿轨参考点为统计总体。误差以两种方法共同有效的点为基础，按原生栅格行列组合聚合为2,442个样本后计算，定义为参考水深减去估计水深。14,902个沿轨参考点的水深均值为1.1126~m，中位数为0.9423~m，标准差为0.7646~m，反映了验证样本的水深分布。
+
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=.95\linewidth,keepaspectratio]{figure/Figure11.jpg}
+  \caption{巴基斯坦验证区的水深估算与评价。（a）CCDepth与FwDET的水深分布。（b）正水深覆盖率与WSE梯度累积分布。（c）水深误差与ICESat-2参考水深分布，误差为参考水深减估计水深。}
   \label{fig:pakistan_depth_validation}
-\end{figure*}
+\end{figure}
 
-CCDepth与FwDET的正水深覆盖率分别为92.36\%和55.96\%。CCDepth的MAE和RMSE分别为0.4910~m和0.6917~m，FwDET分别为0.8742~m和1.0677~m，CCDepth分别降低43.8\%和35.2\%。误差定义为参考水深减去估计水深。两种方法的误差均值分别为0.2937~m和0.8641~m，误差标准差分别为0.6262~m和0.6271~m。14,902个沿轨参考点的水深均值为1.1126~m，中位数为0.9423~m，标准差为0.7646~m，描述了验证样本的水深分布。两种方法的误差均值均为正值，估计水深整体低于参考水深。其误差标准差接近，误差差异主要表现为平均偏差减小。图~\ref{fig:pakistan_depth_validation}(b)中，CCDepth与FwDET的中值WSE梯度分别为3.73‰和28.87‰，CCDepth的累积分布曲线在较小梯度处上升更快，对应较小的相邻有效像元水面高程差。
+CCDepth与FwDET的正水深覆盖率分别为92.36\%和55.96\%。CCDepth的MAE和RMSE分别为0.4910~m和0.6917~m，FwDET分别为0.8742~m和1.0677~m，CCDepth分别降低43.8\%和35.2\%。两种方法的误差均值分别为0.2937~m和0.8641~m，均为正值，表明估计水深整体低于参考水深。误差标准差分别为0.6262~m和0.6271~m，数值接近，误差差异主要表现为CCDepth平均偏差的减小。
 
-表~\ref{tab:ccdepth_ablation}给出CCDepth的约束项消融结果。消融围绕边界参照、地形下界、连续性、边界权重和次目标五组约束，设置九个单因素配置和一个组合配置F1。单因素配置只替换一项约束，其余参数与表~\ref{tab:method_config}一致。各配置沿用完整模型判定的可解分量，误差在同一组2,442个聚合样本上计算，有效零水深按0~m计入，正水深覆盖率仍以14,902个参考点统计。
+图~\ref{fig:pakistan_depth_validation}(b)中，CCDepth与FwDET的WSE梯度中值分别为3.73‰和28.87‰。CCDepth的累积分布曲线在较小梯度处上升更快，对应较小的相邻有效像元水面高程差。沿轨误差、正水深覆盖率和WSE梯度共同表明，CCDepth在该验证区具有较低的平均偏差、较高的正水深覆盖率和较小的局部水面高程变化。
+
+为分析各约束对上述估深结果的贡献，表~\ref{tab:ccdepth_ablation}围绕边界参照、地形下界、连续性、边界权重和次目标开展消融，共设置九个单因素配置和一个组合配置F1。单因素配置只替换一项约束，其余参数与表~\ref{tab:method_config}一致。各配置沿用完整模型判定的可解分量，误差在同一组2,442个聚合样本上计算，有效零水深按0~m计入，正水深覆盖率以14,902个参考点统计。
 
 A1将边界水位区间退化为中点，A2和A3分别采用内侧和外侧边界样本。B1移除内部硬地形下界，B2将其改为与边界带相同的软约束。C1直接采用分量初始化水面。D1采用均匀边界权重，D2移除邻近候选一致性惩罚。E1仅求解主目标，F1组合内侧边界样本与分量初始化水面配置。
 
-\input{tables/table8_ccdepth_constraint_ablation.tex}
+\floatingtableinput{tables/table8_ccdepth_constraint_ablation.tex}
 
-完整模型的正水深覆盖率、误差均值、误差标准差、MAE和RMSE在全部配置中均为最优（表~\ref{tab:ccdepth_ablation}）。各配置相对完整模型的MAE增量为0.0011至0.3106~m，其中D2和E1的增量分别为0.0092~m和0.0011~m，均小于0.01~m。在边界参照组中，A2的误差均值和MAE分别为0.5347~m和0.6482~m，均大于A3，A3的误差标准差为0.6874~m，大于A2。在地形下界组中，B1的正水深覆盖率降至86.12\%，为单因素配置中最低。在连续性组中，C1的误差标准差为0.7431~m，为全部配置中最大。在边界权重组中，D1的MAE增加0.0414~m。组合配置F1的正水深覆盖率降至63.28\%，MAE升至0.8016~m，均为全部配置中最差，其MAE增量为0.3106~m，大于A2与C1的增量之和。
+完整模型的正水深覆盖率、误差均值、误差标准差、MAE和RMSE在全部配置中均为最优。各配置相对完整模型的MAE增量为0.0011至0.3106~m。单因素配置中，A2和C1的MAE增量最大，分别为0.1572~m和0.1210~m，表明边界参照构造和分量内部水面调整对该验证区的误差控制作用较大。
 
-图~\ref{fig:two_stage_consistency}比较人工参考范围（Label）与HarmoSSM检测范围（seg）两类输入下的水深等级转移。两类输入采用相同的DEM和求解参数，水深分级阈值保持一致，具体见图~\ref{fig:two_stage_consistency}。转移矩阵以各方法在Label条件下的有效水深等级为行，以seg条件下的水深等级及缺失类别为列，并按行归一化，对角线元素为同级保持比例。Missed表示Label条件下具有有效水深的像元在检测掩膜中被判为背景，No data表示像元位于检测掩膜内但没有有效水深输出。各矩阵分别以对应方法在人工参考范围下的有效水深像元为参考域。
+边界参照组中，A1和A3的MAE增量分别为0.0963~m和0.0831~m。A2的误差均值和MAE分别为0.5347~m和0.6482~m，均大于A3，A3的误差标准差为0.6874~m，大于A2。两种单侧参照分别表现为较大的平均偏差和误差离散程度，双侧区间配置在这两项指标上均取得较低值。
 
-\begin{figure*}[htbp]
-  \centering
-  \includegraphics[width=\textwidth,keepaspectratio]{figure/Figure13.jpg}
-  \caption{CCDepth与FwDET在不同范围输入下的水深等级转移矩阵。（a）至（c）为CCDepth在郑州、涿州和广西的结果。（d）至（f）为FwDET在相应研究区的结果。纵轴Label depth为各方法以人工参考范围为输入得到的水深等级，横轴HarmoSSM depth为以检测范围为输入得到的水深等级。各矩阵分别以对应方法在人工参考范围下的有效水深像元为参考域，按行归一化，数值与颜色表示转移比例，对角线表示同级保持。Missed表示参考域内的像元在检测掩膜中被判为背景，No data表示参考域内的像元位于检测掩膜内但没有有效水深输出。水深单位为m。}
-  \label{fig:two_stage_consistency}
-\end{figure*}
+地形下界组中，B1的正水深覆盖率降至86.12\%，为单因素配置中最低，MAE增量为0.0452~m，说明地形下界同时影响正水深覆盖和估计误差。连续性组中，C1的误差标准差为0.7431~m，为全部配置中最大。结合其MAE增量，连续性约束对分量内部水面调整和误差离散程度具有较明显影响。
 
-CCDepth在郑州、涿州和广西的同级保持比例分别为0.77至0.82、0.66至0.71和0.74至0.78，FwDET分别为0.19至0.86、0.38至0.63和0.63至0.73。在涿州和广西，CCDepth在各水深等级的同级保持比例均高于FwDET。在郑州，FwDET在最浅等级的同级保持比例为0.86，高于CCDepth。在郑州最高水深等级，CCDepth与FwDET的同级保持比例分别为0.82和0.19，向2至4~m等级迁移的比例分别为0.06和0.36，No data比例分别为0.00和0.25。在涿州最浅等级中，CCDepth的Missed和No data比例分别为0.14和0.06，FwDET分别为0.26和0.18。在广西最高水深等级中，两种方法的No data比例分别为0.04和0.09。
+边界权重组中，D1的MAE增加0.0414~m，D2增加0.0092~m。次目标配置E1的MAE增加0.0011~m，D2和E1的增量均小于0.01~m。组合配置F1的正水深覆盖率降至63.28\%，MAE升至0.8016~m，两项均为全部配置中最差，其MAE增量0.3106~m大于A2与C1的增量之和。总体而言，双侧边界参照和连续性约束对误差控制的作用较突出，地形下界有助于维持正水深覆盖，多项约束共同支撑了完整模型的估深表现。
 
 \FloatBarrier
 
-\subsection{DDFlood Framework Performance Analysis}
+\subsection{\texorpdfstring{\textcolor{blue}{DDFlood 框架性能分析}}{DDFlood 框架性能分析}}\label{sec:ddflood_framework_evaluation}
 
-图~\ref{fig:depth_overview}以人工参考范围为输入，比较CCDepth与FwDET在郑州、涿州和广西的区域水深产品及其与局地参考记录的对应关系。三地分别呈现分散斑块与局部条带、连片受淹区以及多个不连续片区，为比较不同淹没形态下的估深表现提供了场景基础。图~\ref{fig:depth_overview}(a)给出三地的水深空间分布。图~\ref{fig:depth_overview}(b)中，CCDepth在三地的有效水深比例分别为93.89\%、91.70\%和94.11\%，FwDET分别为37.83\%、61.26\%和40.79\%。图~\ref{fig:depth_overview}(c)中，CCDepth的WSE梯度累积分布在较小梯度处上升更快。
+DDFlood的区域制图评价围绕水深产品、范围传递和运行效率展开。第~\ref{sec:ccdepth_evaluation}节给出局地点位和独立验证区的估深结果。区域尺度以HarmoSSM检测范围为输入，比较三个研究区两阶段输出的水深空间分布，并以人工参考范围下的估深结果为参照，分析检测范围传递对水深等级的影响。结合第4.2节的检测精度和各阶段运行记录，进一步评价范围识别与水深估算衔接后的计算开销。
 
-\begin{figure*}[htbp]
+图~\ref{fig:depth_overview}(a)给出以HarmoSSM检测范围为输入的CCDepth与FwDET水深分布。郑州以分散斑块和局部条带为主，涿州以连片受淹区为主，广西包含多个不连续片区。两种方法的水深分布与这些受淹形态相对应。图中白色区域包括人工参考范围内被检测掩膜判为背景的像元，以及检测范围内无有效水深输出的像元，分别对应图~\ref{fig:two_stage_consistency}中的Missed和No data类别。
+
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=\textwidth,height=.66\textheight,keepaspectratio]{figure/Figure12.jpg}
-  \caption{以人工参考范围为输入的三研究区区域水深产品与局地参考对照。（a）郑州、涿州和广西的CCDepth与FwDET水深分布。（b）有效水深比例。（c）水面高程（WSE）梯度累积分布。（d）照片点位S1至S12及文献点位LS1至LS3对应连通域的水深区间与局地参考记录对照。}
+  \includegraphics[width=.95\linewidth,keepaspectratio]{figure/Figure12.jpg}
+  \caption{以HarmoSSM检测范围为输入的三研究区水深产品。（a）CCDepth与FwDET水深分布，白色为人工参考范围内的漏检像元与检测范围内无有效水深输出的像元。（b）有效水深比例，以检测范围像元总数为基数。（c）WSE梯度累积分布，虚线为中值。}
   \label{fig:depth_overview}
-\end{figure*}
+\end{figure}
 
-图~\ref{fig:depth_overview}(d)给出点位尺度的对照。S8和S9对应连通域的CCDepth水深区间与参考区间重叠，FwDET区间位于参考区间下方。S12处CCDepth区间覆盖参考区间，且中位数落入参考区间。S5至S7处两种方法的水深区间均低于参考区间。LS1至LS3为文献报道的水深记录。LS1包含多条水深记录，CCDepth区间与其中一条记录的范围重叠，其余三条记录的水深均高于CCDepth估计值，FwDET的估计偏离更大。LS2和LS3处CCDepth区间对参考记录的覆盖均优于FwDET。
+图~\ref{fig:depth_overview}(b)以检测范围像元总数为基数统计有效水深比例。CCDepth在郑州、涿州和广西的有效水深比例分别为93.89\%、91.70\%和94.11\%，FwDET分别为37.83\%、61.26\%和40.79\%。CCDepth在三地的有效水深比例均高于91\%，表明在分散、连片和不连续片区三种淹没形态下，CCDepth对检测范围的水深覆盖较完整。FwDET的无有效水深像元在图~\ref{fig:depth_overview}(a)中表现为检测范围内部的白色区域。
 
-图~\ref{fig:framework_efficiency}(a)给出九种检测方法在广西研究区的IoU、FLOPs和参数量。复杂度记录对应\(256\times256\)双时相影像块，来源包括本地模型统计和文献参考配置。本地逐片测量使用NVIDIA GeForce RTX 4090 D，CCDepth与FwDET的估深实验使用AMD Ryzen 9 7950X。HarmoSSM的FLOPs约为175~G，与CGNet和TTP处于同一量级，IoU分别比二者高11.60和11.57个百分点。TTP的参数量在九种方法中最大，IoU为70.22\%。图~\ref{fig:framework_efficiency}(b)给出CCDepth与FwDET在四个区域的估深耗时。
+图~\ref{fig:depth_overview}(c)中，CCDepth在郑州、涿州和广西的WSE梯度中值分别为5.26‰、3.25‰和5.37‰，FwDET分别为31.64‰、34.07‰和35.06‰。CCDepth的累积分布曲线在三个研究区均于较小梯度处上升更快，对应较小的相邻有效像元水面高程差。区域产品表明，DDFlood两阶段输出在三种淹没形态下具有较高的有效水深覆盖和较平缓的局部水面变化。
 
-\begin{figure*}[htbp]
+为分析检测范围对水深结果的影响，图~\ref{fig:two_stage_consistency}以人工参考范围下的估深结果为参照，比较输入替换为HarmoSSM检测范围后的水深等级转移，两类输入分别记为Label和seg。两类输入采用相同的DEM、求解参数和水深分级阈值，通过固定估深条件考察范围替换后的结果变化。各矩阵以对应方法在Label条件下的有效水深像元为参考域，行为Label条件下的水深等级，列为seg条件下的水深等级及Missed和No data类别。矩阵按行归一化，对角线元素为同级保持比例。Missed表示参考域内被检测掩膜判为背景的像元，No data表示检测掩膜内部的水深输出缺失像元。
+
+\begin{figure}[!htb]
   \centering
-  \includegraphics[width=\textwidth,keepaspectratio]{figure/Figure14.jpg}
-  \caption{DDFlood的检测精度、模型复杂度与估深运行耗时。（a）九种检测方法在广西研究区的IoU与FLOPs关系，气泡面积表示参数量，复杂度记录对应\(256\times256\)双时相影像块，来源包括本地模型统计和文献参考配置。（b）已有运行记录中CCDepth与FwDET在郑州、涿州、广西和巴基斯坦的估深耗时，横轴采用以秒为单位的对数尺度，点旁标注给出相应耗时。}
-  \label{fig:framework_efficiency}
-\end{figure*}
+  \includegraphics[width=\linewidth]{figure/Figure13.jpg}
+  \caption{人工参考范围（Label）与HarmoSSM检测范围（seg）输入下的水深等级转移矩阵。（a）至（c）为CCDepth，（d）至（f）为FwDET，依次对应郑州、涿州和广西。行为Label下的有效水深等级，列为seg下的水深等级及Missed和No data类别，按行归一化，水深单位为m。}
+  \label{fig:two_stage_consistency}
+\end{figure}
 
-以HarmoSSM检测范围为输入时，CCDepth在郑州、涿州和广西的估深耗时分别为17.9~s、7.8~s和33.5~s，FwDET分别为62.14~s、62.16~s和108.47~s。在巴基斯坦验证区，两种方法的估深耗时分别为25~min~01.3~s和95.45~min。FwDET在郑州和涿州的耗时接近，CCDepth在涿州的耗时不足郑州的一半。检测阶段的已有记录显示，HarmoSSM在三地的瓦片推理循环耗时分别为19~s、14~s和86~s，该循环包括数据读取、预测和重叠区累加等步骤。这些记录分别反映了检测与估深阶段的处理耗时，为区域洪水制图的计算安排提供依据。
+CCDepth在郑州、涿州和广西的同级保持比例分别为0.77至0.82、0.66至0.71和0.74至0.78，FwDET分别为0.19至0.86、0.38至0.63和0.63至0.73。在涿州和广西，CCDepth各水深等级的同级保持比例均高于FwDET。在郑州最浅等级，FwDET的同级保持比例为0.86，高于CCDepth。CCDepth在三地的同级保持比例以郑州较高、涿州较低，表明范围替换对水深等级的影响随研究区而变化。
+
+郑州大于4~m的最高等级中，CCDepth与FwDET的同级保持比例分别为0.82和0.19，向相邻2至4~m等级迁移的比例分别为0.06和0.36，No data比例分别为0.00和0.25。涿州最浅等级中，CCDepth的Missed和No data比例分别为0.14和0.06，FwDET分别为0.26和0.18。广西最高等级中，两种方法的No data比例分别为0.04和0.09。这些结果区分了范围遗漏、估深缺失和水深等级迁移三类变化，表明检测范围传递既影响输出覆盖，也影响保留区域的水深分级。
+
+完成区域产品与范围传递分析后，框架评价进一步考察计算开销。图~\ref{fig:framework_efficiency}(a)从检测精度与计算复杂度两方面比较九种检测方法在广西研究区的表现。复杂度记录对应\(256\times256\)双时相影像块，来源包括本地模型统计和文献参考配置。HarmoSSM的FLOPs约为175~G，与CGNet和TTP处于同一量级，IoU分别比二者高11.60和11.57个百分点。TTP的参数量在九种方法中最大，IoU为70.22\%。这些结果表明，HarmoSSM在与上述方法相近的运算量下取得了较高的检测精度。
+
+\begin{figure}[!htb]
+  \centering
+  \includegraphics[width=\linewidth]{figure/Figure14.jpg}
+  \caption{DDFlood的检测复杂度与估深耗时。（a）广西研究区九种检测方法的IoU与FLOPs，气泡面积表示参数量。（b）CCDepth与FwDET在四个区域的估深耗时，横轴为以秒为单位的对数尺度。}
+  \label{fig:framework_efficiency}
+\end{figure}
+
+图~\ref{fig:framework_efficiency}(b)给出四个区域的估深耗时。以HarmoSSM检测范围为输入时，CCDepth在郑州、涿州和广西的耗时分别为17.9~s、7.8~s和33.5~s，FwDET分别为62.14~s、62.16~s和108.47~s。在巴基斯坦验证区，以GFM洪水范围为输入，两种方法分别为25.02~min和95.45~min。CCDepth在四个区域的估深耗时均短于FwDET。CCDepth在郑州与涿州的耗时相差10.1~s，FwDET在两地的耗时基本相同。
+
+检测阶段的本地运行使用NVIDIA GeForce RTX 4090 D，估深阶段使用AMD Ryzen 9 7950X。HarmoSSM在郑州、涿州和广西的瓦片推理循环耗时分别为19~s、14~s和86~s，包含数据读取、预测和重叠区累加。按检测循环与估深阶段的已有记录，三地近似处理时间分别为37~s、22~s和120~s，反映上述硬件条件下两个阶段的处理时间量级。结合检测精度、范围替换后的水深等级保持及分阶段耗时，DDFlood实现了从新增淹没范围识别到水深制图的衔接，为区域洪灾评估提供空间分布、受淹程度和计算开销方面的依据。
 
 \FloatBarrier
 
