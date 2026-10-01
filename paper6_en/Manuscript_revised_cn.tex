@@ -585,13 +585,13 @@ HarmoSSM的主要实现设置见表~\ref{tab:method_config}，训练目标及主
 
 \subsection{HarmoSSM Flood Change Detection Results}
 
-表~\ref{tab:comparison_zhengzhou}至\ref{tab:comparison_guangxi}给出HarmoSSM与八种比较方法在郑州、涿州和广西的整景检测精度，图~\ref{fig:qual_zhengzhou}至\ref{fig:qual_guangxi}给出对应的整景与局部结果。表中各指标按精度比较，每列最优与次优结果分别加粗与加下划线，显示值统一保留两位小数。HarmoSSM在三个研究区均取得最高F1和IoU。三区各方法的OA均高于94\%，郑州IoU最低的方法其OA仍高于97\%，说明受淹像元在参考域中占比较低时，OA对洪水识别差异的区分能力有限。因此后续比较以IoU和F1为主，并结合P与R解释误差构成。
+表~\ref{tab:comparison_zhengzhou}至\ref{tab:comparison_guangxi}给出HarmoSSM与八种比较方法在郑州、涿州和广西的整景检测精度，图~\ref{fig:qual_zhengzhou}至\ref{fig:qual_guangxi}给出对应的整景与局部结果。表中各指标按精度比较，每列最优结果加粗，显示值统一保留两位小数。HarmoSSM在三个研究区均取得最高F1和IoU。三区各方法的OA均高于94\%，郑州IoU最低的方法其OA仍高于97\%，说明受淹像元在参考域中占比较低时，OA对洪水识别差异的区分能力有限。因此后续比较以IoU和F1为主，并结合P与R解释误差构成。
 
 \floatingtableinput{tables/table4_comparison_zhengzhou.tex}
 
-HarmoSSM的领先在三个研究区保持一致，比较方法的排序则随场景变化。IoU和F1排名第二的方法在郑州与广西为ChangeDINO，在涿州为CGNet。CGNet在涿州进入前列而在郑州明显靠后，ChangeDINO在涿州退至第三，说明比较方法的相对表现随地表与淹没形态变化。HarmoSSM相对各区第二名的IoU优势在郑州超过20个百分点，在涿州与广西保持在9个百分点以上。在城市建成区、城乡交错地表和农林镶嵌地表三类场景中，HarmoSSM均保持最高重叠精度，其中与比较方法的差距在郑州最大。
-
 \floatingtableinput{tables/table5_comparison_zhuozhou.tex}
+
+HarmoSSM的领先在三个研究区保持一致，比较方法的排序则随场景变化。IoU和F1排名第二的方法在郑州与广西为ChangeDINO，在涿州为CGNet。CGNet在涿州进入前列而在郑州明显靠后，ChangeDINO在涿州退至第三，说明比较方法的相对表现随地表与淹没形态变化。HarmoSSM相对各区第二名的IoU优势在郑州超过20个百分点，在涿州与广西保持在9个百分点以上。在城市建成区、城乡交错地表和农林镶嵌地表三类场景中，HarmoSSM均保持最高重叠精度，其中与比较方法的差距在郑州最大。
 
 \begin{figure}[!htb]
   \centering

@@ -79,15 +79,15 @@
 \@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces 协调对齐模块（HA）结构。双时相特征依次经过统计校准和局部可变形对齐。下方展示共享统计量、残差恢复和采样位置示意。}}{9}{figure.caption.6}\protected@file@percent }
 \newlabel{fig:ha}{{3}{9}{协调对齐模块（HA）结构。双时相特征依次经过统计校准和局部可变形对齐。下方展示共享统计量、残差恢复和采样位置示意。}{figure.caption.6}{}}
 \@writefile{toc}{\contentsline {paragraph}{Change Query Interaction (CQI)}{9}{section*.7}\protected@file@percent }
-\newlabel{eq:cqi_pair}{{7}{10}{Change Query Interaction (CQI)}{equation.3.7}{}}
+\newlabel{eq:cqi_pair}{{7}{9}{Change Query Interaction (CQI)}{equation.3.7}{}}
 \newlabel{eq:cqi_query}{{8}{10}{Change Query Interaction (CQI)}{equation.3.8}{}}
 \newlabel{eq:cqi_token}{{9}{10}{Change Query Interaction (CQI)}{equation.3.9}{}}
 \newlabel{eq:cqi_output}{{10}{10}{Change Query Interaction (CQI)}{equation.3.10}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces 变化查询交互模块（CQI）结构。灾前、灾后、有向差和绝对差特征经联合投影，通过查询与密集token的双向交互和残差细化生成变化特征。}}{10}{figure.caption.8}\protected@file@percent }
 \newlabel{fig:cqi}{{4}{10}{变化查询交互模块（CQI）结构。灾前、灾后、有向差和绝对差特征经联合投影，通过查询与密集token的双向交互和残差细化生成变化特征。}{figure.caption.8}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}Omni-Scale State-Space Decoder}{10}{subsubsection.3.2.2}\protected@file@percent }
+\newlabel{sec:oscd}{{3.2.2}{10}{Omni-Scale State-Space Decoder}{subsubsection.3.2.2}{}}
 \citation{gu2023mamba,liu2024vmamba}
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}Omni-Scale State-Space Decoder}{11}{subsubsection.3.2.2}\protected@file@percent }
-\newlabel{sec:oscd}{{3.2.2}{11}{Omni-Scale State-Space Decoder}{subsubsection.3.2.2}{}}
 \newlabel{eq:oscd_deep_fusion}{{11}{11}{Omni-Scale State-Space Decoder}{equation.3.11}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces 全尺度状态空间解码器（OSSD）结构。左侧为深层上下文建模与浅层逐级恢复路径，右上为区域上下文构建，右下为多分辨率输入构造。}}{11}{figure.caption.9}\protected@file@percent }
 \newlabel{fig:oscd}{{5}{11}{全尺度状态空间解码器（OSSD）结构。左侧为深层上下文建模与浅层逐级恢复路径，右上为区域上下文构建，右下为多分辨率输入构造。}{figure.caption.9}{}}
@@ -101,7 +101,7 @@
 \newlabel{eq:ccdepth_domains}{{16}{13}{Change-Constrained Flood Depth Estimation}{equation.3.16}{}}
 \newlabel{eq:ccdepth_samples}{{17}{13}{Change-Constrained Flood Depth Estimation}{equation.3.17}{}}
 \newlabel{eq:ccdepth_interval}{{18}{13}{Change-Constrained Flood Depth Estimation}{equation.3.18}{}}
-\newlabel{eq:ccdepth_weight}{{19}{14}{Change-Constrained Flood Depth Estimation}{equation.3.19}{}}
+\newlabel{eq:ccdepth_weight}{{19}{13}{Change-Constrained Flood Depth Estimation}{equation.3.19}{}}
 \newlabel{eq:ccdepth_peer}{{20}{14}{Change-Constrained Flood Depth Estimation}{equation.3.20}{}}
 \newlabel{eq:ccdepth_energy}{{21}{14}{Change-Constrained Flood Depth Estimation}{equation.3.21}{}}
 \newlabel{eq:ccdepth_normalized_energy}{{22}{14}{Change-Constrained Flood Depth Estimation}{equation.3.22}{}}
@@ -143,41 +143,41 @@
 \newlabel{eq:valid_depth_ratio}{{33}{19}{Evaluation Metrics and Protocols}{equation.4.33}{}}
 \newlabel{eq:depth_error_stats}{{34}{19}{Evaluation Metrics and Protocols}{equation.4.34}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.2}HarmoSSM Flood Change Detection Results}{20}{subsection.4.2}\protected@file@percent }
-\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Flood-change detection results in Zhengzhou. Best and second-best values are bold and underlined, respectively.}}{20}{table.caption.11}\protected@file@percent }
-\newlabel{tab:comparison_zhengzhou}{{4}{20}{Flood-change detection results in Zhengzhou. Best and second-best values are bold and underlined, respectively}{table.caption.11}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Flood-change detection results in Zhuozhou. Best and second-best values are bold and underlined, respectively.}}{21}{table.caption.12}\protected@file@percent }
-\newlabel{tab:comparison_zhuozhou}{{5}{21}{Flood-change detection results in Zhuozhou. Best and second-best values are bold and underlined, respectively}{table.caption.12}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Flood-change detection results in Guangxi. Best and second-best values are bold and underlined, respectively.}}{21}{table.caption.14}\protected@file@percent }
-\newlabel{tab:comparison_guangxi}{{6}{21}{Flood-change detection results in Guangxi. Best and second-best values are bold and underlined, respectively}{table.caption.14}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces 郑州洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}}{22}{figure.caption.13}\protected@file@percent }
-\newlabel{fig:qual_zhengzhou}{{6}{22}{郑州洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}{figure.caption.13}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces 涿州洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}}{23}{figure.caption.15}\protected@file@percent }
-\newlabel{fig:qual_zhuozhou}{{7}{23}{涿州洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}{figure.caption.15}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}\textcolor {blue}{HarmoSSM Ablation Analysis}}{23}{subsection.4.3}\protected@file@percent }
-\newlabel{sec:ablation}{{4.3}{23}{\texorpdfstring {\textcolor {blue}{HarmoSSM Ablation Analysis}}{HarmoSSM Ablation Analysis}}{subsection.4.3}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces 广西洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}}{24}{figure.caption.16}\protected@file@percent }
-\newlabel{fig:qual_guangxi}{{8}{24}{广西洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}{figure.caption.16}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Flood-change detection results in Zhengzhou. The best value in each metric column is shown in bold.}}{20}{table.caption.11}\protected@file@percent }
+\newlabel{tab:comparison_zhengzhou}{{4}{20}{Flood-change detection results in Zhengzhou. The best value in each metric column is shown in bold}{table.caption.11}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Flood-change detection results in Zhuozhou. The best value in each metric column is shown in bold.}}{20}{table.caption.12}\protected@file@percent }
+\newlabel{tab:comparison_zhuozhou}{{5}{20}{Flood-change detection results in Zhuozhou. The best value in each metric column is shown in bold}{table.caption.12}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces 郑州洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}}{21}{figure.caption.13}\protected@file@percent }
+\newlabel{fig:qual_zhengzhou}{{6}{21}{郑州洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}{figure.caption.13}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Flood-change detection results in Guangxi. The best value in each metric column is shown in bold.}}{22}{table.caption.14}\protected@file@percent }
+\newlabel{tab:comparison_guangxi}{{6}{22}{Flood-change detection results in Guangxi. The best value in each metric column is shown in bold}{table.caption.14}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces 涿州洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}}{22}{figure.caption.15}\protected@file@percent }
+\newlabel{fig:qual_zhuozhou}{{7}{22}{涿州洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}{figure.caption.15}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces 广西洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}}{23}{figure.caption.16}\protected@file@percent }
+\newlabel{fig:qual_guangxi}{{8}{23}{广西洪水变化检测结果的可视化对比。（A）整景对比。（B）局部放大对比，标注 ROI-1 至 ROI-3。（a）灾前SAR影像。（b）灾后SAR影像。（c）参考标签。（d）至（l）依次为FC-Siam-Diff、CGNet、HANet、SNUNet、BIT、ChangeFormer、TTP、ChangeDINO和HarmoSSM的结果。局部对比中，TP、FN和FP分别表示正确检测、漏检和误检的洪水像元。}{figure.caption.16}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}\textcolor {blue}{HarmoSSM Ablation Analysis}}{24}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:ablation}{{4.3}{24}{\texorpdfstring {\textcolor {blue}{HarmoSSM Ablation Analysis}}{HarmoSSM Ablation Analysis}}{subsection.4.3}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Ablation study of HA, CQI, and OSSD on three study areas. The best value in each region-metric column is shown in bold.}}{24}{table.caption.17}\protected@file@percent }
+\newlabel{tab:ablation_modules}{{7}{24}{Ablation study of HA, CQI, and OSSD on three study areas. The best value in each region-metric column is shown in bold}{table.caption.17}{}}
 \citation{zhang2024yolomaskrcnn}
-\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Ablation study of HA, CQI, and OSSD on three study areas. Best and second-best values in each region-metric column are bold and underlined.}}{25}{table.caption.17}\protected@file@percent }
-\newlabel{tab:ablation_modules}{{7}{25}{Ablation study of HA, CQI, and OSSD on three study areas. Best and second-best values in each region-metric column are bold and underlined}{table.caption.17}{}}
 \@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces HarmoSSM的多尺度变化特征与解码特征可视化。三行依次为郑州、涿州和广西。各列依次为灾前SAR、灾后SAR、参考标签、CQI变化特征\(D_1\)至\(D_5\)、OSSD重建特征\(R_3\)、\(R_2\)、\(R_1\)，以及预测与参考标签的叠加结果。}}{25}{figure.caption.18}\protected@file@percent }
 \newlabel{fig:feature_vis}{{9}{25}{HarmoSSM的多尺度变化特征与解码特征可视化。三行依次为郑州、涿州和广西。各列依次为灾前SAR、灾后SAR、参考标签、CQI变化特征\(D_1\)至\(D_5\)、OSSD重建特征\(R_3\)、\(R_2\)、\(R_1\)，以及预测与参考标签的叠加结果。}{figure.caption.18}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.4}\textcolor {blue}{CCDepth 性能评估}}{25}{subsection.4.4}\protected@file@percent }
 \newlabel{sec:ccdepth_evaluation}{{4.4}{25}{\texorpdfstring {\textcolor {blue}{CCDepth 性能评估}}{CCDepth 性能评估}}{subsection.4.4}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces 三研究区局地点位的受淹场景与水深对照。照片按郑州S1至S4、涿州S5至S8和广西S9至S12分组，标注给出参照物及参考水深区间，点位位置见图~\ref {fig:dataset}。（a）以HarmoSSM检测范围为输入的点位水深结果，蓝色圆点和橙色三角分别表示CCDepth与FwDET的连通分量水深中位数，误差线表示最小至最大水深范围，绿色线段表示照片参考区间，黑色点表示LS1至LS3的文献水深记录。（b）15个点位的类别计数，依次为中位数命中、仅范围重叠和整体偏低。}}{26}{figure.caption.19}\protected@file@percent }
-\newlabel{fig:local_depth_comparison}{{10}{26}{三研究区局地点位的受淹场景与水深对照。照片按郑州S1至S4、涿州S5至S8和广西S9至S12分组，标注给出参照物及参考水深区间，点位位置见图~\ref {fig:dataset}。（a）以HarmoSSM检测范围为输入的点位水深结果，蓝色圆点和橙色三角分别表示CCDepth与FwDET的连通分量水深中位数，误差线表示最小至最大水深范围，绿色线段表示照片参考区间，黑色点表示LS1至LS3的文献水深记录。（b）15个点位的类别计数，依次为中位数命中、仅范围重叠和整体偏低。}{figure.caption.19}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces 巴基斯坦验证区的水深估算与评价。（a）CCDepth与FwDET的水深分布。（b）正水深覆盖率与水面高程（WSE）梯度累积分布。（c）两种方法的水深误差分布及ICESat-2参考水深分布。误差定义为参考水深减估计水深。}}{27}{figure.caption.20}\protected@file@percent }
-\newlabel{fig:pakistan_depth_validation}{{11}{27}{巴基斯坦验证区的水深估算与评价。（a）CCDepth与FwDET的水深分布。（b）正水深覆盖率与水面高程（WSE）梯度累积分布。（c）两种方法的水深误差分布及ICESat-2参考水深分布。误差定义为参考水深减估计水深。}{figure.caption.20}{}}
-\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces CCDepth constraint ablation in the Pakistan validation area. Best and second-best values of R, $\bar  e$, $\sigma _e$, MAE, and RMSE among the variants are bold and underlined, respectively. The $\bar  e$ column is ranked by absolute value.}}{28}{table.caption.21}\protected@file@percent }
-\newlabel{tab:ccdepth_ablation}{{8}{28}{CCDepth constraint ablation in the Pakistan validation area. Best and second-best values of R, $\bar e$, $\sigma _e$, MAE, and RMSE among the variants are bold and underlined, respectively. The $\bar e$ column is ranked by absolute value}{table.caption.21}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces 三研究区局地点位的受淹场景与水深对照。照片标注参照物与参考水深区间，点位位置见图~\ref {fig:dataset}。（a）以HarmoSSM检测范围为输入的点位水深，蓝色圆点和橙色三角分别为CCDepth与FwDET的连通分量水深中位数，误差线为分量内最小至最大水深，绿色线段为照片参考区间，黑色点为LS1至LS3的文献记录。（b）15个点位的中位数命中、仅范围重叠和整体偏低计数。}}{26}{figure.caption.19}\protected@file@percent }
+\newlabel{fig:local_depth_comparison}{{10}{26}{三研究区局地点位的受淹场景与水深对照。照片标注参照物与参考水深区间，点位位置见图~\ref {fig:dataset}。（a）以HarmoSSM检测范围为输入的点位水深，蓝色圆点和橙色三角分别为CCDepth与FwDET的连通分量水深中位数，误差线为分量内最小至最大水深，绿色线段为照片参考区间，黑色点为LS1至LS3的文献记录。（b）15个点位的中位数命中、仅范围重叠和整体偏低计数。}{figure.caption.19}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces 巴基斯坦验证区的水深估算与评价。（a）CCDepth与FwDET的水深分布。（b）正水深覆盖率与WSE梯度累积分布。（c）水深误差与ICESat-2参考水深分布，误差为参考水深减估计水深。}}{27}{figure.caption.20}\protected@file@percent }
+\newlabel{fig:pakistan_depth_validation}{{11}{27}{巴基斯坦验证区的水深估算与评价。（a）CCDepth与FwDET的水深分布。（b）正水深覆盖率与WSE梯度累积分布。（c）水深误差与ICESat-2参考水深分布，误差为参考水深减估计水深。}{figure.caption.20}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces CCDepth constraint ablation in the Pakistan validation area. The best value in each column of R, $\bar  e$, $\sigma _e$, MAE, and RMSE is shown in bold. The $\bar  e$ column is ranked by absolute value.}}{28}{table.caption.21}\protected@file@percent }
+\newlabel{tab:ccdepth_ablation}{{8}{28}{CCDepth constraint ablation in the Pakistan validation area. The best value in each column of R, $\bar e$, $\sigma _e$, MAE, and RMSE is shown in bold. The $\bar e$ column is ranked by absolute value}{table.caption.21}{}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {4.5}\textcolor {blue}{DDFlood 框架性能分析}}{29}{subsection.4.5}\protected@file@percent }
 \newlabel{sec:ddflood_framework_evaluation}{{4.5}{29}{\texorpdfstring {\textcolor {blue}{DDFlood 框架性能分析}}{DDFlood 框架性能分析}}{subsection.4.5}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces 以人工参考范围为输入的三研究区区域水深产品。（a）郑州、涿州和广西的CCDepth与FwDET水深分布，白色对应图例中的Missed类别。（b）有效水深比例。（c）水面高程（WSE）梯度累积分布，虚线表示中值。}}{30}{figure.caption.22}\protected@file@percent }
-\newlabel{fig:depth_overview}{{12}{30}{以人工参考范围为输入的三研究区区域水深产品。（a）郑州、涿州和广西的CCDepth与FwDET水深分布，白色对应图例中的Missed类别。（b）有效水深比例。（c）水面高程（WSE）梯度累积分布，虚线表示中值。}{figure.caption.22}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {13}{\ignorespaces 人工参考范围与HarmoSSM检测范围两类输入下的水深等级转移矩阵。（a）至（c）为CCDepth在郑州、涿州和广西的结果。（d）至（f）为FwDET在相应研究区的结果。行表示Label条件下的有效水深等级，列表示检测范围条件下的水深等级及Missed和No data类别。各矩阵以对应方法在Label条件下的有效水深像元为参考域，按行归一化，数值与颜色表示转移比例，对角线表示同级保持。Missed表示参考域内被检测掩膜判为背景的像元，No data表示检测掩膜内部的水深输出缺失像元。水深单位为m。}}{31}{figure.caption.23}\protected@file@percent }
-\newlabel{fig:two_stage_consistency}{{13}{31}{人工参考范围与HarmoSSM检测范围两类输入下的水深等级转移矩阵。（a）至（c）为CCDepth在郑州、涿州和广西的结果。（d）至（f）为FwDET在相应研究区的结果。行表示Label条件下的有效水深等级，列表示检测范围条件下的水深等级及Missed和No data类别。各矩阵以对应方法在Label条件下的有效水深像元为参考域，按行归一化，数值与颜色表示转移比例，对角线表示同级保持。Missed表示参考域内被检测掩膜判为背景的像元，No data表示检测掩膜内部的水深输出缺失像元。水深单位为m。}{figure.caption.23}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {14}{\ignorespaces DDFlood的检测精度、模型复杂度与估深运行耗时。（a）九种检测方法在广西研究区的IoU与FLOPs关系，气泡面积表示参数量，复杂度记录对应\(256\times 256\)双时相影像块，来源包括本地模型统计和文献参考配置。（b）已有运行记录中CCDepth与FwDET在郑州、涿州、广西和巴基斯坦的估深耗时，横轴采用以秒为单位的对数尺度，点旁标注给出相应耗时。}}{31}{figure.caption.24}\protected@file@percent }
-\newlabel{fig:framework_efficiency}{{14}{31}{DDFlood的检测精度、模型复杂度与估深运行耗时。（a）九种检测方法在广西研究区的IoU与FLOPs关系，气泡面积表示参数量，复杂度记录对应\(256\times 256\)双时相影像块，来源包括本地模型统计和文献参考配置。（b）已有运行记录中CCDepth与FwDET在郑州、涿州、广西和巴基斯坦的估深耗时，横轴采用以秒为单位的对数尺度，点旁标注给出相应耗时。}{figure.caption.24}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces 以HarmoSSM检测范围为输入的三研究区水深产品。（a）CCDepth与FwDET水深分布，白色为人工参考范围内的漏检像元与检测范围内无有效水深输出的像元。（b）有效水深比例，以检测范围像元总数为基数。（c）WSE梯度累积分布，虚线为中值。}}{30}{figure.caption.22}\protected@file@percent }
+\newlabel{fig:depth_overview}{{12}{30}{以HarmoSSM检测范围为输入的三研究区水深产品。（a）CCDepth与FwDET水深分布，白色为人工参考范围内的漏检像元与检测范围内无有效水深输出的像元。（b）有效水深比例，以检测范围像元总数为基数。（c）WSE梯度累积分布，虚线为中值。}{figure.caption.22}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {13}{\ignorespaces 人工参考范围（Label）与HarmoSSM检测范围（seg）输入下的水深等级转移矩阵。（a）至（c）为CCDepth，（d）至（f）为FwDET，依次对应郑州、涿州和广西。行为Label下的有效水深等级，列为seg下的水深等级及Missed和No data类别，按行归一化，水深单位为m。}}{30}{figure.caption.23}\protected@file@percent }
+\newlabel{fig:two_stage_consistency}{{13}{30}{人工参考范围（Label）与HarmoSSM检测范围（seg）输入下的水深等级转移矩阵。（a）至（c）为CCDepth，（d）至（f）为FwDET，依次对应郑州、涿州和广西。行为Label下的有效水深等级，列为seg下的水深等级及Missed和No data类别，按行归一化，水深单位为m。}{figure.caption.23}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {14}{\ignorespaces DDFlood的检测复杂度与估深耗时。（a）广西研究区九种检测方法的IoU与FLOPs，气泡面积表示参数量。（b）CCDepth与FwDET在四个区域的估深耗时，横轴为以秒为单位的对数尺度。}}{31}{figure.caption.24}\protected@file@percent }
+\newlabel{fig:framework_efficiency}{{14}{31}{DDFlood的检测复杂度与估深耗时。（a）广西研究区九种检测方法的IoU与FLOPs，气泡面积表示参数量。（b）CCDepth与FwDET在四个区域的估深耗时，横轴为以秒为单位的对数尺度。}{figure.caption.24}{}}
 \@writefile{toc}{\contentsline {section}{\numberline {5}Discussion}{32}{section.5}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.1}估深约束机制与检测误差传递}{32}{subsection.5.1}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {5.2}局限与未来展望}{33}{subsection.5.2}\protected@file@percent }
