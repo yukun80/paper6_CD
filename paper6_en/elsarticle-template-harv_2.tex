@@ -607,7 +607,7 @@ Omissions in the three study areas are concentrated in narrow scattered patches,
 
 Table~\ref{tab:ablation_modules} reports IoU and F1 for eight configurations in Zhengzhou, Zhuozhou, and Nanning, with the configurations defined in Section~\ref{sec:experiment_implementation}. Configuration A is the common baseline. B, C, and D add HA, CQI, and OSSD to A, respectively. E, F, and G combine HA with CQI, HA with OSSD, and CQI with OSSD, respectively, and H contains all three modules.
 
-\floatingtableinput{tables/table7_ablation_hacqi.tex}
+\floatingtableinput{tables/table7_ablation_harmossm.tex}
 
 Single-module configurations outperform the common baseline in both IoU and F1 in all three study areas, with IoU gains of 2.37--8.49 percentage points. CQI provides the largest gain in Zhengzhou and Nanning, while OSSD provides the largest gain in Zhuozhou. The baseline IoU in Zhengzhou is 43.27\%, the lowest of the three areas. Single-module IoU gains in Zhengzhou range from 7.17 to 8.49 percentage points, exceeding the ranges of 2.37--4.00 percentage points in Zhuozhou and 2.91--3.73 percentage points in Nanning. Pairwise configurations improve IoU by 6.56--17.75 percentage points over the common baseline. Each gain exceeds the sum of the corresponding two single-module gains, by 0.10--2.09 percentage points. G is the best pairwise configuration in all three areas.
 

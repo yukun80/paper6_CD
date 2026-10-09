@@ -641,7 +641,7 @@ HarmoSSM和CCDepth的主要实现设置见表~\ref{tab:method_config}，训练�
 
 表~\ref{tab:ablation_modules}报告郑州、涿州和南宁八种配置的IoU与F1，配置定义见第~\ref{sec:experiment_implementation}节。A为统一Baseline，B、C和D分别在A中加入HA、CQI和OSSD，E、F和G分别组合HA与CQI、HA与OSSD以及CQI与OSSD，H包含全部三项模块。
 
-\floatingtableinput{tables/table7_ablation_hacqi.tex}
+\floatingtableinput{tables/table7_ablation_harmossm.tex}
 
 单模块配置在三个研究区的IoU和F1均高于统一Baseline，IoU增量为2.37至8.49个百分点。郑州和南宁以CQI的增量最大，涿州以OSSD的增量最大。郑州Baseline的IoU为43.27\%，是三个研究区中最低的。三个单模块在郑州的IoU增量为7.17至8.49个百分点，高于涿州的2.37至4.00个百分点和南宁的2.91至3.73个百分点。两两组合相对统一Baseline的IoU增量为6.56至17.75个百分点，均高于对应两个单模块增量之和，超出幅度为0.10至2.09个百分点。G在三个研究区均为最优两两组合。
 

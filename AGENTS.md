@@ -1,181 +1,61 @@
 # Repository Guidelines
 
-## Project Role & Current Priority
-This repository is a combined flood-change-detection, flood-depth-estimation, and writing workspace.
+## 工作范围与入口
 
-- `HA-CQI/` is the current primary algorithm code path for SAR flood change detection.
-- `HA-CQI-CFDepth/` is the integrated HA-CQI + CFDepth package for paper-facing reproduction, scene prediction, and CFDepth implementation reference.
-- `paper6_en/` is the English manuscript workspace.
-- `patent/` is the Chinese invention patent application workspace.
-- `technical proposal/` is the project technical-solution/proposal workspace.
-- `baselines/`, `demo/`, and historical snapshots are for comparison, visualization, or archived reference only.
+本仓库同时存放算法、论文和其他写作材料。各类材料保持独立，未经要求不进行文体转换或跨目录整理。
 
-Keep these artifact boundaries explicit. Do not mix manuscript prose, patent claims, and technical-proposal language unless the user asks for a conversion between them.
+- `HarmoSSM/`：当前 SAR 洪水变化检测主线；[使用目录](docs/harmossm/README.md)。
+- `CCDepth/`：当前本地水深估计实现；[使用目录](docs/ccdepth/README.md)。
+- `datasets/`：源数据及处理后的数据；当前训练集见[数据说明](docs/harmossm/data.md)。
+- `paper6_en/`：论文正文、图表和参考文献；不随算法文档重构搬移。
+- `demo/`：出图与比较材料；不作为当前算法主线。
+- 专利、技术方案及历史基线遵守下方边界；相应目录不在当前检出中时不得假定它们存在。
+- `HA-CQI-CFDepth/` 及已移除的交付副本不作为当前操作入口。
 
-## Project Structure & Module Organization
-- `HA-CQI/`: active SAR flood-change detection implementation.
-  - `model/architectures/ha_cqi.py`: HA-CQI model assembly.
-  - `model/engine.py`: training/inference engine, losses, checkpoint metadata.
-  - `model/modules/`: harmonized alignment, DINO adapter, CQI, semantic encoding, attention blocks.
-  - `model/decode_heads/`: OSCD state-space dense change decoder and auxiliary heads.
-  - `data/`: SAR change-detection dataset and transforms.
-  - `scripts/`: whole-scene SAR tile inference, label preparation, and mosaic utilities.
-  - `model_design/paper_narrative.md`: model-story reference for paper-aligned algorithm changes.
-- `HA-CQI-CFDepth/`: integrated release-style path for HA-CQI and CFDepth.
-  - `train.py`, `train.sh`: training entrypoints.
-  - `predict.py`, `predict.sh`: tiled SAR scene prediction and mosaic reconstruction.
-  - `CFDepth/CFDepth_GEE.txt`: authoritative CFDepth implementation reference for GEE-based depth estimation.
-  - `datasets/train_set/`: packaged training split manifests and stats.
-- `datasets/`: source data and prepared SAR change-detection data.
-  - `S1GFloods/`: raw S1GFloods data.
-  - `S1GFloods_CD_DINO_BG_75_25_/`: active, manually cleaned binary SAR change-detection dataset.
-  - `S1GFloods_CD_DINO_BG_75_25/`: archived pre-cleaning prepared dataset.
-  - `S1GFloods_CD_DINO/`: archived pre-correction dataset; select explicitly only for historical analysis.
-  - `S1GFloods_CD_DINO_/`: experiment-specific variant; select explicitly.
-  - `GF3_Henan/`, `GF3_Henan_CD_infer/`: Zhengzhou/GF3 source and tiled inference inputs.
-  - `GF3_Zhuozhou/`, `GF3_Zhuozhou_CD_infer/`: Zhuozhou/GF3 source and tiled inference inputs.
-  - `VarFloods/`: auxiliary SAR data source for fused training-set construction.
-  - `script/`: dataset conversion and preprocessing utilities.
-- `paper6_en/`: Elsevier manuscript, BibTeX, figures, and tables. Main manuscript file is `elsarticle-template-harv_2.tex`.
-- `patent/`: patent drafts, converted reference documents, figures, and prior-art references.
-- `technical proposal/`: project technical proposal drafts; quote the path because it contains a space.
-- `baselines/`: comparison and historical code paths, including `ChangeDINO-main`, `ChangeDINO_raw`, and `open-cd`.
-- `demo/`: Zhengzhou/Zhuozhou comparison visualizations and paper/demo artifacts.
+## 文档同步要求
 
-## Current Algorithm Notes
-- The active change-detection model is **HA-CQI**, not ChangeDINO.
-- The active HA-CQI stack is:
-  - shared pre/post CNN-DINO semantic encoder;
-  - EfficientNet-B2-only CNN-FPN pyramid;
-  - frozen DINOv3 semantic features from explicit fusion layers `[5,8,11]` with fixed LVD ImageNet normalization;
-  - Harmonized Alignment on shallow features;
-  - optional deformable soft alignment;
-  - fixed five-level Change Query Interaction;
-  - MMSCoPE-inspired Omni-Scale State-Space Change Decoder (OSCD);
-  - multi-scale auxiliary supervision for small waterlogging and large inundation regions.
-- Preserve HA-CQI's own architecture story. Do not back-port ChangeDINO Risk-Aware, HybridRefiner, topo-router, or micro-gate modules unless the user explicitly requests that experiment.
-- HA-CQI selects `best_primary` by validation Flood IoU while jointly calibrating threshold on the configured grid. `0.40` is only a validation diagnostic threshold.
-- Active code accepts checkpoint v2 only. The 20260427 checkpoints are disk archives and are intentionally unsupported.
-- Training membership is resolved from exact A/B/label filename equality in the live train/val directories. Historical manifests and fingerprints do not gate training or resume; `stats_mode=auto` recomputes cached normalization when train A/B members change.
-- CFDepth is the depth-estimation method. Change detection provides an upstream flood extent/support-region input; it is not the patent core unless the user changes the invention scope.
+- 讨论方案时正常讨论，不要求每轮对话同步文档。
+- **方案确认并执行功能修改时，必须在同一次交付中更新相关文档及目录。**
+- 修改不影响文档时，在交付说明中简短说明原因。
+- 当前算法正文统一放根 `docs/`，根及算法目录 README 仅保留概要和入口。
+- 遵循[文档维护约定](docs/maintenance.md)：按主题逐层展开，一份内容只维护一处。
+- 既有历史方案及修订记录原位原文保留，从历史入口访问；不当作当前用法。
+- 不增加文档检查工具、定期任务或提交限制。
 
-## Build, Train, and Inference Commands
-Run commands from repository root unless a command starts with `cd`.
+## 算法约束
 
-### HA-CQI Training
-```bash
-cd HA-CQI
-bash trainval_s1gfloods.sh
-```
+- 主线为 HarmoSSM，不是 ChangeDINO。架构和说明以[模型设计](docs/harmossm/design.md)及现有程序为依据。
+- 保留共享 CNN-DINO 编码器、EfficientNet-B2、冻结 DINOv3 `[5,8,11]`、ImageNet normalization、HA、五级 CQI、OSCD 及多尺度辅助监督。
+- 未经明确要求，不引入历史 ChangeDINO Risk-Aware、HybridRefiner、topo-router、micro-gate 等结构。
+- `best_primary` 按验证 Flood IoU 联合选择阈值；`0.40` 仅为诊断阈值。
+- 仅接受 checkpoint v2；旧记录中的 HA-CQI 身份可兼容读取，新记录使用 HarmoSSM，详见[更名说明](docs/harmossm/rename.md)。20260427 等旧格式档案不受支持。
+- 训练成员来自实际 train/val 下 A/B/label 的严格同名集合；`stats_mode=auto` 随训练图像成员变化更新统计。
+- 每次训练从预训练权重开始；不支持续训或整模型初始化，详见[训练记录](docs/harmossm/checkpoints.md)。
+- CCDepth 接收 0/1 淹没支持区与 DEM；遵守[输入约定](docs/ccdepth/inputs.md)、[输出说明](docs/ccdepth/outputs.md)和[恢复约定](docs/ccdepth/recovery.md)。
+- 区分当前实现与历史 CFDepth 来源；变化检测只提供上游范围，不自动扩大水深专利保护对象。
+- 不将旧 ChangeDINO 默认值、UrbanSARFloods 12 通道、分层 floodness/flood_type、pos_mIoU 优先、PPO/prompt/SAM 尝试或已移除路径当作当前规范。
 
-Useful overrides:
+## 操作与验证
 
-```bash
-cd HA-CQI
-DATASET_NAME=S1GFloods_CD_DINO_BG_75_25_ \
-DATA_ROOT=../datasets \
-STATS_MODE=auto \
-RUN_NAME=S1GFloods-HA-CQI-B2-OSCD-DINO5-8-11-CLEAN-s1 \
-BATCH_SIZE=12 \
-NUM_WORKERS=8 \
-LR=1e-4 \
-AMP_DTYPE=bf16 \
-EVAL_FG_THRESHOLD=0.40 \
-bash trainval_s1gfloods.sh
-```
+- HarmoSSM：[环境与权重](docs/harmossm/environment.md)、[训练](docs/harmossm/training.md)、[预测与评价](docs/harmossm/inference.md)、[运行验证](docs/harmossm/validation.md)。
+- CCDepth：[运行准备](docs/ccdepth/running.md)、[高覆盖模式](docs/ccdepth/coverage.md)。
+- 修改 Python 后运行相应 `py_compile`；修改脚本后检查语法，并使用代表性输入验证实际行为。
+- 数据处理脚本支持 `--dry-run` 时先预览，再进行小样本实际验证。
+- 整景预测改动需检查报告、二值拼接结果、有效掩码及 NoData，不能只以程序启动成功判定完成。
+- 文档变更需核对链接、执行目录和说明与现状的一致性；不得编造未执行的训练或精度验证。
+- 论文修改后在 `paper6_en/` 编译 `elsarticle-template-harv_2.tex`，核对图表、引用编号；现有工具可用时使用 `latexmk -xelatex`。
+- 专利或方案修改后检查材料类型、来源、术语及保护范围。
 
-Disable soft alignment for ablation:
+## 数据、交付与安全
 
-```bash
-cd HA-CQI
-SOFT_ALIGNMENT=0 RUN_NAME=S1GFloods-HA-CQI-noalign bash trainval_s1gfloods.sh
-```
-
-### HA-CQI Whole-Scene Inference
-```bash
-python HA-CQI/scripts/infer_sar_scene_tiles.py \
-  --tiles-root datasets/GF3_Henan_CD_infer \
-  --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
-  --gpu_ids 0 \
-  --batch_size 8 \
-  --output-dir HA-CQI/outputs/gf3_henan
-```
-
-For Zhuozhou, switch `--tiles-root` and `--output-dir`:
-
-```bash
-python HA-CQI/scripts/infer_sar_scene_tiles.py \
-  --tiles-root datasets/GF3_Zhuozhou_CD_infer \
-  --checkpoint HA-CQI/checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
-  --gpu_ids 0 \
-  --batch_size 8 \
-  --output-dir HA-CQI/outputs/gf3_zhuozhou
-```
-
-### HA-CQI Pair Inference
-```bash
-cd HA-CQI
-python run.py \
-  --checkpoint checkpoints/<b2_run>/<b2_run>_efficientnet_b2_best_primary.pth \
-  --img_A /path/to/pre_image.tif \
-  --img_B /path/to/post_image.tif \
-  --output outputs/run_pred.png \
-  --gpu_ids 0
-```
-
-### HA-CQI-CFDepth Training and Prediction
-```bash
-cd HA-CQI-CFDepth
-bash train.sh
-```
-
-```bash
-cd HA-CQI-CFDepth
-CHECKPOINT=checkpoints/HA-CQI-vits16/HA-CQI-vits16_efficientnet_b0_best.pth \
-BATCH_SIZE=8 \
-THRESHOLD=0.40 \
-bash predict.sh
-```
-
-Single-scene prediction:
-
-```bash
-cd HA-CQI-CFDepth
-python predict.py \
-  --tiles-root datasets/test_set_Zhengzhou \
-  --checkpoint checkpoints/HA-CQI-vits16/HA-CQI-vits16_efficientnet_b0_best.pth \
-  --stats_file datasets/train_set/channel_stats_s1gfloods_train.json \
-  --gpu_ids 0 \
-  --batch_size 8 \
-  --threshold 0.40 \
-  --output-dir outputs/test_set_Zhengzhou
-```
-
-### CFDepth
-- Use `HA-CQI-CFDepth/CFDepth/CFDepth_GEE.txt` as the implementation reference for CFDepth.
-- CFDepth expects a 0/1 flood mask or flood support region and DEM-derived constraints.
-- Do not claim a Python depth-estimation pipeline exists unless the corresponding implementation is present.
-
-### Manuscript
-```bash
-cd paper6_en
-latexmk -xelatex elsarticle-template-harv_2.tex
-```
-
-If `latexmk` is unavailable, use the local LaTeX toolchain available in the environment and verify that references, figures, and tables resolve.
-
-## Data, Weights, and Generated Artifacts
-- Do not commit datasets, model checkpoints, pretrained weights, large generated rasters, or bulky rendered outputs.
-- HA-CQI default local weights:
-  - `HA-CQI/dinov3/weights/dinov3_vits16_pretrain_lvd1689m-08c60483.pth`
-  - `HA-CQI/pretrained/efficientnet_b2_ra-bcdf34b7.pth`
-- HA-CQI-CFDepth default local weights:
-  - `HA-CQI-CFDepth/pretrained/dinov3_vits16_pretrain_lvd1689m-08c60483.pth`
-  - `HA-CQI-CFDepth/pretrained/efficientnet_b0_ra-3dd342df.pth`
-- Dataset stats must match the selected dataset root. Keep `--dataset`, `--dataroot`, and `--stats_file` consistent.
-- Scene-inference directories must contain `tile_manifest.csv`, A/B tile PNGs, and valid-mask files before running tiled prediction.
+- 不提交数据集、模型权重、大型栅格、缓存及大量生成结果；不将密钥或令牌写入文件。
+- 训练数据根目录和统计文件必须一致；场景推理输入须有清单、A/B 图像和有效掩码。
+- 本机路径优先使用环境变量或运行参数。清理生成结果前核对目标，保留用户材料，除非已明确授权删除。
+- 保留用户已有改动，禁止借文档整理改写算法、数据、结果或历史原文。
+- 提交信息简短明确，可用 `scope: change summary`；PR 说明目的、范围、复现命令、验证结果及数据和环境前提。
 
 ## Coding Style & Naming Conventions
+
 - Python uses 4-space indentation, PEP8-compatible layout, and type hints for new utilities.
 - Add concise Chinese comments/docstrings for key classes, key methods, and non-trivial logic blocks.
 - Keep comments focused on intent and behavior; avoid restating obvious assignments.
@@ -184,85 +64,30 @@ If `latexmk` is unavailable, use the local LaTeX toolchain available in the envi
 - Use structured readers for CSV, JSON, raster, and LaTeX/BibTeX content where practical.
 - Preserve the checkpoint v2 contract: require `meta.format_version == 2`, `network`, `meta.model_config`, and an explicit or selected inference threshold.
 
-## Validation Guidelines
-- For modified Python files, run `python -m py_compile` on the touched files.
-- For HA-CQI core edits:
-  ```bash
-  cd HA-CQI
-  python -m py_compile \
-    option.py \
-    model/architectures/ha_cqi.py \
-    model/modules/*.py \
-    model/decode_heads/*.py \
-    model/engine.py \
-    trainval.py \
-    test.py \
-    run.py \
-    scripts/diagnose_cross_domain_features.py \
-    scripts/infer_sar_scene_tiles.py
-  bash -n trainval_s1gfloods.sh trainval.sh
-  ```
-- For HA-CQI-CFDepth core edits:
-  ```bash
-  cd HA-CQI-CFDepth
-  python -m py_compile \
-    option.py \
-    train.py \
-    predict.py \
-    model/architectures/ha_cqi.py \
-    model/modules/*.py \
-    model/decode_heads/*.py \
-    model/engine.py
-  bash -n train.sh predict.sh
-  ```
-- For dataset script changes, run `--dry-run` first when supported, then a short real execution on a small sample.
-- For tiled inference changes, verify that `infer_report.json`, stitched probability/binary outputs, valid-mask handling, and no-data values are correct.
-- For paper edits, compile the manuscript and check figure/table/reference numbering.
-- For patent or proposal edits, run a manual consistency check for artifact type, source hierarchy, terminology, and whether protected claims drift beyond the intended method.
-
 ## Writing Artifact Rules
+
 ### `paper6_en/`
+
 - Write in academic manuscript style, grounded in the current figures, tables, code, and experiment outputs.
 - Use `paper6_en/elsarticle-template-harv_2.tex`, `reference.bib`, `figure/`, and `tables/` as the authoritative paper artifacts.
 - Do not import patent claim wording into the paper.
 
 ### `patent/`
+
 - Target artifact is a **Chinese invention patent application text**, not a technical disclosure.
 - The CFDepth depth-estimation method in `paper6_en/elsarticle-template-harv_2.tex` is the core method source.
-- `HA-CQI-CFDepth/CFDepth/CFDepth_GEE.txt` is the implementation check for CFDepth details.
+- The historical implementation path `HA-CQI-CFDepth/CFDepth/CFDepth_GEE.txt` is absent in this checkout. Do not treat it as a live source; verify method details against the authorized manuscript and available implementation without expanding patent scope.
 - Existing documents under `patent/` are format references.
 - `patent/参考文献/` is prior-art/background only, not the invention source.
 - Do not write repository paths, paper titles, code names, or experiment-only details into the formal patent body.
-- Do not accidentally protect the HA-CQI change-detection model when the user asks for the CFDepth water-depth invention.
+- Do not accidentally protect the HarmoSSM change-detection model when the user asks for the CFDepth water-depth invention.
 
 ### `technical proposal/`
+
 - Treat this as a project technical-solution document, not a manuscript or patent application.
 - Emphasize system architecture, implementation routes, datasets, validation, deployment assumptions, and deliverables.
 - Keep claims and performance statements tied to available evidence; do not invent project results.
 - Quote the path in shell commands: `'technical proposal'`.
-
-## Baselines and Deprecated Context
-- `baselines/ChangeDINO-main/` and `baselines/ChangeDINO_raw/` are historical/comparison paths, not the active workflow.
-- `baselines/open-cd/` is for baseline comparison and reruns only.
-- Do not refer to a root-level `ChangeDINO-main/` path as current; the active root-level algorithm path is `HA-CQI/`.
-- Deprecated as current spec:
-  - old ChangeDINO detector/refiner defaults;
-  - UrbanSARFloods 12-channel conventions;
-  - hierarchical `floodness/flood_type` label workflows;
-  - `pos_mIoU`-first model-selection policy from older pipelines;
-  - PPO/prompt/SAM historical attempts;
-  - removed paths such as `HSBA-flood/`.
-
-## Commit & Pull Request Guidelines
-- Keep commit messages concise and specific, Chinese or English.
-- Recommended format: `scope: change summary`.
-- PRs should include purpose, impacted paths, exact reproduction commands, key logs/metrics, dataset assumptions, and environment assumptions.
-- Do not commit datasets, checkpoints, pretrained weights, secrets, or large generated artifacts.
-
-## Security & Configuration
-- Keep secrets, API keys, and tokens out of tracked files and scripts.
-- Prefer environment variables or runtime arguments for local machine paths.
-- Before destructive cleanup of generated outputs, confirm the target path and preserve user-created artifacts unless explicitly told otherwise.
 
 ## Reasoning and Communication
 
