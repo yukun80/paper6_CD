@@ -3,8 +3,8 @@ INPUT /etc/texmf/web2c/texmf.cnf
 INPUT /usr/share/texmf/web2c/texmf.cnf
 INPUT /usr/share/texlive/texmf-dist/web2c/texmf.cnf
 INPUT /var/lib/texmf/web2c/xetex/xelatex.fmt
-INPUT /home/yukun80/codes/paper6_waterlogging/paper6_en/elsarticle-template-harv_2.tex
-OUTPUT elsarticle-template-harv_2.log
+INPUT elsarticle-template-harv_2 copy.tex
+OUTPUT elsarticle-template-harv_2 copy.log
 INPUT ./elsarticle.cls
 INPUT elsarticle.cls
 INPUT /usr/share/texlive/texmf-dist/tex/latex/base/fontenc.sty
@@ -45,12 +45,12 @@ INPUT /usr/share/texlive/texmf-dist/tex/latex/graphics-cfg/graphics.cfg
 INPUT /usr/share/texlive/texmf-dist/tex/latex/graphics-def/xetex.def
 INPUT /usr/share/texlive/texmf-dist/tex/latex/graphics-def/xetex.def
 INPUT /usr/share/texlive/texmf-dist/tex/latex/graphics-def/xetex.def
-INPUT ./elsarticle-template-harv_2.spl
-INPUT ./elsarticle-template-harv_2.spl
-INPUT elsarticle-template-harv_2.spl
+INPUT ./elsarticle-template-harv_2 copy.spl
+INPUT ./elsarticle-template-harv_2 copy.spl
+INPUT elsarticle-template-harv_2 copy.spl
 INPUT /usr/share/texlive/texmf-dist/tex/latex/natbib/natbib.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/natbib/natbib.sty
-OUTPUT elsarticle-template-harv_2.spl
+OUTPUT elsarticle-template-harv_2 copy.spl
 INPUT /usr/share/texlive/texmf-dist/tex/latex/geometry/geometry.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/geometry/geometry.sty
 INPUT /usr/share/texlive/texmf-dist/tex/generic/iftex/ifvtex.sty
@@ -311,23 +311,35 @@ INPUT /usr/share/texlive/texmf-dist/tex/generic/uniquecounter/uniquecounter.sty
 INPUT /usr/share/texlive/texmf-dist/tex/generic/uniquecounter/uniquecounter.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/placeins/placeins.sty
 INPUT /usr/share/texlive/texmf-dist/tex/latex/placeins/placeins.sty
-INPUT ./elsarticle-template-harv_2.aux
-INPUT ./elsarticle-template-harv_2.aux
-INPUT elsarticle-template-harv_2.aux
-OUTPUT elsarticle-template-harv_2.aux
+INPUT ./elsarticle-template-harv_2 copy.aux
+INPUT ./elsarticle-template-harv_2 copy.aux
+INPUT elsarticle-template-harv_2 copy.aux
+OUTPUT elsarticle-template-harv_2 copy.aux
 INPUT /usr/share/texlive/texmf-dist/tex/latex/base/ts1cmr.fd
 INPUT /usr/share/texlive/texmf-dist/tex/latex/base/ts1cmr.fd
 INPUT /usr/share/texlive/texmf-dist/tex/latex/base/ts1cmr.fd
 INPUT /usr/share/texlive/texmf-dist/tex/latex/translations/translations-basic-dictionary-english.trsl
 INPUT /usr/share/texlive/texmf-dist/tex/latex/translations/translations-basic-dictionary-english.trsl
 INPUT /usr/share/texlive/texmf-dist/tex/latex/translations/translations-basic-dictionary-english.trsl
-INPUT ./elsarticle-template-harv_2.out
-INPUT ./elsarticle-template-harv_2.out
-INPUT elsarticle-template-harv_2.out
-INPUT elsarticle-template-harv_2.out
-INPUT ./elsarticle-template-harv_2.out
-INPUT ./elsarticle-template-harv_2.out
-OUTPUT elsarticle-template-harv_2.out
+INPUT ./elsarticle-template-harv_2 copy.out
+INPUT ./elsarticle-template-harv_2 copy.out
+INPUT elsarticle-template-harv_2 copy.out
+INPUT elsarticle-template-harv_2 copy.out
+OUTPUT elsarticle-template-harv_2 copy.out
+INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex7.tfm
+INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex7.tfm
+INPUT /usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsa.fd
+INPUT /usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsa.fd
+INPUT /usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsa.fd
+INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msam10.tfm
+INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msam7.tfm
+INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msam5.tfm
+INPUT /usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsb.fd
+INPUT /usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsb.fd
+INPUT /usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsb.fd
+INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msbm10.tfm
+INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msbm7.tfm
+INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msbm5.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr12.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr8.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr6.tfm
@@ -340,33 +352,19 @@ INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmsy6.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmex10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex8.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex7.tfm
-INPUT /usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsa.fd
-INPUT /usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsa.fd
-INPUT /usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsa.fd
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msam10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msam10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msam7.tfm
-INPUT /usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsb.fd
-INPUT /usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsb.fd
-INPUT /usr/share/texlive/texmf-dist/tex/latex/amsfonts/umsb.fd
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msbm10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msbm10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msbm7.tfm
-OUTPUT elsarticle-template-harv_2.xdv
+OUTPUT elsarticle-template-harv_2 copy.xdv
 INPUT ./figure/Figure1.jpg
 INPUT ./figure/Figure1.jpg
 INPUT ./figure/Figure1.jpg
 INPUT ./tables/table1_sar_imagery.tex
 INPUT ./tables/table1_sar_imagery.tex
 INPUT tables/table1_sar_imagery.tex
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex7.tfm
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex7.tfm
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msam10.tfm
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msam7.tfm
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msam5.tfm
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msbm10.tfm
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msbm7.tfm
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msbm5.tfm
 INPUT ./tables/table2_training_split.tex
 INPUT ./tables/table2_training_split.tex
 INPUT tables/table2_training_split.tex
@@ -376,27 +374,30 @@ INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmsy10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmex10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msam10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msbm10.tfm
+INPUT ./figure/Figure2.jpg
+INPUT ./figure/Figure2.jpg
+INPUT ./figure/Figure2.jpg
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmbx12.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmbx8.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmbx6.tfm
-INPUT ./figure/Figure2.jpg
-INPUT ./figure/Figure2.jpg
-INPUT ./figure/Figure2.jpg
+INPUT ./figure/Figure3.jpg
+INPUT ./figure/Figure3.jpg
+INPUT ./figure/Figure3.jpg
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmmib10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmmib8.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmmib6.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmbsy10.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmbsy8.tfm
 INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmbsy6.tfm
-INPUT ./figure/Figure3.jpg
-INPUT ./figure/Figure3.jpg
-INPUT ./figure/Figure3.jpg
 INPUT ./figure/Figure4.jpg
 INPUT ./figure/Figure4.jpg
 INPUT ./figure/Figure4.jpg
 INPUT ./figure/Figure5.jpg
 INPUT ./figure/Figure5.jpg
 INPUT ./figure/Figure5.jpg
+INPUT ./figure/Figure6.jpg
+INPUT ./figure/Figure6.jpg
+INPUT ./figure/Figure6.jpg
 INPUT ./tables/algorithm1_ccdepth.tex
 INPUT ./tables/algorithm1_ccdepth.tex
 INPUT tables/algorithm1_ccdepth.tex
@@ -416,18 +417,12 @@ INPUT tables/table5_comparison_zhuozhou.tex
 INPUT ./tables/table6_comparison_guangxi.tex
 INPUT ./tables/table6_comparison_guangxi.tex
 INPUT tables/table6_comparison_guangxi.tex
-INPUT ./figure/Figure6.jpg
-INPUT ./figure/Figure6.jpg
-INPUT ./figure/Figure6.jpg
 INPUT ./figure/Figure7.jpg
 INPUT ./figure/Figure7.jpg
 INPUT ./figure/Figure7.jpg
 INPUT ./figure/Figure8.jpg
 INPUT ./figure/Figure8.jpg
 INPUT ./figure/Figure8.jpg
-INPUT ./tables/table7_ablation_hacqi.tex
-INPUT ./tables/table7_ablation_hacqi.tex
-INPUT tables/table7_ablation_hacqi.tex
 INPUT ./figure/Figure9.jpg
 INPUT ./figure/Figure9.jpg
 INPUT ./figure/Figure9.jpg
@@ -437,16 +432,6 @@ INPUT ./figure/Figure10.jpg
 INPUT ./figure/Figure11.jpg
 INPUT ./figure/Figure11.jpg
 INPUT ./figure/Figure11.jpg
-INPUT ./tables/table8_ccdepth_constraint_ablation.tex
-INPUT ./tables/table8_ccdepth_constraint_ablation.tex
-INPUT tables/table8_ccdepth_constraint_ablation.tex
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmr9.tfm
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmmi9.tfm
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmsy9.tfm
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/cmextra/cmex9.tfm
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/cm/cmbx9.tfm
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msam10.tfm
-INPUT /usr/share/texlive/texmf-dist/fonts/tfm/public/amsfonts/symbols/msbm10.tfm
 INPUT ./figure/Figure12.jpg
 INPUT ./figure/Figure12.jpg
 INPUT ./figure/Figure12.jpg
@@ -456,9 +441,10 @@ INPUT ./figure/Figure13.jpg
 INPUT ./figure/Figure14.jpg
 INPUT ./figure/Figure14.jpg
 INPUT ./figure/Figure14.jpg
-INPUT ./elsarticle-template-harv_2.bbl
-INPUT ./elsarticle-template-harv_2.bbl
-INPUT elsarticle-template-harv_2.bbl
-INPUT elsarticle-template-harv_2.aux
-INPUT ./elsarticle-template-harv_2.out
-INPUT ./elsarticle-template-harv_2.out
+INPUT ./figure/Figure15.jpg
+INPUT ./figure/Figure15.jpg
+INPUT ./figure/Figure15.jpg
+INPUT ./elsarticle-template-harv_2 copy.bbl
+INPUT ./elsarticle-template-harv_2 copy.bbl
+INPUT elsarticle-template-harv_2 copy.bbl
+INPUT elsarticle-template-harv_2 copy.aux

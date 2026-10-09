@@ -4,44 +4,44 @@ The top-level auxiliary file: elsarticle-template-harv_2.aux
 The style file: elsarticle-harv.bst
 Database file #1: reference.bib
 Reallocated singl_function (elt_size=4) to 100 items from 50.
-You've used 50 entries,
+You've used 51 entries,
             2990 wiz_defined-function locations,
-            974 strings with 19640 characters,
-and the built_in function-call counts, 43671 in all, are:
-= -- 3153
-> -- 2404
-< -- 19
-+ -- 925
-- -- 864
-* -- 5309
-:= -- 6303
-add.period$ -- 184
-call.type$ -- 50
-change.case$ -- 538
-chr.to.int$ -- 47
-cite$ -- 50
-duplicate$ -- 2925
-empty$ -- 2731
-format.name$ -- 1026
-if$ -- 7991
+            978 strings with 19916 characters,
+and the built_in function-call counts, 44684 in all, are:
+= -- 3223
+> -- 2470
+< -- 20
++ -- 950
+- -- 888
+* -- 5441
+:= -- 6450
+add.period$ -- 188
+call.type$ -- 51
+change.case$ -- 551
+chr.to.int$ -- 48
+cite$ -- 51
+duplicate$ -- 2986
+empty$ -- 2788
+format.name$ -- 1055
+if$ -- 8172
 int.to.chr$ -- 4
 int.to.str$ -- 1
-missing$ -- 633
-newline$ -- 299
-num.names$ -- 200
-pop$ -- 1003
+missing$ -- 648
+newline$ -- 305
+num.names$ -- 204
+pop$ -- 1024
 preamble$ -- 1
-purify$ -- 487
+purify$ -- 499
 quote$ -- 0
-skip$ -- 848
+skip$ -- 862
 stack$ -- 0
-substring$ -- 1678
-swap$ -- 2510
+substring$ -- 1717
+swap$ -- 2569
 text.length$ -- 11
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 450
+type$ -- 459
 warning$ -- 0
-while$ -- 231
+while$ -- 236
 width$ -- 0
-write$ -- 796
+write$ -- 812
